@@ -165,3 +165,38 @@ body {
   );
   pointer-events: none;
 }
+
+/* ── Q-Preset Background ── */
+.qpreset-bg {
+  background: linear-gradient(135deg, #5b6af0 0%, #4a59e0 100%);
+}
+
+.qpreset-circle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.qpreset-bg .circle-outline {
+  border: 4px solid rgba(255, 255, 255, 0.25);
+}
+
+.qpreset-bg .circle-filled {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.qpreset-bg .c1  { top: 5%; left: 3%; width: 80px; height: 80px; }
+.qpreset-bg .c2  { bottom: 10%; right: -3%; width: 170px; height: 170px; }
+.qpreset-bg .c3  { top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; height: 400px; background: rgba(255, 255, 255, 0.06); }
+.qpreset-bg .c4  { top: 12%; right: 8%; width: 50px; height: 50px; }
+.qpreset-bg .c5  { bottom: 20%; left: 6%; width: 100px; height: 100px; background: rgba(255, 255, 255, 0.08); }
+.qpreset-bg .c6  { top: 30%; right: 2%; width: 120px; height: 120px; border-width: 5px; }
+.qpreset-bg .c7  { bottom: 35%; left: -2%; width: 70px; height: 70px; background: rgba(255, 255, 255, 0.10); }
+.qpreset-bg .c8  { top: 70%; right: 15%; width: 40px; height: 40px; }
+.qpreset-bg .c9  { top: 8%; left: 40%; width: 30px; height: 30px; background: rgba(255, 255, 255, 0.15); }
+.qpreset-bg .c10 { bottom: 5%; right: 40%; width: 55px; height: 55px; }
+
+/* ── Title Shadow ── */
+.title-shadow {
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4);
+}

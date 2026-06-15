@@ -7,6 +7,7 @@ import { useCallback } from 'react';
 export default function Controls({
   bgPreset, setBgPreset,
   textGlow, setTextGlow,
+  titleShadow, setTitleShadow,
   gradient, setGradient,
   overflow, setOverflow,
   titleSize, setTitleSize,
@@ -41,6 +42,7 @@ export default function Controls({
         >
           <option value="gradient">Gradient</option>
           <option value="blue-cyber">Blue Cyber</option>
+          <option value="q-preset">Q-Preset</option>
         </select>
       </div>
 
@@ -96,6 +98,28 @@ export default function Controls({
           <span
             className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
               textGlow ? 'translate-x-[16px]' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Title Shadow toggle */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-white/45 whitespace-nowrap cursor-pointer select-none" htmlFor="shadow-toggle">
+          Title Shadow
+        </label>
+        <button
+          id="shadow-toggle"
+          role="switch"
+          aria-checked={titleShadow}
+          onClick={() => setTitleShadow(v => !v)}
+          className={`relative w-[36px] h-[20px] rounded-full border transition-colors ${
+            titleShadow ? 'bg-[#7c2fd4] border-[#7c2fd4]' : 'bg-[#2a2a3a] border-white/15'
+          }`}
+        >
+          <span
+            className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
+              titleShadow ? 'translate-x-[16px]' : 'translate-x-0'
             }`}
           />
         </button>

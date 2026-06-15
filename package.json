@@ -2,6 +2,7 @@
   "name": "device-mockup",
   "private": true,
   "version": "1.0.0",
+  "author": "Omar Khaled <khaledelkhly57@gmail.com>",
   "type": "module",
   "scripts": {
     "dev": "vite",

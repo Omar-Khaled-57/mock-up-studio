@@ -12,12 +12,14 @@ import { useState, useRef, useCallback } from 'react';
 import Controls from './components/Controls';
 import Scene from './components/Scene';
 import BlueCyberBg from './components/BlueCyberBg';
+import QPresetBg from './components/QPresetBg';
 
 let nextId = 1;
 
 export default function App() {
   const [bgPreset, setBgPreset] = useState('gradient');
   const [textGlow, setTextGlow] = useState(false);
+  const [titleShadow, setTitleShadow] = useState(false);
   const [gradient, setGradient] = useState({
     colors: ['#3b1fa8', '#7c2fd4', '#1a0e6e', '#0a0540'],
     angle: 135,
@@ -104,6 +106,8 @@ export default function App() {
         setBgPreset={setBgPreset}
         textGlow={textGlow}
         setTextGlow={setTextGlow}
+        titleShadow={titleShadow}
+        setTitleShadow={setTitleShadow}
         gradient={gradient}
         setGradient={setGradient}
         overflow={overflow}
@@ -122,12 +126,13 @@ export default function App() {
           ref={sceneRef}
           className={`scene relative w-full max-w-[960px] aspect-video rounded-[18px] overflow-hidden shadow-[0_40px_120px_rgba(0,0,0,.75)] preset-${bgPreset}`}
           style={{
-            background: bgPreset === 'gradient' ? `linear-gradient(${gradient.angle}deg, ${gradient.colors.join(', ')})` : '#05080c',
+            background: bgPreset === 'gradient' ? `linear-gradient(${gradient.angle}deg, ${gradient.colors.join(', ')})` : bgPreset === 'q-preset' ? 'transparent' : '#05080c',
           }}
         >
           {bgPreset === 'blue-cyber' && <BlueCyberBg />}
+          {bgPreset === 'q-preset' && <QPresetBg />}
           <span className="edit-hint">&#9998; click title / slogan to edit</span>
-          <Scene textGlow={textGlow} overflow={overflow} titleSize={titleSize} sloganSize={sloganSize} textBoxes={textBoxes} removeTextBox={removeTextBox} updateTextBox={updateTextBox} />
+          <Scene textGlow={textGlow} titleShadow={titleShadow} overflow={overflow} titleSize={titleSize} sloganSize={sloganSize} textBoxes={textBoxes} removeTextBox={removeTextBox} updateTextBox={updateTextBox} />
         </div>
       </main>
     </>
