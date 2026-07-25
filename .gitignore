@@ -5,3 +5,5 @@ out
 *.log
 dev/
 *.tsbuildinfo
+AGENTS.md
+REMAINING-WORK.md
