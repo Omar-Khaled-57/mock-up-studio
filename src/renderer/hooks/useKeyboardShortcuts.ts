@@ -10,7 +10,10 @@ export function useKeyboardShortcuts() {
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
+  const deleteSelected = useStore((s) => s.deleteSelected)
+  const duplicateSelected = useStore((s) => s.duplicateSelected)
   const pushHistory = useStore((s) => s.pushHistory)
+  const clearSelection = useStore((s) => s.clearSelection)
 
   useEffect(() => {
     function findElement(id: string) {
@@ -54,24 +57,52 @@ export function useKeyboardShortcuts() {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
 
+      // Undo/Redo
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
         return
       }
-
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
         e.preventDefault()
         redo()
         return
       }
-
       if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
         e.preventDefault()
         redo()
         return
       }
 
+      // Duplicate
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault()
+        if (selectedIds.length > 0) {
+          const newIds = duplicateSelected(selectedIds)
+          pushHistory('Duplicate')
+          useStore.setState({ selectedIds: newIds })
+        }
+        return
+      }
+
+      // Select all
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault()
+        useStore.getState().selectAll()
+        return
+      }
+
+      // Delete
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedIds.length > 0) {
+          e.preventDefault()
+          deleteSelected(selectedIds)
+          pushHistory('Delete')
+        }
+        return
+      }
+
+      // Arrow nudge
       const step = e.shiftKey ? 10 : 1
 
       switch (e.key) {
@@ -92,7 +123,7 @@ export function useKeyboardShortcuts() {
           nudge(step, 0)
           break
         case 'Escape':
-          useStore.getState().clearSelection()
+          clearSelection()
           break
       }
     }
@@ -108,6 +139,9 @@ export function useKeyboardShortcuts() {
     updateDevice,
     updateTextBox,
     updateImage,
-    pushHistory
+    deleteSelected,
+    duplicateSelected,
+    pushHistory,
+    clearSelection
   ])
 }

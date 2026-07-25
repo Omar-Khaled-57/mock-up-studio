@@ -28,3 +28,25 @@ export const DEFAULT_CANVAS = {
 
 // Snap threshold in px
 export const SNAP_THRESHOLD = 5
+
+// Background presets
+export type AnimatedPreset = 'aurora' | 'neon-grid' | 'blue-cyber'
+export type StaticPreset = 'q-preset' | 'qless' | 'storybox3' | 'dark-solid'
+export type BackgroundPresetName = AnimatedPreset | StaticPreset
+
+export interface BackgroundPresetMeta {
+  name: BackgroundPresetName
+  label: string
+  category: 'animated' | 'static'
+  thumbnail: string
+}
+
+export const BACKGROUND_PRESETS: BackgroundPresetMeta[] = [
+  { name: 'aurora', label: 'Aurora', category: 'animated', thumbnail: 'linear-gradient(135deg, #0b1628, #1a0533, #0f3460, #16213e)' },
+  { name: 'neon-grid', label: 'Neon Grid', category: 'animated', thumbnail: 'linear-gradient(180deg, #0a0a0a 0%, #0f0f23 50%, #0a0a0a 100%)' },
+  { name: 'blue-cyber', label: 'Blue Cyber', category: 'animated', thumbnail: 'linear-gradient(160deg, #000428, #004e92)' },
+  { name: 'q-preset', label: 'Q-Preset', category: 'static', thumbnail: 'linear-gradient(135deg, #1a3a5c, #2563eb)' },
+  { name: 'qless', label: 'Qless', category: 'static', thumbnail: 'linear-gradient(135deg, #2d1b69, #7c3aed)' },
+  { name: 'storybox3', label: 'Storybox3', category: 'static', thumbnail: 'linear-gradient(135deg, #1a0533, #4c1d95)' },
+  { name: 'dark-solid', label: 'Dark Solid', category: 'static', thumbnail: '#0a0a0a' }
+]

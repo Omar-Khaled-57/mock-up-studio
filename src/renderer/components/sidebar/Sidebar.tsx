@@ -1,9 +1,10 @@
 import { useStore } from '../../store'
 import type { SidebarTab } from '../../store/uiSlice'
-import type { Device } from '@shared/types'
 import DevicesPanel from './DevicesPanel'
 import TextPanel from './TextPanel'
 import CanvasPresetsPanel from './CanvasPresetsPanel'
+import LayersPanel from './LayersPanel'
+import ThemesPanel from './ThemesPanel'
 
 const TABS: { id: SidebarTab; label: string; icon: string }[] = [
   { id: 'themes', label: 'Themes', icon: '🎨' },
@@ -18,8 +19,6 @@ const TABS: { id: SidebarTab; label: string; icon: string }[] = [
 export default function Sidebar() {
   const sidebarTab = useStore((s) => s.sidebarTab)
   const setSidebarTab = useStore((s) => s.setSidebarTab)
-  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
-  const select = useStore((s) => s.select)
 
   return (
     <aside className="flex h-full">
@@ -45,34 +44,9 @@ export default function Sidebar() {
       <div className="w-56 bg-zinc-900 border-r border-zinc-800 p-3 overflow-y-auto">
         {sidebarTab === 'devices' && <DevicesPanel />}
 
-        {sidebarTab === 'layers' && (
-          <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3">Layers</h3>
-            <div className="space-y-1">
-              {[...scene.devices]
-                .sort((a, b) => b.zIndex - a.zIndex)
-                .map((device: Device) => (
-                  <button
-                    key={device.id}
-                    onClick={() => select(device.id)}
-                    className="w-full text-left px-2 py-1.5 rounded text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center gap-2"
-                  >
-                    <span className="text-zinc-600">{device.visible ? '👁' : '—'}</span>
-                    {device.name}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
+        {sidebarTab === 'layers' && <LayersPanel />}
 
-        {sidebarTab === 'themes' && (
-          <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3">Background</h3>
-            <div className="space-y-2 text-sm text-zinc-400">
-              <p>Type: {scene.background.type}</p>
-            </div>
-          </div>
-        )}
+        {sidebarTab === 'themes' && <ThemesPanel />}
 
         {sidebarTab === 'export' && (
           <div>
@@ -89,7 +63,7 @@ export default function Sidebar() {
           <div>
             <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-3">Images</h3>
             <div className="space-y-2 text-sm text-zinc-400">
-              <p>Phase 2</p>
+              <p>Upload images via the canvas to create overlays</p>
             </div>
           </div>
         )}
