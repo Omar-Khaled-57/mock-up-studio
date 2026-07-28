@@ -67,6 +67,7 @@ export default function App() {
   }, [updateVersion])
 
   useEffect(() => {
+    if (!window.api?.onMenuAction) return
 
     const cleanup = window.api.onMenuAction((action: string) => {
       switch (action) {
