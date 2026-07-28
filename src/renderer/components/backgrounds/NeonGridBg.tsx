@@ -26,12 +26,6 @@ export default function NeonGridBg() {
           background: 'linear-gradient(180deg, transparent, rgba(0, 255, 200, 0.08))'
         }}
       />
-      <style>{`
-        @keyframes neon-scroll {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 60px; }
-        }
-      `}</style>
     </div>
   )
 }

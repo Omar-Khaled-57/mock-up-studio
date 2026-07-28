@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../../store'
+import { safeScene } from '../../store/sceneSlice'
 import { buildTextStyle } from '../../lib/device-utils'
 import InlineEditor from './InlineEditor'
 
 export default function TitleBlock() {
-  const titleText = useStore((s) => s.scenes[s.activeSceneIndex].titleText)
-  const sloganText = useStore((s) => s.scenes[s.activeSceneIndex].sloganText)
+  const titleText = useStore((s) => safeScene(s).titleText)
+  const sloganText = useStore((s) => safeScene(s).sloganText)
   const updateTitleText = useStore((s) => s.updateTitleText)
   const updateSloganText = useStore((s) => s.updateSloganText)
   const pushHistory = useStore((s) => s.pushHistory)

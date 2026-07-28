@@ -76,7 +76,7 @@ export interface Device {
   customBezelColor?: string
   customBorderColor?: string
   screenImage: string | null
-  objectFit: 'contain' | 'cover'
+  objectFit: 'contain' | 'cover' | 'stretch'
   customFrame?: {
     svgData: string
     screenRegion: { x: number; y: number; w: number; h: number }

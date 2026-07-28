@@ -1,12 +1,10 @@
 import { useEffect } from 'react'
 import { useStore } from '../store'
+import { safeScene } from '../store/sceneSlice'
 
 export function useKeyboardShortcuts() {
   const undo = useStore((s) => s.undo)
   const redo = useStore((s) => s.redo)
-  const selectedIds = useStore((s) => s.selectedIds)
-  const scenes = useStore((s) => s.scenes)
-  const activeSceneIndex = useStore((s) => s.activeSceneIndex)
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
@@ -14,10 +12,18 @@ export function useKeyboardShortcuts() {
   const duplicateSelected = useStore((s) => s.duplicateSelected)
   const pushHistory = useStore((s) => s.pushHistory)
   const clearSelection = useStore((s) => s.clearSelection)
+  const saveProject = useStore((s) => s.saveProject)
+  const saveProjectAs = useStore((s) => s.saveProjectAs)
+  const openProject = useStore((s) => s.openProject)
+  const newProject = useStore((s) => s.newProject)
+  const copySelected = useStore((s) => s.copySelected)
+  const cutSelected = useStore((s) => s.cutSelected)
+  const pasteClipboard = useStore((s) => s.pasteClipboard)
+  const setSidebarTab = useStore((s) => s.setSidebarTab)
 
   useEffect(() => {
     function findElement(id: string) {
-      const scene = scenes[activeSceneIndex]
+      const scene = safeScene(useStore.getState())
       const device = scene.devices.find((d) => d.id === id)
       if (device) return { type: 'device' as const, el: device }
       const textBox = scene.textBoxes.find((t) => t.id === id)
@@ -27,7 +33,7 @@ export function useKeyboardShortcuts() {
       return null
     }
 
-    function nudge(dx: number, dy: number) {
+    function nudge(selectedIds: string[], dx: number, dy: number) {
       if (selectedIds.length === 0) return
 
       pushHistory('Nudge')
@@ -57,25 +63,85 @@ export function useKeyboardShortcuts() {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
 
+      const mod = e.ctrlKey || e.metaKey
+      const selectedIds = useStore.getState().selectedIds
+      const dirty = useStore.getState().dirty
+
+      // Save: Ctrl+S
+      if (mod && e.key === 's' && !e.shiftKey) {
+        e.preventDefault()
+        saveProject()
+        return
+      }
+
+      // Save As: Ctrl+Shift+S
+      if (mod && e.key === 's' && e.shiftKey) {
+        e.preventDefault()
+        saveProjectAs()
+        return
+      }
+
+      // Open: Ctrl+O
+      if (mod && e.key === 'o') {
+        e.preventDefault()
+        openProject()
+        return
+      }
+
+      // New: Ctrl+N
+      if (mod && e.key === 'n') {
+        e.preventDefault()
+        if (dirty) {
+          if (!confirm('Unsaved changes will be lost. Continue?')) return
+        }
+        newProject()
+        return
+      }
+
       // Undo/Redo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if (mod && e.key === 'z' && !e.shiftKey) {
         e.preventDefault()
         undo()
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+      if (mod && e.key === 'z' && e.shiftKey) {
         e.preventDefault()
         redo()
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      if (mod && e.key === 'y') {
         e.preventDefault()
         redo()
         return
       }
 
-      // Duplicate
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+      // Copy: Ctrl+C
+      if (mod && e.key === 'c' && !e.shiftKey) {
+        if (selectedIds.length > 0) {
+          e.preventDefault()
+          copySelected()
+        }
+        return
+      }
+
+      // Cut: Ctrl+X
+      if (mod && e.key === 'x') {
+        if (selectedIds.length > 0) {
+          e.preventDefault()
+          cutSelected()
+        }
+        return
+      }
+
+      // Paste: Ctrl+V
+      if (mod && e.key === 'v' && !e.shiftKey) {
+        e.preventDefault()
+        pasteClipboard()
+        return
+      }
+
+      // Duplicate: Ctrl+D
+      if (mod && e.key === 'd') {
         e.preventDefault()
         if (selectedIds.length > 0) {
           const newIds = duplicateSelected(selectedIds)
@@ -85,10 +151,17 @@ export function useKeyboardShortcuts() {
         return
       }
 
-      // Select all
-      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+      // Select all: Ctrl+A
+      if (mod && e.key === 'a') {
         e.preventDefault()
         useStore.getState().selectAll()
+        return
+      }
+
+      // Export: Ctrl+E
+      if (mod && e.key === 'e') {
+        e.preventDefault()
+        setSidebarTab('export')
         return
       }
 
@@ -108,19 +181,19 @@ export function useKeyboardShortcuts() {
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault()
-          nudge(0, -step)
+          nudge(selectedIds, 0, -step)
           break
         case 'ArrowDown':
           e.preventDefault()
-          nudge(0, step)
+          nudge(selectedIds, 0, step)
           break
         case 'ArrowLeft':
           e.preventDefault()
-          nudge(-step, 0)
+          nudge(selectedIds, -step, 0)
           break
         case 'ArrowRight':
           e.preventDefault()
-          nudge(step, 0)
+          nudge(selectedIds, step, 0)
           break
         case 'Escape':
           clearSelection()
@@ -133,15 +206,20 @@ export function useKeyboardShortcuts() {
   }, [
     undo,
     redo,
-    selectedIds,
-    scenes,
-    activeSceneIndex,
     updateDevice,
     updateTextBox,
     updateImage,
     deleteSelected,
     duplicateSelected,
     pushHistory,
-    clearSelection
+    clearSelection,
+    saveProject,
+    saveProjectAs,
+    openProject,
+    newProject,
+    copySelected,
+    cutSelected,
+    pasteClipboard,
+    setSidebarTab
   ])
 }

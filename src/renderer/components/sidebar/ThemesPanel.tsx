@@ -1,7 +1,9 @@
 import { useCallback, useRef } from 'react'
 import { useStore } from '../../store'
+import { safeScene } from '../../store/sceneSlice'
 import type { Background } from '@shared/types'
 import { BACKGROUND_PRESETS, type BackgroundPresetName } from '../../lib/constants'
+import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
 
 const BG_TYPES: { value: Background['type']; label: string }[] = [
   { value: 'solid', label: 'Solid' },
@@ -67,20 +69,13 @@ function SliderInput({
 }
 
 export default function ThemesPanel() {
-  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const scene = useStore(safeScene)
   const updateBackground = useStore((s) => s.updateBackground)
   const pushHistory = useStore((s) => s.pushHistory)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const bg = scene.background
 
-  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pushHistoryDebounced = useCallback(
-    (label: string) => {
-      if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
-      historyTimerRef.current = setTimeout(() => pushHistory(label), 500)
-    },
-    [pushHistory]
-  )
+  const pushHistoryDebounced = useDebouncedHistory()
 
   const setType = useCallback(
     (type: Background['type']) => {
@@ -201,14 +196,14 @@ export default function ThemesPanel() {
 
       {/* Type Selector */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Background Type</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Background Type</h3>
         <div className="grid grid-cols-2 gap-1">
           {BG_TYPES.map((t) => (
             <button
               key={t.value}
               onClick={() => setType(t.value)}
-              className={`px-2 py-1.5 text-xs rounded transition-colors ${
-                bg.type === t.value ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              className={`px-2 py-1.5 text-xs rounded-lg transition-all duration-150 ${
+                bg.type === t.value ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
               }`}
             >
               {t.label}
@@ -220,7 +215,7 @@ export default function ThemesPanel() {
       {/* Solid Controls */}
       {bg.type === 'solid' && (
         <div>
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Color</h3>
+          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Color</h3>
           <ColorInput label="" value={bg.color ?? '#18181b'} onChange={setSolidColor} />
         </div>
       )}
@@ -230,7 +225,7 @@ export default function ThemesPanel() {
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase">Colors</h3>
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Colors</h3>
               {(bg.gradient?.colors ?? []).length < 4 && (
                 <button
                   onClick={addGradientStop}
@@ -339,7 +334,7 @@ export default function ThemesPanel() {
       {bg.type === 'preset' && (
         <div className="space-y-3">
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Animated</h3>
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Animated</h3>
             <div className="grid grid-cols-2 gap-1.5">
               {BACKGROUND_PRESETS.filter((p) => p.category === 'animated').map((preset) => (
                 <button
@@ -364,7 +359,7 @@ export default function ThemesPanel() {
           </div>
 
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Static</h3>
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Static</h3>
             <div className="grid grid-cols-2 gap-1.5">
               {BACKGROUND_PRESETS.filter((p) => p.category === 'static').map((preset) => (
                 <button

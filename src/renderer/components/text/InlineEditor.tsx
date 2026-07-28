@@ -94,8 +94,7 @@ export default function InlineEditor({
         wordBreak: 'break-word',
         minHeight: '1em'
       }}
-    >
-      {showPlaceholder && <span style={{ color: '#71717a', fontStyle: 'italic' }}>{placeholder}</span>}
-    </div>
+      data-placeholder={showPlaceholder ? placeholder : undefined}
+    />
   )
 }

@@ -1,10 +1,39 @@
+/**
+ * Canvas — Viewport container with zoom, pan, and auto-fit.
+ *
+ * Viewport model:
+ *   - The inner `<div>` is positioned absolutely and transformed via
+ *     `translate(panX, panY) scale(zoom)` with `transform-origin: 0 0`.
+ *   - Scene coordinates map to screen coordinates via: screen = scene * zoom + pan.
+ *   - Pan values are in screen pixels (not scene units).
+ *
+ * Zoom:
+ *   - Ctrl+scroll (trackpad pinch) → multiplicative zoom (0.95x / 1.05x).
+ *   - Zoom range is clamped by viewportSlice.
+ *
+ * Pan:
+ *   - Middle-click drag, or Alt+left-click drag, or trackpad two-finger scroll.
+ *   - `deltaMode === 0` (pixel) → horizontal + vertical pan.
+ *   - `deltaMode === 1/2` (line/page) → vertical pan only (mouse wheel).
+ *
+ * Auto-fit:
+ *   - A debounced ResizeObserver (100ms) calls `fitToWindow()` whenever the
+ *     container resizes (window resize, sidebar toggle, etc.).
+ *   - This recalculates zoom and pan so the entire scene fits inside the
+ *     container with a small margin.
+ *
+ * Deselection:
+ *   - Clicking the empty canvas area (not on an element) clears the selection.
+ */
+
 import { useRef, useEffect, useCallback } from 'react'
 import { useStore } from '../../store'
+import { safeScene } from '../../store/sceneSlice'
 import Scene from './Scene'
 
 export default function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const scene = useStore(safeScene)
   const zoom = useStore((s) => s.zoom)
   const panX = useStore((s) => s.panX)
   const panY = useStore((s) => s.panY)
@@ -24,17 +53,18 @@ export default function Canvas() {
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
-        // Pinch-to-zoom (trackpad pinch or Ctrl+scroll)
+        // Pinch-to-zoom (trackpad pinch or Ctrl+scroll).
+        // Multiplicative scale factor for smooth, natural feel.
         e.preventDefault()
         const scaleFactor = e.deltaY > 0 ? 0.95 : 1.05
         setZoom(zoomRef.current * scaleFactor)
       } else if (e.deltaMode === 0) {
-        // Pixel mode — trackpad two-finger scroll → pan
+        // Pixel mode — trackpad two-finger scroll → pan both axes.
         e.preventDefault()
         const p = panRef.current
         setPan(p.x - e.deltaX, p.y - e.deltaY)
       } else {
-        // Line/page mode — mouse wheel → pan vertically
+        // Line/page mode — mouse wheel → pan vertically only.
         e.preventDefault()
         const p = panRef.current
         setPan(p.x, p.y - e.deltaY * 16)
@@ -43,6 +73,7 @@ export default function Canvas() {
     [setZoom, setPan]
   )
 
+  /** Starts panning on middle-click or Alt+left-click. */
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (e.button === 1 || (e.button === 0 && e.altKey)) {
@@ -68,6 +99,7 @@ export default function Canvas() {
     if (isPanning) setIsPanning(false)
   }, [isPanning, setIsPanning])
 
+  /** Clicking empty canvas clears selection (clicks on elements are stopped by e.stopPropagation). */
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.target === e.currentTarget) clearSelection()
@@ -75,14 +107,27 @@ export default function Canvas() {
     [clearSelection]
   )
 
+  /**
+   * Debounced ResizeObserver: calls fitToWindow when the container size
+   * changes (window resize, sidebar toggle). Debounced at 100ms to
+   * prevent a storm of fitToWindow calls during rapid resizing.
+   */
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+    let timer: ReturnType<typeof setTimeout> | null = null
     const ro = new ResizeObserver(() => {
-      fitToWindow(scene.canvas.width, scene.canvas.height, el.clientWidth, el.clientHeight)
+      if (timer) return
+      timer = setTimeout(() => {
+        timer = null
+        fitToWindow(scene.canvas.width, scene.canvas.height, el.clientWidth, el.clientHeight)
+      }, 100)
     })
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      if (timer) clearTimeout(timer)
+      ro.disconnect()
+    }
   }, [scene.canvas.width, scene.canvas.height, fitToWindow])
 
   return (

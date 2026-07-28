@@ -1,0 +1,97 @@
+import { useEffect, useCallback } from 'react'
+
+interface Props {
+  onClose: () => void
+}
+
+const SECTIONS = [
+  {
+    title: 'File',
+    shortcuts: [
+      { keys: 'Ctrl+N', action: 'New project' },
+      { keys: 'Ctrl+O', action: 'Open project' },
+      { keys: 'Ctrl+S', action: 'Save' },
+      { keys: 'Ctrl+Shift+S', action: 'Save As' },
+      { keys: 'Ctrl+E', action: 'Open export panel' }
+    ]
+  },
+  {
+    title: 'Edit',
+    shortcuts: [
+      { keys: 'Ctrl+Z', action: 'Undo' },
+      { keys: 'Ctrl+Shift+Z / Ctrl+Y', action: 'Redo' },
+      { keys: 'Ctrl+C', action: 'Copy' },
+      { keys: 'Ctrl+X', action: 'Cut' },
+      { keys: 'Ctrl+V', action: 'Paste' },
+      { keys: 'Ctrl+D', action: 'Duplicate' },
+      { keys: 'Ctrl+A', action: 'Select all' },
+      { keys: 'Delete / Backspace', action: 'Delete selected' }
+    ]
+  },
+  {
+    title: 'Canvas',
+    shortcuts: [
+      { keys: 'Arrow keys', action: 'Nudge 1px' },
+      { keys: 'Shift + Arrow', action: 'Nudge 10px' },
+      { keys: 'Escape', action: 'Deselect all' },
+      { keys: 'Alt + Drag / Middle click', action: 'Pan canvas' },
+      { keys: 'Ctrl + Scroll', action: 'Zoom in/out' }
+    ]
+  }
+]
+
+export default function ShortcutsModal({ onClose }: Props) {
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    },
+    [onClose]
+  )
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  return (
+    <div
+      className="fixed inset-0 z-[9998] bg-black/60 flex items-center justify-center"
+      onClick={onClose}
+    >
+      <div
+        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-sm font-semibold text-zinc-200">Keyboard Shortcuts</h2>
+          <button
+            onClick={onClose}
+            className="text-zinc-500 hover:text-zinc-300 text-xs"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          {SECTIONS.map((section) => (
+            <div key={section.title}>
+              <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+                {section.title}
+              </h3>
+              <div className="space-y-1">
+                {section.shortcuts.map((s) => (
+                  <div key={s.action} className="flex items-center justify-between py-1">
+                    <span className="text-xs text-zinc-400">{s.action}</span>
+                    <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 bg-zinc-800 border border-zinc-700 rounded">
+                      {s.keys}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

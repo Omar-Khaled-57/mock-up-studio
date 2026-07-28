@@ -88,7 +88,7 @@ export default function ScreenContainer({ device }: Props) {
     return (
       <div
         ref={dropRef}
-        onClick={handleFileSelect}
+        onDoubleClick={handleFileSelect}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -115,7 +115,7 @@ export default function ScreenContainer({ device }: Props) {
           }}
         >
           <div style={{ fontSize: 20, marginBottom: 4 }}>+</div>
-          {isDragOver ? 'Drop image here' : 'Click or drop screenshot'}
+          {isDragOver ? 'Drop image here' : 'Double-click or drop screenshot'}
         </div>
       </div>
     )
@@ -142,7 +142,7 @@ export default function ScreenContainer({ device }: Props) {
         style={{
           width: '100%',
           height: '100%',
-          objectFit: device.objectFit,
+          objectFit: device.objectFit === 'stretch' ? 'fill' : device.objectFit,
           display: 'block'
         }}
         draggable={false}
@@ -150,7 +150,7 @@ export default function ScreenContainer({ device }: Props) {
 
       {/* Replace overlay on hover */}
       <div
-        onClick={handleReplace}
+        onDoubleClick={handleReplace}
         style={{
           position: 'absolute',
           inset: 0,
@@ -164,10 +164,8 @@ export default function ScreenContainer({ device }: Props) {
         }}
         className="screen-replace-overlay"
       >
-        <span style={{ color: '#fff', fontSize: 12, fontWeight: 500 }}>Click to replace</span>
+        <span style={{ color: '#fff', fontSize: 12, fontWeight: 500 }}>Double-click to replace</span>
       </div>
-
-      <style>{`.screen-replace-overlay:hover { opacity: 1 !important; }`}</style>
     </div>
   )
 }

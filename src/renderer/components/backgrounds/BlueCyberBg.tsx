@@ -29,28 +29,6 @@ export default function BlueCyberBg() {
           }}
         />
       ))}
-      <style>{`
-        @keyframes cyber-scanlines {
-          0% { background-position: 0 0; }
-          100% { background-position: 0 100px; }
-        }
-        @keyframes cyber-pulse {
-          0% { opacity: 1; }
-          100% { opacity: 0.7; }
-        }
-        @keyframes cyber-particle-0 {
-          0% { transform: translate(0, 0); opacity: 0.3; }
-          100% { transform: translate(10px, -15px); opacity: 0.8; }
-        }
-        @keyframes cyber-particle-1 {
-          0% { transform: translate(0, 0); opacity: 0.5; }
-          100% { transform: translate(-8px, 12px); opacity: 0.2; }
-        }
-        @keyframes cyber-particle-2 {
-          0% { transform: translate(0, 0); opacity: 0.4; }
-          100% { transform: translate(15px, 8px); opacity: 0.7; }
-        }
-      `}</style>
     </div>
   )
 }

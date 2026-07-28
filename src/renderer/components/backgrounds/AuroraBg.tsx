@@ -34,20 +34,6 @@ export default function AuroraBg() {
           animation: 'aurora-drift-3 18s ease-in-out infinite alternate'
         }}
       />
-      <style>{`
-        @keyframes aurora-drift-1 {
-          0% { transform: translate(0, 0) scale(1); }
-          100% { transform: translate(8%, 5%) scale(1.1); }
-        }
-        @keyframes aurora-drift-2 {
-          0% { transform: translate(0, 0) scale(1); }
-          100% { transform: translate(-6%, -8%) scale(1.15); }
-        }
-        @keyframes aurora-drift-3 {
-          0% { transform: translate(0, 0) scale(1); }
-          100% { transform: translate(5%, -5%) scale(1.05); }
-        }
-      `}</style>
     </div>
   )
 }

@@ -1,8 +1,46 @@
+/**
+ * sceneSlice — Central source of truth for all scene data.
+ *
+ * Architecture:
+ *   - `scenes[]` is an array of independent Scene objects (multi-scene support).
+ *   - `activeSceneIndex` selects which scene is currently displayed/edited.
+ *   - Every mutation clones the scenes array (immutable update) so Zustand
+ *     selectors see the new reference and React re-renders correctly.
+ *
+ * Safety invariants:
+ *   - `safeScene()` must be used instead of raw `scenes[activeSceneIndex]`
+ *     because the index can go stale after undo/redo or scene deletion.
+ *   - `clampIndex()` guards all index writes so the active scene is never out of bounds.
+ *
+ * History contract:
+ *   - Callers MUST call `pushHistory()` BEFORE mutating (not after) so that
+ *     undo restores the pre-mutation state. This is critical for SceneTabs
+ *     and clipboard operations.
+ */
+
 import { StateCreator } from 'zustand'
-import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, TitleText } from '@shared/types'
+import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, TitleText, GridSettings } from '@shared/types'
 import { StoreState } from './index'
 import { DEFAULT_CANVAS } from '../lib/constants'
 import { generateId } from '../lib/id'
+
+/**
+ * Returns the current active scene, or a fresh default if the scenes array
+ * is empty or the index is out of bounds. This is the ONLY safe way to
+ * access the active scene — raw `scenes[activeSceneIndex]` can crash after
+ * undo/redo, scene deletion, or during async operations.
+ */
+export function safeScene(state: StoreState): Scene {
+  const { scenes, activeSceneIndex } = state
+  if (scenes.length === 0) return createDefaultScene()
+  return scenes[Math.min(activeSceneIndex, scenes.length - 1)] ?? createDefaultScene()
+}
+
+/** Clamps an index to valid range [0, scenes.length - 1]. Returns 0 for empty arrays. */
+function clampIndex(scenes: Scene[], index: number): number {
+  if (scenes.length === 0) return 0
+  return Math.min(index, scenes.length - 1)
+}
 
 function defaultTitleText(): TitleText {
   return {
@@ -32,7 +70,7 @@ function defaultSloganText(): TitleText {
   }
 }
 
-function createDefaultScene(): Scene {
+export function createDefaultScene(): Scene {
   return {
     id: generateId(),
     name: 'Scene 1',
@@ -71,8 +109,13 @@ function createDefaultScene(): Scene {
   }
 }
 
-type ElementKind = 'device' | 'textbox' | 'image'
+export type ElementKind = 'device' | 'textbox' | 'image'
 
+/**
+ * Flattens all element types (devices, textboxes, images) into a single
+ * array sorted by z-index. Used by z-order operations (bringToFront,
+ * sendToBack, etc.) to compute relative positions across types.
+ */
 function findAllElements(scene: Scene): { id: string; kind: ElementKind; zIndex: number }[] {
   const all = [
     ...scene.devices.map((d) => ({ id: d.id, kind: 'device' as const, zIndex: d.zIndex })),
@@ -82,6 +125,10 @@ function findAllElements(scene: Scene): { id: string; kind: ElementKind; zIndex:
   return all.sort((a, b) => a.zIndex - b.zIndex)
 }
 
+/**
+ * Updates a single element's zIndex without mutating the rest of the scene.
+ * Returns a new scene object with shallow copies of the affected array.
+ */
 function patchZIndex(
   scene: Scene,
   kind: ElementKind,
@@ -97,6 +144,7 @@ function patchZIndex(
   return { ...scene, images: scene.images.map((i) => (i.id === id ? { ...i, zIndex: newZ } : i)) }
 }
 
+/** Removes an element by id from the appropriate typed array. */
 function removeById(scene: Scene, kind: ElementKind, id: string): Scene {
   if (kind === 'device') return { ...scene, devices: scene.devices.filter((d) => d.id !== id) }
   if (kind === 'textbox') return { ...scene, textBoxes: scene.textBoxes.filter((t) => t.id !== id) }
@@ -130,20 +178,35 @@ export interface SceneSlice {
   sendBackward: (id: string) => void
   reorderLayer: (id: string, kind: ElementKind, targetZIndex: number) => void
   findElementKind: (id: string) => ElementKind | null
+  updateGrid: (patch: Partial<GridSettings>) => void
+  addGuide: (orientation: 'horizontal' | 'vertical', position: number) => void
+  removeGuide: (guideId: string) => void
+  updateGuide: (guideId: string, position: number) => void
+  clearGuides: () => void
+  addScene: () => void
+  duplicateScene: (index: number) => void
+  deleteScene: (index: number) => void
+  renameScene: (index: number, name: string) => void
 }
 
 export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (set, get) => ({
   scenes: [createDefaultScene()],
   activeSceneIndex: 0,
 
+  /**
+   * Runtime getter (non-reactive). Prefer the `safeScene()` selector in
+   * components/hooks that subscribe to store updates. This is mainly
+   * useful inside actions that need the current scene synchronously.
+   */
   getActiveScene: () => {
     const { scenes, activeSceneIndex } = get()
-    return scenes[activeSceneIndex]
+    if (scenes.length === 0) return createDefaultScene()
+    return scenes[Math.min(activeSceneIndex, scenes.length - 1)]
   },
 
-  setScenes: (scenes) => set({ scenes }),
+  setScenes: (scenes) => set((state) => ({ scenes, activeSceneIndex: clampIndex(scenes, state.activeSceneIndex) })),
 
-  setActiveSceneIndex: (index) => set({ activeSceneIndex: index }),
+  setActiveSceneIndex: (index) => set((state) => ({ activeSceneIndex: clampIndex(state.scenes, index) })),
 
   updateCanvas: (settings) =>
     set((state) => {
@@ -288,7 +351,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     }),
 
   findElementKind: (id) => {
-    const scene = get().scenes[get().activeSceneIndex]
+    const scene = safeScene(get())
     if (scene.devices.some((d) => d.id === id)) return 'device'
     if (scene.textBoxes.some((t) => t.id === id)) return 'textbox'
     if (scene.images.some((i) => i.id === id)) return 'image'
@@ -308,6 +371,11 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes, selectedIds: [] }
     }),
 
+  /**
+   * Deep-clones selected elements with offset positions (+30px) and new IDs.
+   * Duplicates are placed on top (maxZ + 1) and automatically selected.
+   * Returns the IDs of the newly created clones.
+   */
   duplicateSelected: (ids) => {
     const state = get()
     const scene = state.scenes[state.activeSceneIndex]
@@ -350,6 +418,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     return newIds
   },
 
+  /** Moves element above all others by setting zIndex to max + 1. */
   bringToFront: (id) =>
     set((state) => {
       const scenes = [...state.scenes]
@@ -362,6 +431,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes }
     }),
 
+  /** Moves element below all others by setting zIndex to min - 1. */
   sendToBack: (id) =>
     set((state) => {
       const scenes = [...state.scenes]
@@ -374,6 +444,10 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes }
     }),
 
+  /**
+   * Moves element up one layer. If two elements share the same zIndex,
+   * increments by 1 to break the tie.
+   */
   bringForward: (id) =>
     set((state) => {
       const scenes = [...state.scenes]
@@ -389,6 +463,10 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes }
     }),
 
+  /**
+   * Moves element down one layer. If two elements share the same zIndex,
+   * decrements by 1 to break the tie.
+   */
   sendBackward: (id) =>
     set((state) => {
       const scenes = [...state.scenes]
@@ -404,11 +482,104 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes }
     }),
 
+  /** Directly sets an element's zIndex. Used by drag-reorder in LayersPanel. */
   reorderLayer: (id, kind, targetZIndex) =>
     set((state) => {
       const scenes = [...state.scenes]
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = patchZIndex(scene, kind, id, targetZIndex)
+      return { scenes }
+    }),
+
+  updateGrid: (patch) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const scene = scenes[state.activeSceneIndex]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        grid: { ...scene.grid, ...patch }
+      }
+      return { scenes }
+    }),
+
+  addGuide: (orientation, position) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const scene = scenes[state.activeSceneIndex]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        guides: [...scene.guides, { id: generateId(), orientation, position }]
+      }
+      return { scenes }
+    }),
+
+  removeGuide: (guideId) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const scene = scenes[state.activeSceneIndex]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        guides: scene.guides.filter((g) => g.id !== guideId)
+      }
+      return { scenes }
+    }),
+
+  updateGuide: (guideId, position) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const scene = scenes[state.activeSceneIndex]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        guides: scene.guides.map((g) => (g.id === guideId ? { ...g, position } : g))
+      }
+      return { scenes }
+    }),
+
+  clearGuides: () =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const scene = scenes[state.activeSceneIndex]
+      scenes[state.activeSceneIndex] = { ...scene, guides: [] }
+      return { scenes }
+    }),
+
+  addScene: () =>
+    set((state) => {
+      const newScene = createDefaultScene()
+      newScene.name = `Scene ${state.scenes.length + 1}`
+      const scenes = [...state.scenes, newScene]
+      return { scenes, activeSceneIndex: scenes.length - 1, selectedIds: [] }
+    }),
+
+  /**
+   * Deep-clones a scene via JSON round-trip (fast, no structural sharing).
+   * The copy is inserted immediately after the source and becomes active.
+   */
+  duplicateScene: (index) =>
+    set((state) => {
+      const source = state.scenes[index]
+      if (!source) return state
+      const dup = JSON.parse(JSON.stringify(source)) as Scene
+      dup.id = generateId()
+      dup.name = `${source.name} copy`
+      const scenes = [...state.scenes]
+      scenes.splice(index + 1, 0, dup)
+      return { scenes, activeSceneIndex: index + 1, selectedIds: [] }
+    }),
+
+  /** Removes a scene. Prevents deletion if only one scene remains. */
+  deleteScene: (index) =>
+    set((state) => {
+      if (state.scenes.length <= 1) return state
+      const scenes = state.scenes.filter((_, i) => i !== index)
+      const newActive = Math.min(state.activeSceneIndex, scenes.length - 1)
+      return { scenes, activeSceneIndex: newActive, selectedIds: [] }
+    }),
+
+  renameScene: (index, name) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      scenes[index] = { ...scenes[index], name }
       return { scenes }
     })
 })

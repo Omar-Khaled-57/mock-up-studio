@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useStore } from '../../store'
+import { safeScene } from '../../store/sceneSlice'
 import { CANVAS_PRESETS } from '../../lib/constants'
 
 const MAX_CUSTOM_SLOTS = 5
@@ -21,7 +22,7 @@ function saveCustomSlots(slots: { label: string; width: number; height: number }
 }
 
 export default function CanvasPresetsPanel() {
-  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const scene = useStore(safeScene)
   const updateCanvas = useStore((s) => s.updateCanvas)
   const pushHistory = useStore((s) => s.pushHistory)
 
@@ -80,7 +81,7 @@ export default function CanvasPresetsPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Quick Presets</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Quick Presets</h3>
         <div className="space-y-1">
           {CANVAS_PRESETS.map((preset) => {
             const active = scene.canvas.width === preset.width && scene.canvas.height === preset.height
@@ -101,7 +102,7 @@ export default function CanvasPresetsPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Resolution Presets</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Resolution Presets</h3>
         <div className="space-y-1">
           {[
             { label: 'Full HD', width: 1920, height: 1080 },
@@ -126,7 +127,7 @@ export default function CanvasPresetsPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Custom Slots</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Custom Slots</h3>
         <div className="space-y-1">
           {customSlots.map((slot, idx) => {
             if (editingSlot === idx) {

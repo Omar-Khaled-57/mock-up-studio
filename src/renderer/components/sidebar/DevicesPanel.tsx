@@ -1,8 +1,11 @@
 import { useCallback } from 'react'
 import { useStore } from '../../store'
+import { safeScene } from '../../store/sceneSlice'
 import { generateId } from '../../lib/id'
 import { DEVICE_ASPECT_RATIOS } from '../../lib/constants'
 import type { Device } from '@shared/types'
+import { Plus, Eye, EyeOff, Lock, Unlock, Copy, Trash2 } from 'lucide-react'
+import LayoutTemplates from './LayoutTemplates'
 
 const DEVICE_TYPES: { type: Device['type']; label: string }[] = [
   { type: 'monitor', label: 'Monitor' },
@@ -22,7 +25,7 @@ function getDefaultHeight(type: Device['type']): number {
 }
 
 export default function DevicesPanel() {
-  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const scene = useStore(safeScene)
   const select = useStore((s) => s.select)
   const addDevice = useStore((s) => s.addDevice)
   const updateDevice = useStore((s) => s.updateDevice)
@@ -123,15 +126,6 @@ export default function DevicesPanel() {
     [scene.devices, updateDevice]
   )
 
-  const handleToggleFit = useCallback(
-    (id: string) => {
-      const device = scene.devices.find((d) => d.id === id)
-      if (!device) return
-      updateDevice(id, { objectFit: device.objectFit === 'contain' ? 'cover' : 'contain' })
-    },
-    [scene.devices, updateDevice]
-  )
-
   const handleRotationChange = useCallback(
     (id: string, rotation: number) => {
       updateDevice(id, { rotation })
@@ -150,15 +144,16 @@ export default function DevicesPanel() {
     <div className="space-y-4">
       {/* Add buttons */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Add Device</h3>
-        <div className="grid grid-cols-2 gap-1">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Add Device</h3>
+        <div className="grid grid-cols-2 gap-1.5">
           {DEVICE_TYPES.map(({ type, label }) => (
             <button
               key={type}
               onClick={() => handleAdd(type)}
-              className="px-2 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-zinc-300 bg-zinc-800/60 rounded-lg hover:bg-zinc-700/80 hover:text-zinc-100 transition-all duration-150"
             >
-              + {label}
+              <Plus size={12} strokeWidth={2} />
+              {label}
             </button>
           ))}
         </div>
@@ -166,38 +161,38 @@ export default function DevicesPanel() {
 
       {/* Device list */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
           Devices ({scene.devices.length})
         </h3>
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {scene.devices.map((device) => (
             <div
               key={device.id}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded text-sm transition-colors ${
+              className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm transition-all duration-150 ${
                 selectedDevice?.id === device.id
-                  ? 'bg-indigo-600/20 border border-indigo-500/30'
-                  : 'hover:bg-zinc-800'
+                  ? 'bg-indigo-500/10 border border-indigo-500/20'
+                  : 'hover:bg-zinc-800/60 border border-transparent'
               }`}
             >
               <button
                 onClick={() => select(device.id)}
-                className="flex-1 text-left text-zinc-300 truncate"
+                className="flex-1 text-left text-zinc-300 truncate text-xs"
               >
                 {device.name}
               </button>
               <button
                 onClick={() => handleToggleVisibility(device.id)}
-                className="w-5 h-5 flex items-center justify-center text-[10px] text-zinc-500 hover:text-zinc-300"
+                className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
                 title={device.visible ? 'Hide' : 'Show'}
               >
-                {device.visible ? '👁' : '—'}
+                {device.visible ? <Eye size={12} /> : <EyeOff size={12} />}
               </button>
               <button
                 onClick={() => handleToggleLock(device.id)}
-                className="w-5 h-5 flex items-center justify-center text-[10px] text-zinc-500 hover:text-zinc-300"
+                className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
                 title={device.locked ? 'Unlock' : 'Lock'}
               >
-                {device.locked ? '🔒' : '🔓'}
+                {device.locked ? <Lock size={12} /> : <Unlock size={12} />}
               </button>
             </div>
           ))}
@@ -206,8 +201,8 @@ export default function DevicesPanel() {
 
       {/* Selected device controls */}
       {selectedDevice && (
-        <div className="space-y-3 border-t border-zinc-800 pt-3">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase">
+        <div className="space-y-3 border-t border-zinc-800/60 pt-3">
+          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
             Properties: {selectedDevice.name}
           </h3>
 
@@ -217,13 +212,13 @@ export default function DevicesPanel() {
             <input
               value={selectedDevice.name}
               onChange={(e) => handleRename(selectedDevice.id, e.target.value)}
-              className="w-full px-2 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className="w-full px-2 py-1.5 text-xs bg-zinc-800/60 text-zinc-200 rounded-lg border border-zinc-700/50 focus:border-indigo-500/50 outline-none transition-colors"
             />
           </div>
 
           {/* Width slider */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">
+            <label className="text-[10px] text-zinc-500 mb-1 block">
               Width: {selectedDevice.width}px
             </label>
             <input
@@ -238,16 +233,16 @@ export default function DevicesPanel() {
 
           {/* Object fit */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">Object Fit</label>
+            <label className="text-[10px] text-zinc-500 mb-1 block">Object Fit</label>
             <div className="flex gap-1">
-              {(['contain', 'cover'] as const).map((fit) => (
+              {(['contain', 'cover', 'stretch'] as const).map((fit) => (
                 <button
                   key={fit}
                   onClick={() => updateDevice(selectedDevice.id, { objectFit: fit })}
-                  className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
+                  className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-all duration-150 ${
                     selectedDevice.objectFit === fit
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-zinc-800 text-zinc-400'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                      : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
                   }`}
                 >
                   {fit}
@@ -258,7 +253,7 @@ export default function DevicesPanel() {
 
           {/* Rotation */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">
+            <label className="text-[10px] text-zinc-500 mb-1 block">
               Rotation: {selectedDevice.rotation}°
             </label>
             <input
@@ -273,16 +268,16 @@ export default function DevicesPanel() {
 
           {/* Color theme */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">Theme</label>
+            <label className="text-[10px] text-zinc-500 mb-1 block">Theme</label>
             <div className="grid grid-cols-3 gap-1">
               {(['dark', 'light', 'space-gray', 'midnight', 'custom'] as const).map((theme) => (
                 <button
                   key={theme}
                   onClick={() => handleThemeChange(selectedDevice.id, theme)}
-                  className={`px-1.5 py-1 text-[10px] rounded transition-colors ${
+                  className={`px-1.5 py-1.5 text-[10px] rounded-lg transition-all duration-150 ${
                     selectedDevice.colorTheme === theme
-                      ? 'bg-indigo-600 text-white'
-                      : 'bg-zinc-800 text-zinc-400'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                      : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
                   }`}
                 >
                   {theme}
@@ -292,22 +287,28 @@ export default function DevicesPanel() {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-1 pt-1">
+          <div className="flex gap-1.5 pt-1">
             <button
               onClick={handleDuplicate}
-              className="flex-1 px-2 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-zinc-800/60 text-zinc-300 rounded-lg hover:bg-zinc-700/80 transition-all duration-150"
             >
+              <Copy size={12} />
               Duplicate
             </button>
             <button
               onClick={handleDelete}
-              className="flex-1 px-2 py-1.5 text-xs bg-red-900/30 text-red-400 rounded hover:bg-red-900/50 transition-colors"
+              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-all duration-150"
             >
+              <Trash2 size={12} />
               Delete
             </button>
           </div>
         </div>
       )}
+
+      <div className="border-t border-zinc-800/60 pt-3 mt-3">
+        <LayoutTemplates />
+      </div>
     </div>
   )
 }

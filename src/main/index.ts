@@ -1,7 +1,24 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
+import { createMenu } from './menu'
+import { initAutoUpdater } from './auto-updater'
+
+let isQuitting = false
+let pendingFilePath: string | null = null
+
+function sendFilePathToRenderer(filePath: string): void {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('open-file-path', filePath)
+  }
+}
+
+function getFilePathFromArgs(argv: string[]): string | null {
+  const mockupArg = argv.find((arg) => arg.endsWith('.mockup'))
+  return mockupArg || null
+}
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -10,6 +27,7 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     show: false,
+    icon: join(__dirname, '../../public/logo.ico'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -20,6 +38,37 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    createMenu(mainWindow)
+    initAutoUpdater(mainWindow)
+
+    if (pendingFilePath) {
+      sendFilePathToRenderer(pendingFilePath)
+      pendingFilePath = null
+    }
+  })
+
+  mainWindow.on('close', (e) => {
+    if (mainWindow.isDestroyed() || isQuitting) return
+    e.preventDefault()
+    mainWindow.webContents.send('request-close')
+
+    // Safety net: if renderer never responds (crash, hang), force-close after 3s.
+    setTimeout(() => {
+      if (!isQuitting && !mainWindow.isDestroyed()) {
+        isQuitting = true
+        mainWindow.destroy()
+      }
+    }, 3000)
+  })
+
+  ipcMain.on('close-confirmed', () => {
+    isQuitting = true
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win && !win.isDestroyed()) win.destroy()
+  })
+
+  ipcMain.on('close-canceled', () => {
+    // User cancelled — do nothing, window stays open.
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -34,6 +83,30 @@ function createWindow(): void {
   }
 }
 
+app.setAsDefaultProtocolClient('mockup-studio')
+
+app.on('open-file', (_event, filePath) => {
+  if (filePath.endsWith('.mockup')) {
+    if (BrowserWindow.getAllWindows().length > 0) {
+      sendFilePathToRenderer(filePath)
+    } else {
+      pendingFilePath = filePath
+    }
+  }
+})
+
+app.on('second-instance', (_event, argv) => {
+  const filePath = getFilePathFromArgs(argv)
+  if (filePath) {
+    sendFilePathToRenderer(filePath)
+  }
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  }
+})
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.mockup-studio')
 
@@ -44,6 +117,11 @@ app.whenReady().then(() => {
   registerIpcHandlers()
 
   createWindow()
+
+  const launchFilePath = getFilePathFromArgs(process.argv)
+  if (launchFilePath && !pendingFilePath) {
+    pendingFilePath = launchFilePath
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

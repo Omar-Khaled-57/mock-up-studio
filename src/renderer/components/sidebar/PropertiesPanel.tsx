@@ -1,18 +1,29 @@
-import { useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import { useStore } from '../../store'
+import { useTheme } from '../../hooks/useTheme'
+import { safeScene } from '../../store/sceneSlice'
 import type { Device, TextBox, ImageOverlay } from '@shared/types'
+import type { AlignmentDirection } from '../../store/selectionSlice'
 import { DEVICE_ASPECT_RATIOS } from '../../lib/constants'
+import { AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal } from 'lucide-react'
+
+const ALIGN_BUTTONS: { dir: AlignmentDirection; icon: typeof AlignStartVertical; label: string }[] = [
+  { dir: 'left', icon: AlignStartVertical, label: 'Align Left' },
+  { dir: 'center-x', icon: AlignCenterVertical, label: 'Align Center X' },
+  { dir: 'right', icon: AlignEndVertical, label: 'Align Right' },
+  { dir: 'top', icon: AlignStartHorizontal, label: 'Align Top' },
+  { dir: 'center-y', icon: AlignCenterHorizontal, label: 'Align Center Y' },
+  { dir: 'bottom', icon: AlignEndHorizontal, label: 'Align Bottom' }
+]
 
 export default function PropertiesPanel() {
   const selectedIds = useStore((s) => s.selectedIds)
-  const scenes = useStore((s) => s.scenes)
-  const activeSceneIndex = useStore((s) => s.activeSceneIndex)
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
-  const pushHistory = useStore((s) => s.pushHistory)
+  const { isLight, clsx } = useTheme()
 
-  const scene = scenes[activeSceneIndex]
+  const scene = useStore(safeScene)
 
   const selected = useMemo(() => {
     if (selectedIds.length !== 1) return null
@@ -24,13 +35,89 @@ export default function PropertiesPanel() {
     const img = scene.images.find((i) => i.id === id)
     if (img) return { kind: 'image' as const, data: img }
     return null
-  }, [selectedIds, scene])
+  }, [selectedIds, scene.devices, scene.textBoxes, scene.images])
+
+  const patchX = useCallback(
+    (v: number) => {
+      if (!selected) return
+      const { kind, data } = selected
+      if (kind === 'device') updateDevice(data.id, { x: v })
+      else if (kind === 'textbox') updateTextBox(data.id, { x: v })
+      else updateImage(data.id, { x: v })
+    },
+    [selected, updateDevice, updateTextBox, updateImage]
+  )
+
+  const patchY = useCallback(
+    (v: number) => {
+      if (!selected) return
+      const { kind, data } = selected
+      if (kind === 'device') updateDevice(data.id, { y: v })
+      else if (kind === 'textbox') updateTextBox(data.id, { y: v })
+      else updateImage(data.id, { y: v })
+    },
+    [selected, updateDevice, updateTextBox, updateImage]
+  )
+
+  const patchW = useCallback(
+    (v: number) => {
+      if (!selected || v < 20) return
+      const { kind, data } = selected
+      if (kind === 'device') {
+        const ratio = DEVICE_ASPECT_RATIOS[(data as Device).type] ?? 16 / 9
+        updateDevice(data.id, { width: v, height: Math.round(v / ratio) })
+      } else if (kind === 'textbox') {
+        updateTextBox(data.id, { width: v })
+      } else {
+        const img = data as ImageOverlay
+        const ratio = img.height / img.width
+        updateImage(data.id, { width: v, height: Math.round(v * ratio) })
+      }
+    },
+    [selected, updateDevice, updateTextBox, updateImage]
+  )
+
+  const patchH = useCallback(
+    (v: number) => {
+      if (!selected || v < 20) return
+      const { kind, data } = selected
+      if (kind === 'device') {
+        const ratio = DEVICE_ASPECT_RATIOS[(data as Device).type] ?? 16 / 9
+        updateDevice(data.id, { width: Math.round(v * ratio), height: v })
+      } else if (kind === 'textbox') {
+        updateTextBox(data.id, { height: v })
+      } else {
+        const img = data as ImageOverlay
+        const ratio = img.width / img.height
+        updateImage(data.id, { width: Math.round(v * ratio), height: v })
+      }
+    },
+    [selected, updateDevice, updateTextBox, updateImage]
+  )
+
+  const patchRotation = useCallback(
+    (v: number) => {
+      if (!selected) return
+      const { kind, data } = selected
+      if (kind === 'device') updateDevice(data.id, { rotation: v })
+      else if (kind === 'image') updateImage(data.id, { rotation: v })
+    },
+    [selected, updateDevice, updateImage]
+  )
+
+  const handleNumericInput = useCallback((value: string, patch: (v: number) => void) => {
+    const n = parseInt(value, 10)
+    if (!isNaN(n)) patch(n)
+  }, [])
 
   if (!selected) {
     return (
-      <aside className="w-52 bg-zinc-900 border-l border-zinc-800 p-3">
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Properties</h3>
-        <p className="text-[11px] text-zinc-600">Select an element to edit its properties</p>
+      <aside className={clsx(
+        "w-52 border-l p-3",
+        isLight ? "bg-zinc-50 border-zinc-200" : "bg-zinc-900 border-zinc-800"
+      )}>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-500" : "text-zinc-400")}>Properties</h3>
+        <p className={clsx("text-[11px]", isLight ? "text-zinc-400" : "text-zinc-600")}>Select an element to edit its properties</p>
       </aside>
     )
   }
@@ -42,59 +129,12 @@ export default function PropertiesPanel() {
   const height = data.height
   const rotation = 'rotation' in data ? data.rotation : 0
 
-  const patchX = (v: number) => {
-    if (kind === 'device') updateDevice(data.id, { x: v })
-    else if (kind === 'textbox') updateTextBox(data.id, { x: v })
-    else updateImage(data.id, { x: v })
-  }
-
-  const patchY = (v: number) => {
-    if (kind === 'device') updateDevice(data.id, { y: v })
-    else if (kind === 'textbox') updateTextBox(data.id, { y: v })
-    else updateImage(data.id, { y: v })
-  }
-
-  const patchW = (v: number) => {
-    if (v < 20) return
-    if (kind === 'device') {
-      const ratio = DEVICE_ASPECT_RATIOS[(data as Device).type] ?? 16 / 9
-      updateDevice(data.id, { width: v, height: Math.round(v / ratio) })
-    } else if (kind === 'textbox') {
-      updateTextBox(data.id, { width: v })
-    } else {
-      const img = data as ImageOverlay
-      const ratio = img.height / img.width
-      updateImage(data.id, { width: v, height: Math.round(v * ratio) })
-    }
-  }
-
-  const patchH = (v: number) => {
-    if (v < 20) return
-    if (kind === 'device') {
-      const ratio = DEVICE_ASPECT_RATIOS[(data as Device).type] ?? 16 / 9
-      updateDevice(data.id, { width: Math.round(v * ratio), height: v })
-    } else if (kind === 'textbox') {
-      updateTextBox(data.id, { height: v })
-    } else {
-      const img = data as ImageOverlay
-      const ratio = img.width / img.height
-      updateImage(data.id, { width: Math.round(v * ratio), height: v })
-    }
-  }
-
-  const patchRotation = (v: number) => {
-    if (kind === 'device') updateDevice(data.id, { rotation: v })
-    else if (kind === 'image') updateImage(data.id, { rotation: v })
-  }
-
-  const handleNumericInput = (value: string, patch: (v: number) => void) => {
-    const n = parseInt(value, 10)
-    if (!isNaN(n)) patch(n)
-  }
-
   return (
-    <aside className="w-52 bg-zinc-900 border-l border-zinc-800 p-3 space-y-3 overflow-y-auto">
-      <h3 className="text-xs font-semibold text-zinc-400 uppercase">
+    <aside className={clsx(
+      "w-52 border-l p-3 space-y-3 overflow-y-auto",
+      isLight ? "bg-zinc-50 border-zinc-200" : "bg-zinc-900/50 border-zinc-800/60"
+    )}>
+      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>
         {kind === 'device' ? `Device: ${(data as Device).name}` : kind === 'textbox' ? 'Text Box' : 'Image'}
       </h3>
 
@@ -102,22 +142,22 @@ export default function PropertiesPanel() {
       <div>
         <label className="text-[10px] text-zinc-500 mb-1 block">Position</label>
         <div className="grid grid-cols-2 gap-1.5">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-600 w-3">X</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-[10px] text-zinc-600 w-3 shrink-0">X</span>
             <input
               type="number"
               value={Math.round(x)}
               onChange={(e) => handleNumericInput(e.target.value, patchX)}
-              className="flex-1 px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className="min-w-0 w-full px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-600 w-3">Y</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-[10px] text-zinc-600 w-3 shrink-0">Y</span>
             <input
               type="number"
               value={Math.round(y)}
               onChange={(e) => handleNumericInput(e.target.value, patchY)}
-              className="flex-1 px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className="min-w-0 w-full px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
         </div>
@@ -127,22 +167,22 @@ export default function PropertiesPanel() {
       <div>
         <label className="text-[10px] text-zinc-500 mb-1 block">Size</label>
         <div className="grid grid-cols-2 gap-1.5">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-600 w-3">W</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-[10px] text-zinc-600 w-3 shrink-0">W</span>
             <input
               type="number"
               value={Math.round(width)}
               onChange={(e) => handleNumericInput(e.target.value, patchW)}
-              className="flex-1 px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className="min-w-0 w-full px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-zinc-600 w-3">H</span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span className="text-[10px] text-zinc-600 w-3 shrink-0">H</span>
             <input
               type="number"
               value={Math.round(height)}
               onChange={(e) => handleNumericInput(e.target.value, patchH)}
-              className="flex-1 px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className="min-w-0 w-full px-1.5 py-1 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             />
           </div>
         </div>
@@ -189,7 +229,7 @@ export default function PropertiesPanel() {
           <div>
             <label className="text-[10px] text-zinc-500 mb-1 block">Object Fit</label>
             <div className="flex gap-1">
-              {(['contain', 'cover'] as const).map((fit) => (
+              {(['contain', 'cover', 'stretch'] as const).map((fit) => (
                 <button
                   key={fit}
                   onClick={() => updateDevice(data.id, { objectFit: fit })}
@@ -289,10 +329,28 @@ export default function PropertiesPanel() {
         </>
       )}
 
-      {/* Multi-select info */}
+      {/* Multi-select info + alignment tools */}
       {selectedIds.length > 1 && (
         <div className="pt-2 border-t border-zinc-800">
-          <p className="text-[11px] text-zinc-500">{selectedIds.length} elements selected</p>
+          <p className={clsx("text-[11px] mb-2", isLight ? "text-zinc-500" : "text-zinc-500")}>{selectedIds.length} elements selected</p>
+          <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-500" : "text-zinc-500")}>Align</label>
+          <div className="grid grid-cols-3 gap-1">
+            {ALIGN_BUTTONS.map(({ dir, icon: Icon, label }) => (
+              <button
+                key={dir}
+                onClick={() => useStore.getState().alignSelected(dir)}
+                title={label}
+                className={clsx(
+                  "flex items-center justify-center p-1.5 rounded transition-colors",
+                  isLight
+                    ? "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 border border-zinc-200"
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 border border-zinc-700"
+                )}
+              >
+                <Icon size={14} strokeWidth={1.5} />
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </aside>

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react'
+import React, { useEffect, useCallback, useRef, useState, useLayoutEffect } from 'react'
 
 export interface ContextMenuItem {
   label: string
@@ -16,6 +16,7 @@ interface MenuProps {
 
 export function ContextMenu({ items, x, y, onClose }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ x, y })
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -34,14 +35,19 @@ export function ContextMenu({ items, x, y, onClose }: MenuProps) {
     }
   }, [onClose])
 
-  const adjustedY = Math.min(y, window.innerHeight - items.length * 32 - 16)
-  const adjustedX = Math.min(x, window.innerWidth - 180)
+  useLayoutEffect(() => {
+    if (!ref.current) return
+    const rect = ref.current.getBoundingClientRect()
+    const adjustedX = Math.min(x, window.innerWidth - rect.width - 8)
+    const adjustedY = Math.min(y, window.innerHeight - rect.height - 8)
+    setPos({ x: Math.max(0, adjustedX), y: Math.max(0, adjustedY) })
+  }, [x, y])
 
   return (
     <div
       ref={ref}
       className="fixed z-[9999] bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[160px]"
-      style={{ left: adjustedX, top: adjustedY }}
+      style={{ left: pos.x, top: pos.y }}
     >
       {items.map((item, i) => {
         if (item.divider) {

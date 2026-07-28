@@ -3,15 +3,17 @@ import { TextBox as TextBoxType } from '@shared/types'
 import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
+import { useSnapping } from '../../hooks/useSnapping'
 import { buildTextStyle } from '../../lib/device-utils'
 import ResizeHandles from '../shared/ResizeHandles'
 import InlineEditor from './InlineEditor'
 
 interface Props {
   textBox: TextBoxType
+  onGuidesChange?: (guides: { verticalGuides: number[]; horizontalGuides: number[] }) => void
 }
 
-export default function TextBox({ textBox }: Props) {
+export default function TextBox({ textBox, onGuidesChange }: Props) {
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(textBox.id))
   const updateTextBox = useStore((s) => s.updateTextBox)
@@ -19,6 +21,7 @@ export default function TextBox({ textBox }: Props) {
   const zoom = useStore((s) => s.zoom)
 
   const [isEditing, setIsEditing] = useState(false)
+  const { computeSnap } = useSnapping()
 
   const commitPosition = useCallback(
     (id: string, x: number, y: number) => {
@@ -31,7 +34,16 @@ export default function TextBox({ textBox }: Props) {
     pushHistory('Move text box')
   }, [pushHistory])
 
-  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd })
+  const snapFn = useCallback(
+    (id: string, x: number, y: number, w: number, h: number) => {
+      const result = computeSnap({ id, x, y, width: w, height: h })
+      onGuidesChange?.({ verticalGuides: result.verticalGuides, horizontalGuides: result.horizontalGuides })
+      return { x: result.x, y: result.y }
+    },
+    [computeSnap, onGuidesChange]
+  )
+
+  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange })
 
   const commitResize = useCallback(
     (id: string, x: number, y: number, w: number, h: number) => {
@@ -57,7 +69,7 @@ export default function TextBox({ textBox }: Props) {
   const handleDragDown = useCallback(
     (e: React.PointerEvent) => {
       if (textBox.locked || isEditing) return
-      drag.handlePointerDown(e, textBox.id, textBox.x, textBox.y)
+      drag.handlePointerDown(e, textBox.id, textBox.x, textBox.y, textBox.width, textBox.height)
     },
     [textBox, drag, isEditing]
   )

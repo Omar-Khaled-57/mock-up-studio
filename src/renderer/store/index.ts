@@ -6,6 +6,9 @@ import { createHistorySlice, HistorySlice } from './historySlice'
 import { createViewportSlice, ViewportSlice } from './viewportSlice'
 import { createUiSlice, UiSlice } from './uiSlice'
 import { createExportSlice, ExportSlice } from './exportSlice'
+import { createClipboardSlice, ClipboardSlice } from './clipboardSlice'
+import { createVersionHistorySlice, VersionHistorySlice } from './versionHistorySlice'
+import { createWatermarkSlice, WatermarkSlice } from './watermarkSlice'
 
 export type StoreState = ProjectSlice &
   SceneSlice &
@@ -13,7 +16,10 @@ export type StoreState = ProjectSlice &
   HistorySlice &
   ViewportSlice &
   UiSlice &
-  ExportSlice
+  ExportSlice &
+  ClipboardSlice &
+  VersionHistorySlice &
+  WatermarkSlice
 
 export const useStore = create<StoreState>()((...a) => ({
   ...createProjectSlice(...a),
@@ -22,5 +28,8 @@ export const useStore = create<StoreState>()((...a) => ({
   ...createHistorySlice(...a),
   ...createViewportSlice(...a),
   ...createUiSlice(...a),
-  ...createExportSlice(...a)
+  ...createExportSlice(...a),
+  ...createClipboardSlice(...a),
+  ...createVersionHistorySlice(...a),
+  ...createWatermarkSlice(...a)
 }))

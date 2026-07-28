@@ -1,5 +1,8 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useStore } from '../../store'
+import { safeScene } from '../../store/sceneSlice'
+import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
+import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react'
 
 const FONT_FAMILIES = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'Lato',
@@ -20,16 +23,13 @@ const FONT_WEIGHTS = [
 type Target = 'title' | 'slogan' | null
 
 export default function TextPanel() {
-  const titleText = useStore((s) => s.scenes[s.activeSceneIndex].titleText)
-  const sloganText = useStore((s) => s.scenes[s.activeSceneIndex].sloganText)
+  const titleText = useStore((s) => safeScene(s).titleText)
+  const sloganText = useStore((s) => safeScene(s).sloganText)
   const updateTitleText = useStore((s) => s.updateTitleText)
   const updateSloganText = useStore((s) => s.updateSloganText)
-  const pushHistory = useStore((s) => s.pushHistory)
   const selectedIds = useStore((s) => s.selectedIds)
-  const scenes = useStore((s) => s.scenes)
-  const activeSceneIndex = useStore((s) => s.activeSceneIndex)
 
-  const scene = scenes[activeSceneIndex]
+  const scene = useStore(safeScene)
 
   const selectedTextBox = useMemo(() => {
     if (selectedIds.length !== 1) return null
@@ -37,6 +37,7 @@ export default function TextPanel() {
   }, [selectedIds, scene.textBoxes])
 
   const updateTextBox = useStore((s) => s.updateTextBox)
+  const pushHistoryDebounced = useDebouncedHistory()
 
   const [activeTarget, setActiveTarget] = useState<Target>('title')
 
@@ -59,15 +60,6 @@ export default function TextPanel() {
     }
     return titleText
   }, [activeTarget, titleText, sloganText, selectedTextBox])
-
-  const historyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pushHistoryDebounced = useCallback(
-    (label: string) => {
-      if (historyTimerRef.current) clearTimeout(historyTimerRef.current)
-      historyTimerRef.current = setTimeout(() => pushHistory(label), 500)
-    },
-    [pushHistory]
-  )
 
   const patch = useCallback(
     (field: string, value: unknown) => {
@@ -126,19 +118,25 @@ export default function TextPanel() {
     ...(selectedTextBox ? [{ id: null, label: `Text: ${selectedTextBox.content.slice(0, 12) || 'Empty'}` } as const] : [])
   ]
 
+  const ALIGN_ICONS = {
+    left: AlignLeft,
+    center: AlignCenter,
+    right: AlignRight
+  } as const
+
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Edit Target</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Edit Target</h3>
         <div className="flex gap-1">
           {targetButtons.map((btn) => (
             <button
               key={btn.label}
               onClick={() => setActiveTarget(btn.id)}
-              className={`flex-1 px-2 py-1.5 text-xs rounded transition-colors ${
+              className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-all duration-150 ${
                 activeTarget === btn.id
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                  : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
               }`}
             >
               {btn.label}
@@ -148,7 +146,7 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Font</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Font</h3>
         <select
           value={activeStyle.fontFamily}
           onChange={(e) => patch('fontFamily', e.target.value)}
@@ -179,7 +177,7 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Size & Spacing</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Size & Spacing</h3>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="text-[10px] text-zinc-500 mb-0.5 block">Size</label>
@@ -189,30 +187,35 @@ export default function TextPanel() {
               max={400}
               value={activeStyle.fontSize}
               onChange={(e) => patch('fontSize', parseInt(e.target.value, 10) || 16)}
-              className="w-full px-2 py-1 text-sm bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className="w-full px-2 py-1.5 text-sm bg-zinc-800/60 text-zinc-200 rounded-lg border border-zinc-700/50 focus:border-indigo-500/50 outline-none transition-colors"
             />
           </div>
           <div>
             <label className="text-[10px] text-zinc-500 mb-0.5 block">Align</label>
             <div className="flex gap-0.5">
-              {(['left', 'center', 'right'] as const).map((align) => (
-                <button
-                  key={align}
-                  onClick={() => patch('textAlign', align)}
-                  className={`flex-1 py-1 text-xs rounded transition-colors ${
-                    activeStyle.textAlign === align ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400'
-                  }`}
-                >
-                  {align === 'left' ? '≡' : align === 'center' ? '≡' : '≡'}
-                </button>
-              ))}
+              {(['left', 'center', 'right'] as const).map((align) => {
+                const Icon = ALIGN_ICONS[align]
+                return (
+                  <button
+                    key={align}
+                    onClick={() => patch('textAlign', align)}
+                    className={`flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-150 ${
+                      activeStyle.textAlign === align
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
+                    }`}
+                  >
+                    <Icon size={14} strokeWidth={1.5} />
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Color</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Color</h3>
         <div className="flex items-center gap-2">
           <input
             type="color"
@@ -229,7 +232,7 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Gradient</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Gradient</h3>
         <button
           onClick={enableGradient}
           className={`w-full px-2 py-1.5 text-xs rounded transition-colors mb-2 ${
@@ -268,7 +271,7 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Glow</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Glow</h3>
         <button
           onClick={enableGlow}
           className={`w-full px-2 py-1.5 text-xs rounded transition-colors mb-2 ${
@@ -302,7 +305,7 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">Shadow</h3>
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Shadow</h3>
         <button
           onClick={enableShadow}
           className={`w-full px-2 py-1.5 text-xs rounded transition-colors mb-2 ${

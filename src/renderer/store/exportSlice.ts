@@ -1,19 +1,19 @@
 import { StateCreator } from 'zustand'
 import { StoreState } from './index'
+import type { ExportFormat, ExportScale, ExportBackground } from '../lib/export-engine'
 
-export type ExportFormat = 'png' | 'jpeg' | 'webp'
-export type ExportScale = 1 | 2 | 3 | 4
+export type { ExportFormat, ExportScale, ExportBackground }
 
 export interface ExportSlice {
   exportFormat: ExportFormat
   exportScale: ExportScale
   exportQuality: number
-  exportBackground: 'scene' | 'solid' | 'transparent'
+  exportBackground: ExportBackground
   exportBackgroundColor: string
   setExportFormat: (format: ExportFormat) => void
   setExportScale: (scale: ExportScale) => void
   setExportQuality: (quality: number) => void
-  setExportBackground: (bg: 'scene' | 'solid' | 'transparent') => void
+  setExportBackground: (bg: ExportBackground) => void
   setExportBackgroundColor: (color: string) => void
 }
 

@@ -1,0 +1,73 @@
+{
+  "versions": [
+    {
+      "version": "0.1.0",
+      "date": "2026-07-28",
+      "title": "Initial Release",
+      "origin": "Started as mockup-template.html, evolved through a React+Vite legacy phase, and rewritten as a full Electron desktop application.",
+      "sections": [
+        {
+          "heading": "Core",
+          "items": [
+            "Electron 33 desktop shell with React 18 + TypeScript",
+            "Zustand 5 state management (10 slices)",
+            "electron-vite 2 bundler (Vite 5)",
+            "Tailwind CSS 3.4"
+          ]
+        },
+        {
+          "heading": "Devices",
+          "items": [
+            "7 device types: Monitor, Laptop, iPad, Phone, Watch, Browser, Terminal",
+            "Double-click to upload custom screen images",
+            "Object-fit: contain, cover, stretch"
+          ]
+        },
+        {
+          "heading": "Canvas & Scene",
+          "items": [
+            "Infinite canvas with zoom and pan",
+            "Multi-scene support with tab navigation",
+            "Smart snapping to edges, center, and grid",
+            "7 built-in background presets"
+          ]
+        },
+        {
+          "heading": "Editing",
+          "items": [
+            "Drag & resize at 60fps",
+            "Inline text editing with gradient, glow, shadow effects",
+            "Image overlay upload and positioning",
+            "Layer management with drag reorder, visibility, lock"
+          ]
+        },
+        {
+          "heading": "Export & Projects",
+          "items": [
+            "PNG, JPEG, WebP export at 1x-4x scale",
+            "Multi-scene export as ZIP",
+            ".mockup project files (ZIP format)",
+            "Auto-save recovery and crash protection"
+          ]
+        },
+        {
+          "heading": "Desktop Integration",
+          "items": [
+            "OS file association for .mockup files",
+            "Unsaved changes guard",
+            "Auto-update via GitHub Releases",
+            "Dark / light UI themes"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "136 unit tests across 12 files",
+            "Error boundaries for crash isolation",
+            "ESLint zero warnings"
+          ]
+        }
+      ]
+    }
+  ]
+}

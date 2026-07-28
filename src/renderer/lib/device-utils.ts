@@ -1,4 +1,4 @@
-import { TitleText, TextGradient, TextGlow, TextShadow } from '@shared/types'
+import { TitleText } from '@shared/types'
 
 export const THEME_COLORS = {
   dark: { bezel: '#27272a', border: '#09090b' },

@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useMemo } from 'react'
 import { useStore } from '../../store'
-import { generateId } from '../../lib/id'
+import { safeScene } from '../../store/sceneSlice'
 import { ContextMenu, useContextMenu, type ContextMenuItem } from '../shared/ContextMenu'
-
-type ElementKind = 'device' | 'textbox' | 'image'
+import type { ElementKind } from '../../store/sceneSlice'
+import { extractVibrantColors } from '../../lib/color-extraction'
+import { Monitor, Type, Image, Eye, EyeOff, Lock, Unlock } from 'lucide-react'
 
 interface LayerEntry {
   id: string
@@ -15,7 +16,7 @@ interface LayerEntry {
 }
 
 export default function LayersPanel() {
-  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const scene = useStore(safeScene)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
   const updateDevice = useStore((s) => s.updateDevice)
@@ -35,11 +36,11 @@ export default function LayersPanel() {
   const [renameValue, setRenameValue] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
 
-  const entries: LayerEntry[] = [
+  const entries: LayerEntry[] = useMemo(() => [
     ...scene.devices.map((d) => ({ id: d.id, kind: 'device' as const, name: d.name, visible: d.visible, locked: d.locked, zIndex: d.zIndex })),
     ...scene.textBoxes.map((t) => ({ id: t.id, kind: 'textbox' as const, name: t.content.slice(0, 20) || 'Text Box', visible: t.visible, locked: t.locked, zIndex: t.zIndex })),
     ...scene.images.map((i) => ({ id: i.id, kind: 'image' as const, name: 'Image', visible: i.visible, locked: i.locked, zIndex: i.zIndex }))
-  ].sort((a, b) => b.zIndex - a.zIndex)
+  ].sort((a, b) => b.zIndex - a.zIndex), [scene.devices, scene.textBoxes, scene.images])
 
   const toggleVisibility = useCallback(
     (kind: ElementKind, id: string) => {
@@ -94,10 +95,32 @@ export default function LayersPanel() {
     [openMenu]
   )
 
+  const handleExtractColors = useCallback(async () => {
+    if (!contextTarget) return
+    let imageSrc: string | null = null
+    if (contextTarget.kind === 'device') {
+      const dev = scene.devices.find((d) => d.id === contextTarget.id)
+      imageSrc = dev?.screenImage ?? null
+    } else if (contextTarget.kind === 'image') {
+      const img = scene.images.find((i) => i.id === contextTarget.id)
+      imageSrc = img?.src ?? null
+    }
+    if (!imageSrc) return
+    const colors = await extractVibrantColors(imageSrc)
+    useStore.getState().updateBackground({
+      type: 'gradient',
+      gradient: { colors: colors.slice(0, 4), angle: 135 }
+    })
+    pushHistory('Extract colors')
+  }, [contextTarget, scene, pushHistory])
+
   const contextItems: ContextMenuItem[] = contextTarget
     ? [
         { label: 'Rename', action: () => startRename(contextTarget) },
         { label: 'Duplicate', action: () => { duplicateSelected([contextTarget.id]); pushHistory('Duplicate') } },
+        ...(contextTarget.kind === 'device' || contextTarget.kind === 'image'
+          ? [{ label: 'Extract Colors', action: handleExtractColors }]
+          : []),
         { divider: true, label: '', action: () => {} },
         { label: 'Bring to Front', action: () => { bringToFront(contextTarget.id); pushHistory('Bring to Front') } },
         { label: 'Send to Back', action: () => { sendToBack(contextTarget.id); pushHistory('Send to Back') } },
@@ -137,14 +160,14 @@ export default function LayersPanel() {
   )
 
   const kindIcon = (kind: ElementKind) => {
-    if (kind === 'device') return '📱'
-    if (kind === 'textbox') return 'T'
-    return '🖼'
+    if (kind === 'device') return <Monitor size={12} strokeWidth={1.5} />
+    if (kind === 'textbox') return <Type size={12} strokeWidth={1.5} />
+    return <Image size={12} strokeWidth={1.5} />
   }
 
   return (
     <div>
-      <h3 className="text-xs font-semibold text-zinc-400 uppercase mb-2">
+      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
         Layers ({entries.length})
       </h3>
       <div className="space-y-0.5">
@@ -157,13 +180,15 @@ export default function LayersPanel() {
             onDrop={(e) => handleDrop(e, entry)}
             onClick={() => select(entry.id)}
             onContextMenu={(e) => handleContextMenu(e, entry)}
-            className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs cursor-pointer transition-colors ${
+            className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150 ${
               selectedIds.includes(entry.id)
-                ? 'bg-indigo-600/20 border border-indigo-500/30'
-                : 'hover:bg-zinc-800 border border-transparent'
+                ? 'bg-indigo-500/10 border border-indigo-500/20'
+                : 'hover:bg-zinc-800/60 border border-transparent'
             }`}
           >
-            <span className="text-[10px] w-4 text-center opacity-60">{kindIcon(entry.kind)}</span>
+            <span className="w-4 flex items-center justify-center text-zinc-500">
+              {kindIcon(entry.kind)}
+            </span>
 
             {renamingId === entry.id ? (
               <input
@@ -186,17 +211,17 @@ export default function LayersPanel() {
 
             <button
               onClick={(e) => { e.stopPropagation(); toggleVisibility(entry.kind, entry.id) }}
-              className="w-4 h-4 flex items-center justify-center text-[9px] text-zinc-500 hover:text-zinc-300"
+              className="w-4 h-4 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
               title={entry.visible ? 'Hide' : 'Show'}
             >
-              {entry.visible ? '👁' : '—'}
+              {entry.visible ? <Eye size={11} /> : <EyeOff size={11} />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); toggleLock(entry.kind, entry.id) }}
-              className="w-4 h-4 flex items-center justify-center text-[9px] text-zinc-500 hover:text-zinc-300"
+              className="w-4 h-4 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
               title={entry.locked ? 'Unlock' : 'Lock'}
             >
-              {entry.locked ? '🔒' : '🔓'}
+              {entry.locked ? <Lock size={11} /> : <Unlock size={11} />}
             </button>
           </div>
         ))}

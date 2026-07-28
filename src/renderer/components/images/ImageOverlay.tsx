@@ -3,18 +3,22 @@ import { ImageOverlay as ImageOverlayType } from '@shared/types'
 import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
+import { useSnapping } from '../../hooks/useSnapping'
 import ResizeHandles from '../shared/ResizeHandles'
 
 interface Props {
   image: ImageOverlayType
+  onGuidesChange?: (guides: { verticalGuides: number[]; horizontalGuides: number[] }) => void
 }
 
-export default function ImageOverlay({ image }: Props) {
+export default function ImageOverlay({ image, onGuidesChange }: Props) {
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(image.id))
   const updateImage = useStore((s) => s.updateImage)
   const pushHistory = useStore((s) => s.pushHistory)
   const zoom = useStore((s) => s.zoom)
+
+  const { computeSnap } = useSnapping()
 
   const commitPosition = useCallback(
     (id: string, x: number, y: number) => {
@@ -27,7 +31,16 @@ export default function ImageOverlay({ image }: Props) {
     pushHistory('Move image')
   }, [pushHistory])
 
-  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd })
+  const snapFn = useCallback(
+    (id: string, x: number, y: number, w: number, h: number) => {
+      const result = computeSnap({ id, x, y, width: w, height: h })
+      onGuidesChange?.({ verticalGuides: result.verticalGuides, horizontalGuides: result.horizontalGuides })
+      return { x: result.x, y: result.y }
+    },
+    [computeSnap, onGuidesChange]
+  )
+
+  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange })
 
   const commitResize = useCallback(
     (id: string, x: number, y: number, w: number, h: number) => {
@@ -53,7 +66,7 @@ export default function ImageOverlay({ image }: Props) {
   const handleDragDown = useCallback(
     (e: React.PointerEvent) => {
       if (image.locked) return
-      drag.handlePointerDown(e, image.id, image.x, image.y)
+      drag.handlePointerDown(e, image.id, image.x, image.y, image.width, image.height)
     },
     [image, drag]
   )

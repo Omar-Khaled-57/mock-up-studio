@@ -3,6 +3,7 @@ import { Device } from '@shared/types'
 import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
+import { useSnapping } from '../../hooks/useSnapping'
 import Monitor from './Monitor'
 import Laptop from './Laptop'
 import Phone from './Phone'
@@ -15,6 +16,7 @@ import ResizeHandles from '../shared/ResizeHandles'
 
 interface Props {
   device: Device
+  onGuidesChange?: (guides: { verticalGuides: number[]; horizontalGuides: number[] }) => void
 }
 
 const DEVICE_COMPONENTS: Record<string, React.ComponentType<{ device: Device; children?: React.ReactNode }>> = {
@@ -27,12 +29,14 @@ const DEVICE_COMPONENTS: Record<string, React.ComponentType<{ device: Device; ch
   terminal: Terminal
 }
 
-export default function DeviceFrame({ device }: Props) {
+export default function DeviceFrame({ device, onGuidesChange }: Props) {
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(device.id))
   const updateDevice = useStore((s) => s.updateDevice)
   const pushHistory = useStore((s) => s.pushHistory)
   const zoom = useStore((s) => s.zoom)
+
+  const { computeSnap } = useSnapping()
 
   const commitPosition = useCallback(
     (id: string, x: number, y: number) => {
@@ -45,7 +49,16 @@ export default function DeviceFrame({ device }: Props) {
     pushHistory('Move device')
   }, [pushHistory])
 
-  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd })
+  const snapFn = useCallback(
+    (id: string, x: number, y: number, w: number, h: number) => {
+      const result = computeSnap({ id, x, y, width: w, height: h })
+      onGuidesChange?.({ verticalGuides: result.verticalGuides, horizontalGuides: result.horizontalGuides })
+      return { x: result.x, y: result.y }
+    },
+    [computeSnap, onGuidesChange]
+  )
+
+  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange })
 
   const commitResize = useCallback(
     (id: string, x: number, y: number, w: number, h: number) => {
@@ -68,10 +81,28 @@ export default function DeviceFrame({ device }: Props) {
     [device.id, select]
   )
 
+  const handleDoubleClick = useCallback(() => {
+    if (device.locked) return
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        updateDevice(device.id, { screenImage: reader.result as string })
+        pushHistory('Upload screenshot')
+      }
+      reader.readAsDataURL(file)
+    }
+    input.click()
+  }, [device.id, device.locked, updateDevice, pushHistory])
+
   const handleDragDown = useCallback(
     (e: React.PointerEvent) => {
       if (device.locked) return
-      drag.handlePointerDown(e, device.id, device.x, device.y)
+      drag.handlePointerDown(e, device.id, device.x, device.y, device.width, device.height)
     },
     [device, drag]
   )
@@ -89,6 +120,7 @@ export default function DeviceFrame({ device }: Props) {
   return (
     <div
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       onPointerDown={handleDragDown}
       onPointerMove={drag.handlePointerMove}
       onPointerUp={drag.handlePointerUp}
