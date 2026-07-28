@@ -14,7 +14,8 @@
  *   - Does NOT auto-install — always asks first.
  */
 
-import { autoUpdater } from 'electron-updater'
+import pkg from 'electron-updater'
+const { autoUpdater } = pkg
 import { BrowserWindow, dialog } from 'electron'
 import { is } from '@electron-toolkit/utils'
 
