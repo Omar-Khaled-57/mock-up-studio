@@ -1,4 +1,4 @@
-# Mockup Studio
+# <img src="public/logo.png" width="28" height="28" style="vertical-align: middle; margin-right: 8px;" /> Mockup Studio
 
 Desktop device mockup scene builder. Compose beautiful device mockups with drag-and-drop, multi-scene support, and instant export.
 
