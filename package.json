@@ -96,7 +96,10 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Mockup Studio"
+      "shortcutName": "Mockup Studio",
+      "installerIcon": "public/logo.ico",
+      "uninstallerIcon": "public/logo.ico",
+      "installerHeaderIcon": "public/logo.ico"
     },
     "mac": {
       "target": [
@@ -125,8 +128,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "",
-      "repo": "mockup-studio"
+      "owner": "Omar-Khaled-57",
+      "repo": "mock-up-studio"
     },
     "fileAssociations": [
       {
