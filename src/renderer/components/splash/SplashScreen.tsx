@@ -66,8 +66,8 @@ export default function SplashScreen() {
         <div className="text-center space-y-3">
           <img src="./logo.png" alt="Mockup Studio" className="w-16 h-16 mx-auto" />
           <div className="space-y-1">
-            <h1 className={clsx("text-3xl font-bold tracking-tight", isLight ? "text-zinc-900" : "text-zinc-100")}>Mockup Studio</h1>
-            <p className={clsx("text-sm", isLight ? "text-zinc-500" : "text-zinc-500")}>Desktop device mockup scene builder</p>
+            <h1 className={clsx("text-4xl font-bold tracking-tight", isLight ? "text-zinc-900" : "text-zinc-100")}>Mockup Studio</h1>
+            <p className="text-base text-zinc-500">Desktop device mockup scene builder</p>
           </div>
         </div>
 
@@ -88,7 +88,7 @@ export default function SplashScreen() {
 
         {recentProjects.length > 0 && (
           <div>
-            <h3 className={clsx("text-xs font-semibold uppercase mb-2", isLight ? "text-zinc-600" : "text-zinc-500")}>Recent Projects</h3>
+            <h3 className={clsx("text-sm font-semibold uppercase mb-2", isLight ? "text-zinc-600" : "text-zinc-500")}>Recent Projects</h3>
             <div className="space-y-1 max-h-60 overflow-y-auto">
               {recentProjects.map((entry) => (
                 <button
@@ -97,7 +97,7 @@ export default function SplashScreen() {
                   className={clsx("w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between", isLight ? "text-zinc-700 hover:bg-zinc-100" : "text-zinc-300 hover:bg-zinc-800")}
                 >
                   <span className="truncate">{entry.name}</span>
-                  <span className={clsx("text-[10px] shrink-0 ml-2", isLight ? "text-zinc-400" : "text-zinc-600")}>
+                  <span className={clsx("text-xs shrink-0 ml-2", isLight ? "text-zinc-400" : "text-zinc-600")}>
                     {new Date(entry.lastOpened).toLocaleDateString()}
                   </span>
                 </button>
@@ -106,9 +106,22 @@ export default function SplashScreen() {
           </div>
         )}
 
-        <p className={clsx("text-center text-[10px]", isLight ? "text-zinc-400" : "text-zinc-700")}>
+        <p className={clsx("text-center text-xs", isLight ? "text-zinc-400" : "text-zinc-700")}>
           Ctrl+N new &middot; Ctrl+O open &middot; Ctrl+S save
         </p>
+
+        <p className={clsx("text-center text-xs select-none", isLight ? "text-zinc-400" : "text-zinc-500")}>
+          v{__APP_VERSION__}
+        </p>
+
+        <div className={clsx("text-center text-xs leading-relaxed", isLight ? "text-zinc-400" : "text-zinc-600")}>
+          <div className="font-medium text-indigo-500">Omar Khaled</div>
+          <div className="flex items-center justify-center gap-2 mt-0.5">
+            <a href="https://github.com/Omar-Khaled-57" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300">GitHub</a>
+            <span className="text-zinc-600">|</span>
+            <a href="https://omar-el-khouly.vercel.app" target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300">Portfolio</a>
+          </div>
+        </div>
       </div>
     </div>
   )

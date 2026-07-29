@@ -5,8 +5,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { Trash2, Plus, Minus } from 'lucide-react'
 
 export default function GridPanel() {
-  const theme = useTheme()
-  const { isLight, clsx } = theme
+  const { clsx, bg, text, border: borderT } = useTheme()
   const grid = useStore((s) => safeScene(s).grid)
   const scene = useStore(safeScene)
   const updateGrid = useStore((s) => s.updateGrid)
@@ -36,9 +35,9 @@ export default function GridPanel() {
 
   return (
     <div className="space-y-4">
-      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>Grid</h3>
+      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", text.secondary)}>Grid</h3>
 
-      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", isLight ? "text-zinc-800" : "text-zinc-300")}>
+      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", text.primary)}>
         <input
           type="checkbox"
           checked={grid.enabled}
@@ -51,7 +50,7 @@ export default function GridPanel() {
       {grid.enabled && (
         <>
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Grid size (px)</label>
+            <label className={clsx("text-xs mb-1 block", text.tertiary)}>Grid size (px)</label>
             <input
               type="range"
               min={5}
@@ -61,17 +60,17 @@ export default function GridPanel() {
               onChange={(e) => updateGrid({ size: Number(e.target.value) })}
               className="w-full accent-blue-500"
             />
-            <span className="text-xs text-zinc-500">{grid.size}px</span>
+            <span className={clsx("text-xs", text.tertiary)}>{grid.size}px</span>
           </div>
 
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Grid color</label>
+            <label className={clsx("text-xs mb-1 block", text.tertiary)}>Grid color</label>
             <div className="flex items-center gap-2">
               <input
                 type="color"
                 value={grid.color.slice(0, 7)}
                 onChange={(e) => updateGrid({ color: e.target.value + '33' })}
-                className={clsx("w-8 h-8 rounded border cursor-pointer shrink-0", isLight ? "border-zinc-300" : "border-zinc-700")}
+                className={clsx("w-8 h-8 rounded border cursor-pointer shrink-0", borderT.secondary)}
               />
               <input
                 type="text"
@@ -80,31 +79,31 @@ export default function GridPanel() {
                   const v = e.target.value
                   if (/^#[0-9a-fA-F]{0,8}$/.test(v) || v === '') updateGrid({ color: v })
                 }}
-                className={clsx("flex-1 px-1.5 py-0.5 text-[10px] font-mono rounded border focus:border-indigo-500 outline-none min-w-0", isLight ? "bg-zinc-100 text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
+                className={clsx("flex-1 px-1.5 py-0.5 text-[10px] font-mono rounded outline-none min-w-0", bg.input)}
                 placeholder="#rrggbbaa"
               />
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-zinc-500 mb-1 block">Grid style</label>
+            <label className={clsx("text-xs mb-1 block", text.tertiary)}>Grid style</label>
             <div className="flex gap-1">
               <button
                 onClick={() => updateGrid({ style: 'dotted' })}
-                className={clsx("flex-1 px-2 py-1 text-xs rounded border transition-colors", grid.style === 'dotted' ? 'bg-indigo-600 text-white border-indigo-500' : isLight ? "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700")}
-              >
-                Dotted
-              </button>
-              <button
-                onClick={() => updateGrid({ style: 'lines' })}
-                className={clsx("flex-1 px-2 py-1 text-xs rounded border transition-colors", grid.style === 'lines' ? 'bg-indigo-600 text-white border-indigo-500' : isLight ? "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700")}
+                className={clsx("flex-1 px-2 py-1 text-xs rounded border transition-colors", grid.style === 'dotted' ? bg.selected : bg.button)}
+                >
+                  Dotted
+                </button>
+                <button
+                  onClick={() => updateGrid({ style: 'lines' })}
+                  className={clsx("flex-1 px-2 py-1 text-xs rounded border transition-colors", grid.style === 'lines' ? bg.selected : bg.button)}
               >
                 Lines
               </button>
             </div>
           </div>
 
-      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", isLight ? "text-zinc-800" : "text-zinc-300")}>
+      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", text.primary)}>
         <input
           type="checkbox"
           checked={grid.snapEnabled}
@@ -116,7 +115,7 @@ export default function GridPanel() {
         </>
       )}
 
-      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", isLight ? "text-zinc-800" : "text-zinc-300")}>
+      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", text.primary)}>
         <input
           type="checkbox"
           checked={showRulers}
@@ -126,12 +125,12 @@ export default function GridPanel() {
         Show rulers
       </label>
 
-      <div className={clsx("border-t pt-3", isLight ? "border-zinc-200" : "border-zinc-800")}>
+      <div className={clsx("border-t pt-3", borderT.primary)}>
         <div className="flex items-center justify-between mb-2">
-          <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>Guides</h3>
+          <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", text.secondary)}>Guides</h3>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className={clsx("transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+            className={clsx("transition-colors", text.muted)}
           >
             {collapsed ? <Plus size={14} /> : <Minus size={14} />}
           </button>
@@ -142,31 +141,31 @@ export default function GridPanel() {
             <div className="flex gap-1">
               <button
                 onClick={handleAddHorizontal}
-                className={clsx("flex-1 px-2 py-1 text-[10px] rounded border transition-colors", isLight ? "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700")}
-              >
-                + Horizontal
-              </button>
-              <button
-                onClick={handleAddVertical}
-                className={clsx("flex-1 px-2 py-1 text-[10px] rounded border transition-colors", isLight ? "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700")}
-              >
-                + Vertical
-              </button>
+                className={clsx("flex-1 px-2 py-1 text-[10px] rounded border transition-colors", bg.button)}
+                >
+                  + Horizontal
+                </button>
+                <button
+                  onClick={handleAddVertical}
+                  className={clsx("flex-1 px-2 py-1 text-[10px] rounded border transition-colors", bg.button)}
+                >
+                  + Vertical
+                </button>
             </div>
 
             {scene.guides.length === 0 ? (
-              <p className={clsx("text-[10px]", isLight ? "text-zinc-400" : "text-zinc-600")}>No guides. Add one above or drag from the ruler.</p>
+              <p className={clsx("text-[10px]", text.muted)}>No guides. Add one above or drag from the ruler.</p>
             ) : (
               <div className="space-y-0.5 max-h-[160px] overflow-y-auto">
                 {scene.guides.map((g) => (
-                  <div key={g.id} className={clsx("flex items-center justify-between px-2 py-1 rounded text-[10px]", isLight ? "hover:bg-zinc-100" : "hover:bg-zinc-800/60")}>
-                    <span className={clsx("truncate", isLight ? "text-zinc-700" : "text-zinc-300")}>
+                  <div key={g.id} className={clsx("flex items-center justify-between px-2 py-1 rounded text-[10px]", bg.hover)}>
+                    <span className={clsx("truncate", text.primary)}>
                       <span className={clsx("inline-block w-1 h-1 rounded-full mr-1.5", g.orientation === 'horizontal' ? "bg-pink-400" : "bg-cyan-400")} />
                       {g.orientation === 'horizontal' ? 'H' : 'V'} — {g.position}px
                     </span>
                     <button
                       onClick={() => handleDeleteGuide(g.id)}
-                      className={clsx("shrink-0 transition-colors", isLight ? "text-zinc-400 hover:text-red-500" : "text-zinc-600 hover:text-red-400")}
+                      className={clsx("shrink-0 transition-colors text-red-400")}
                     >
                       <Trash2 size={10} />
                     </button>
@@ -178,10 +177,10 @@ export default function GridPanel() {
             {scene.guides.length > 0 && (
               <button
                 onClick={() => { pushHistory('Clear guides'); clearGuides() }}
-                className={clsx("text-[10px] transition-colors", isLight ? "text-zinc-400 hover:text-red-500" : "text-zinc-600 hover:text-red-400")}
-              >
-                Clear all
-              </button>
+                className={clsx("text-[10px] transition-colors text-red-400")}
+                  >
+                    Clear all
+                  </button>
             )}
           </div>
         )}

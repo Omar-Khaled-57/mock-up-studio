@@ -91,7 +91,7 @@ function generateRandomGradient(): GradientValue {
 }
 
 export default function GradientEditor({ value, onChange, presets = DEFAULT_PRESETS, className = '' }: Props) {
-  const { isLight, clsx } = useTheme()
+  const { clsx, bg, text } = useTheme()
   const [showPresets, setShowPresets] = useState(false)
 
   const previewStyle = useMemo(() => ({ background: buildCSSGradient(value) }), [value])
@@ -137,21 +137,20 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
   return (
     <div className={`space-y-3 ${className}`}>
       {/* Preview */}
-      <div className={clsx("w-full h-8 rounded border", isLight ? "border-zinc-200" : "border-zinc-800")} style={previewStyle} />
+      <div className={clsx("w-full h-8 rounded border", "border-zinc-700")} style={previewStyle} />
 
       {/* Type selector */}
       <div>
-        <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Type</label>
+        <label className={clsx("text-[10px] mb-1 block", text.secondary)}>Type</label>
         <div className="flex gap-1">
           {(['linear', 'radial', 'conic'] as const).map((type) => (
             <button
               key={type}
               onClick={() => onChange({ ...value, type })}
-              className={`flex-1 px-2 py-1 text-[10px] rounded transition-colors ${
-                value.type === type
-                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                  : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
-              }`}
+              className={clsx(
+                "flex-1 px-2 py-1 text-[10px] rounded transition-colors",
+                value.type === type ? bg.selected : bg.button
+              )}
             >
               {type}
             </button>
@@ -167,17 +166,16 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
       {/* Radial shape */}
       {value.type === 'radial' && (
         <div>
-          <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Shape</label>
+          <label className={clsx("text-[10px] mb-1 block", text.secondary)}>Shape</label>
           <div className="flex gap-1">
             {(['circle', 'ellipse'] as const).map((shape) => (
               <button
                 key={shape}
                 onClick={() => onChange({ ...value, radialShape: shape })}
-                className={`flex-1 px-2 py-1 text-[10px] rounded transition-colors ${
-                  value.radialShape === shape
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                    : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
-                }`}
+                className={clsx(
+                  "flex-1 px-2 py-1 text-[10px] rounded transition-colors",
+                  value.radialShape === shape ? bg.selected : bg.button
+                )}
               >
                 {shape}
               </button>
@@ -189,12 +187,12 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
       {/* Color stops */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <label className={clsx("text-[10px]", isLight ? "text-zinc-600" : "text-zinc-500")}>Colors ({value.stops.length})</label>
+          <label className={clsx("text-[10px]", text.secondary)}>Colors ({value.stops.length})</label>
           <div className="flex gap-1.5">
-            <button onClick={handleRandomize} className={clsx("text-[10px]", isLight ? "text-zinc-500 hover:text-zinc-800" : "text-zinc-500 hover:text-zinc-300")} title="Randomize">
+            <button onClick={handleRandomize} className={clsx("text-[10px]", text.muted, "hover:text-zinc-300")} title="Randomize">
               Random
             </button>
-            <button onClick={addStop} className={clsx("text-[10px]", isLight ? "text-indigo-600 hover:text-indigo-500" : "text-indigo-400 hover:text-indigo-300")}>+ Add</button>
+            <button onClick={addStop} className={clsx("text-[10px]", "text-indigo-500 hover:text-indigo-400")}>+ Add</button>
           </div>
         </div>
 
@@ -205,13 +203,13 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
                 type="color"
                 value={stop.color}
                 onChange={(e) => updateStop(idx, { color: e.target.value })}
-                className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent shrink-0", isLight ? "border-zinc-300" : "border-zinc-700")}
+                className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent shrink-0", "border-zinc-700")}
               />
               <input
                 type="text"
                 value={stop.color}
                 onChange={(e) => updateStop(idx, { color: e.target.value })}
-                className={clsx("w-16 px-1.5 py-0.5 text-[10px] font-mono rounded border focus:border-indigo-500 outline-none", isLight ? "bg-zinc-100 text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
+                className={clsx("w-16 px-1.5 py-0.5 text-[10px] font-mono rounded outline-none", bg.input)}
               />
               <input
                 type="number"
@@ -219,13 +217,13 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
                 max={100}
                 value={stop.position}
                 onChange={(e) => updateStop(idx, { position: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })}
-                className={clsx("w-12 px-1 py-0.5 text-[10px] rounded border focus:border-indigo-500 outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none", isLight ? "bg-zinc-100 text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
+                className={clsx("w-12 px-1 py-0.5 text-[10px] rounded outline-none text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none", bg.input)}
               />
-              <span className={clsx("text-[9px]", isLight ? "text-zinc-400" : "text-zinc-600")}>%</span>
+              <span className={clsx("text-[9px]", text.muted)}>%</span>
               {value.stops.length > 2 && (
                 <button
                   onClick={() => removeStop(idx)}
-                  className={clsx("p-1 rounded transition-colors", isLight ? "text-zinc-400 hover:text-red-600 hover:bg-red-50" : "text-zinc-500 hover:text-red-400 hover:bg-red-900/20")}
+                  className={clsx("p-1 rounded transition-colors", text.muted, "hover:text-red-400 hover:bg-red-900/20")}
                   title="Delete color"
                 >
                   <Trash2 size={12} />
@@ -240,7 +238,7 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
       <div>
         <button
           onClick={() => setShowPresets(!showPresets)}
-          className={clsx("text-[10px]", isLight ? "text-indigo-600 hover:text-indigo-500" : "text-indigo-400 hover:text-indigo-300")}
+          className={clsx("text-[10px]", "text-indigo-500 hover:text-indigo-400")}
         >
           {showPresets ? 'Hide presets' : 'Show presets'}
         </button>
@@ -250,11 +248,11 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
               <button
                 key={preset.name}
                 onClick={() => applyPreset(preset)}
-                className={clsx("group relative rounded overflow-hidden border transition-colors", isLight ? "border-zinc-200 hover:border-zinc-400" : "border-zinc-800 hover:border-zinc-600")}
+                className={clsx("group relative rounded overflow-hidden border transition-colors", bg.button)}
                 title={preset.label}
               >
                 <div className="w-full h-8" style={{ background: buildCSSGradient(preset.gradient) }} />
-                <span className={clsx("block text-[8px] py-0.5 text-center", isLight ? "text-zinc-500 group-hover:text-zinc-800" : "text-zinc-500 group-hover:text-zinc-300")}>
+                <span className={clsx("block text-[8px] py-0.5 text-center", text.muted)}>
                   {preset.label}
                 </span>
               </button>

@@ -72,7 +72,7 @@ export default function UpdateModal({ version, onDismiss }: UpdateModalProps) {
                     : clsx(isLight ? 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800')
                 }`}
               >
-                Our Story
+                Zatoona
               </button>
             )}
           </div>

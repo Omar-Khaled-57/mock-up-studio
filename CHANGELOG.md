@@ -5,6 +5,77 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-29
+
+### Added
+
+#### Shape System
+- 11 SVG shape kinds: rectangle, circle, triangle, hexagon, diamond, parallelogram, trapezoid, cross, plus, heart, shield, arrow-right
+- Shape CRUD with dedicated slice, panel, and z-order support
+- Shape fill color, opacity, rotation, blur, blend mode
+- Shape background image upload (rendered as SVG pattern fill)
+- Shape shadow and glow effects via shared editors
+- Shape layers in LayersPanel with visibility/lock/rename/duplicate
+
+#### Advanced Editors
+- Gradient editor with unlimited color stops, 4 types (linear, radial, conic, reflected), angle control, 10 presets
+- Multi-layer shadow editor with inset support and 10 presets
+- Multi-layer glow editor with 10 presets
+- Shared primitives: ColorInput, SliderInput, ToggleSwitch, SectionHeader
+
+#### Enhanced Typography
+- Letter spacing, word spacing, text-transform controls
+- Stroke color and stroke width for text
+- Line height control
+- Added "Add Text Box" button + text box list in TextPanel
+
+#### Image Enhancements
+- Opacity, border-radius, blend mode
+- Horizontal/vertical flip
+- Blur, glow, and shadow effects on image overlays
+
+#### Theme Presets
+- 17 color theme presets with swatches and instant apply
+- Dedicated ThemePresetsPanel with preview thumbnails
+- Device custom color theme: color picker + hex input for bezel/border
+
+#### Interactive Guides & Rulers
+- Viewport ruler bars with zoom/pan-aware tick marks
+- Drag from ruler onto canvas to create guides
+- Interactive guide lines (drag to reposition, right-click to delete)
+- Guide preview overlay during drag-from-ruler
+
+#### Layer & Selection Improvements
+- Ctrl+click multi-select in LayersPanel
+- Triple-click rename for all element kinds (devices, text, images, shapes, groups)
+- Nested group rendering with parentGroupId hierarchy
+- Extended context menus: Group/Ungroup/Nest in Group/Make Parent Group
+
+#### UI Polish
+- Theme token system (`bg.*`, `text.*`, `border.*`) fully migrated across all 20+ panels
+- Custom scrollbars, focus indicators, ARIA labels
+- Empty states for Devices, Text, Images, and Layers panels
+- Light theme support for sidebar, panels, scene tabs
+- Preload CJS fix for Electron sandbox compatibility
+
+### Fixed
+- `reverseNesting` broken conditional chains
+- `GradientEditor` opacity range bars removed per user feedback
+- TextPanel alignments not working: `buildTextStyle` missing `textAlign`
+- Gradient/glow/shadow toggle always setting `enabled: false`
+- Text double-click not editing: added stopPropagation to outer container
+- `useResize` pointer capture removed to prevent text edit interference
+- LayersPanel broken JSX and duplicate visibility button
+- ShapesPanel unused imports cleaned
+- `changelog.json` 404 in file:// mode: absolute → relative path
+- Various hardcoded theme colors migrated to token system
+
+### Tests
+- From 136 to 231 tests across 14 files
+- Added shapeSlice tests (10 shape kinds, backgroundImage CRUD)
+- Added guide/ruler interaction tests
+- Added clipboard shape copy/cut/paste tests
+
 ## [0.1.0] - 2026-07-28
 
 Initial release.

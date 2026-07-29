@@ -17,8 +17,7 @@ export default function Monitor({ device, children }: Props) {
         display: 'flex',
         flexDirection: 'column',
         borderRadius: 8,
-        overflow: 'hidden',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.5)'
+        overflow: 'hidden'
       }}
     >
       {/* Bezel top */}

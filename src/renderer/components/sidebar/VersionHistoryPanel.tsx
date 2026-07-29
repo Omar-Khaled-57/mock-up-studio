@@ -18,7 +18,7 @@ function formatRelative(ts: number): string {
 }
 
 export default function VersionHistoryPanel() {
-  const { isLight, clsx } = useTheme()
+  const { clsx, bg, text } = useTheme()
   const snapshots = useStore((s) => s.snapshots)
   const autoSnapshotEnabled = useStore((s) => s.autoSnapshotEnabled)
   const createSnapshot = useStore((s) => s.createSnapshot)
@@ -43,17 +43,17 @@ export default function VersionHistoryPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>Version History</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", text.secondary)}>Version History</h3>
         <button
           onClick={handleCreateManual}
-          className={clsx("flex items-center gap-1 text-[10px] transition-colors", isLight ? "text-indigo-600 hover:text-indigo-500" : "text-indigo-400 hover:text-indigo-300")}
+          className={clsx("flex items-center gap-1 text-[10px] transition-colors", "text-indigo-500 hover:text-indigo-400")}
         >
           <Camera size={11} />
           Snapshot
         </button>
       </div>
 
-      <label className={clsx("flex items-center gap-2 text-xs cursor-pointer", isLight ? "text-zinc-600" : "text-zinc-400")}>
+      <label className={clsx("flex items-center gap-2 text-xs cursor-pointer", text.secondary)}>
         <input
           type="checkbox"
           checked={autoSnapshotEnabled}
@@ -64,30 +64,30 @@ export default function VersionHistoryPanel() {
       </label>
 
       {snapshots.length === 0 ? (
-        <p className={clsx("text-xs text-center py-4", isLight ? "text-zinc-400" : "text-zinc-600")}>No snapshots yet</p>
+        <p className={clsx("text-xs text-center py-4", text.muted)}>No snapshots yet</p>
       ) : (
         <>
           <div className="space-y-1 max-h-[400px] overflow-y-auto">
             {snapshots.map((snap) => (
               <div
                 key={snap.id}
-                className={clsx("group flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors", isLight ? "hover:bg-zinc-100" : "hover:bg-zinc-800")}
+                className={clsx("group flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors", bg.hover)}
               >
                 <div className="flex-1 min-w-0">
-                  <span className={clsx("block truncate", isLight ? "text-zinc-800" : "text-zinc-300")}>{snap.label}</span>
-                  <span className={clsx("text-[10px]", isLight ? "text-zinc-400" : "text-zinc-600")}>
+                  <span className={clsx("block truncate", text.primary)}>{snap.label}</span>
+                  <span className={clsx("text-[10px]", text.muted)}>
                     {formatTime(snap.timestamp)} · {formatRelative(snap.timestamp)}
                   </span>
                 </div>
                 <button
                   onClick={() => handleRestore(snap.id)}
-                  className={clsx("opacity-0 group-hover:opacity-100 text-[10px] transition-opacity shrink-0", isLight ? "text-indigo-600 hover:text-indigo-500" : "text-indigo-400 hover:text-indigo-300")}
+                  className={clsx("opacity-0 group-hover:opacity-100 text-[10px] transition-opacity shrink-0", "text-indigo-500 hover:text-indigo-400")}
                 >
                   Restore
                 </button>
                 <button
                   onClick={() => deleteSnapshot(snap.id)}
-                  className={clsx("opacity-0 group-hover:opacity-100 transition-opacity shrink-0", isLight ? "text-zinc-400 hover:text-red-600" : "text-zinc-600 hover:text-red-400")}
+                  className={clsx("opacity-0 group-hover:opacity-100 transition-opacity shrink-0", text.muted, "hover:text-red-400")}
                 >
                   <X size={12} />
                 </button>
@@ -97,7 +97,7 @@ export default function VersionHistoryPanel() {
 
           <button
             onClick={clearSnapshots}
-            className={clsx("w-full flex items-center justify-center gap-1.5 text-[10px] transition-colors py-1", isLight ? "text-zinc-400 hover:text-zinc-600" : "text-zinc-600 hover:text-zinc-400")}
+            className={clsx("w-full flex items-center justify-center gap-1.5 text-[10px] transition-colors py-1", text.muted)}
           >
             <Trash2 size={10} />
             Clear all

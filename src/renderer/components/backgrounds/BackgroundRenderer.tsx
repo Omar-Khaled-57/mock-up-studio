@@ -43,6 +43,8 @@ export default function BackgroundRenderer({ background }: Props) {
         <GradientBg
           colors={background.gradient?.colors ?? ['#1e1b4b', '#312e81']}
           angle={background.gradient?.angle ?? 135}
+          type={background.gradient?.type}
+          radialShape={background.gradient?.radialShape}
         />
       )
     case 'image': {

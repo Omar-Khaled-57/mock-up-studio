@@ -1,9 +1,9 @@
-import { Component, ReactNode } from 'react'
+import { Component, type ReactNode } from 'react'
 import { AlertTriangle, RotateCcw } from 'lucide-react'
+import { useStore } from '../../store'
 
 interface Props {
   children: ReactNode
-  /** Optional label shown in the error report for debugging. */
   label?: string
 }
 
@@ -29,16 +29,17 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const isLight = useStore.getState().theme === 'light'
       return (
-        <div className="flex flex-col items-center justify-center h-full bg-zinc-950 text-zinc-300 p-8 gap-4">
+        <div className={`flex flex-col items-center justify-center h-full p-8 gap-4 ${isLight ? 'bg-white text-zinc-700' : 'bg-zinc-950 text-zinc-300'}`}>
           <AlertTriangle size={40} className="text-amber-500/80" />
-          <h2 className="text-lg font-semibold text-zinc-100">Something went wrong</h2>
-          <p className="text-sm text-zinc-500 text-center max-w-md">
+          <h2 className={`text-lg font-semibold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>Something went wrong</h2>
+          <p className={`text-sm text-center max-w-md ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>
             {this.state.error?.message || 'An unexpected error occurred.'}
           </p>
           <button
             onClick={this.handleReset}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-zinc-800 text-zinc-300 rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700"
+            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-colors border ${isLight ? 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border-zinc-200' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700'}`}
           >
             <RotateCcw size={14} />
             Try Again

@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function SectionHeader({ title, defaultOpen = true, count, children, className = '' }: Props) {
-  const { isLight, clsx } = useTheme()
+  const { clsx, text } = useTheme()
   const [open, setOpen] = useState(defaultOpen)
   const toggle = useCallback(() => setOpen((v) => !v), [])
 
@@ -21,12 +21,12 @@ export default function SectionHeader({ title, defaultOpen = true, count, childr
         onClick={toggle}
         className="w-full flex items-center justify-between mb-1 group"
       >
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", text.secondary)}>
           {title}{count !== undefined ? ` (${count})` : ''}
         </h3>
         <ChevronDown
           size={12}
-          className={clsx("transition-transform duration-150", isLight ? "text-zinc-400" : "text-zinc-500", open ? '' : '-rotate-90')}
+          className={clsx("transition-transform duration-150", text.tertiary, open ? '' : '-rotate-90')}
         />
       </button>
       {open && <div>{children}</div>}

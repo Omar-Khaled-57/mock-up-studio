@@ -12,6 +12,7 @@ import type { ChangelogVersion } from './components/shared/UpdateModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useStore } from './store'
 import { loadProjectFromZipResult } from './lib/project-serialization'
+import { useTheme } from './hooks/useTheme'
 
 const STORAGE_KEY = 'mockup-studio-last-seen-version'
 
@@ -32,6 +33,7 @@ export default function App() {
   const cutSelected = useStore((s) => s.cutSelected)
   const pasteClipboard = useStore((s) => s.pasteClipboard)
   const selectAll = useStore((s) => s.selectAll)
+  const { isLight, clsx: themeClsx } = useTheme()
 
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [updateVersion, setUpdateVersion] = useState<ChangelogVersion | null>(null)
@@ -174,8 +176,8 @@ export default function App() {
       const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
       useStore.setState({
-        project,
-        scenes,
+        project: project as unknown as import('@shared/types').Project,
+        scenes: scenes as never[],
         activeSceneIndex,
         filePath: result.filePath,
         dirty: false,
@@ -200,7 +202,7 @@ export default function App() {
 
   return (
     <ErrorBoundary label="App">
-      <div className={`flex h-screen ${theme === 'light' ? 'bg-white text-zinc-900' : 'bg-zinc-950 text-zinc-100'}`}>
+      <div className={`flex h-screen ${isLight ? 'bg-white text-zinc-900' : 'bg-zinc-950 text-zinc-100'}`}>
         <Sidebar />
         <ResizeHandle position="right" onResize={(delta) => {
           const current = useStore.getState().sidebarPanelWidth
@@ -218,21 +220,21 @@ export default function App() {
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
         {updateCheckResult && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={() => setUpdateCheckResult(null)}>
-            <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-5 max-w-sm w-full mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className={themeClsx("rounded-lg p-5 max-w-sm w-full mx-4", isLight ? "bg-white border border-zinc-200 shadow-lg" : "bg-zinc-900 border border-zinc-700")} onClick={(e) => e.stopPropagation()}>
               {updateCheckResult.status === 'up-to-date' && (
                 <>
-                  <h3 className="text-sm font-semibold text-zinc-100 mb-2">Up to Date</h3>
-                  <p className="text-xs text-zinc-400 mb-3">You are using the latest version ({updateCheckResult.currentVersion}).</p>
+                  <h3 className={themeClsx("text-sm font-semibold mb-2", isLight ? "text-zinc-900" : "text-zinc-100")}>Up to Date</h3>
+                  <p className={themeClsx("text-xs mb-3", isLight ? "text-zinc-500" : "text-zinc-400")}>You are using the latest version ({updateCheckResult.currentVersion}).</p>
                 </>
               )}
               {updateCheckResult.status === 'available' && (
                 <>
-                  <h3 className="text-sm font-semibold text-zinc-100 mb-2">Update Available</h3>
-                  <p className="text-xs text-zinc-400 mb-1">Current: <span className="text-zinc-300">{updateCheckResult.currentVersion}</span></p>
-                  <p className="text-xs text-zinc-400 mb-2">Latest: <span className="text-emerald-400">{updateCheckResult.latestVersion}</span></p>
+                  <h3 className={themeClsx("text-sm font-semibold mb-2", isLight ? "text-zinc-900" : "text-zinc-100")}>Update Available</h3>
+                  <p className={themeClsx("text-xs mb-1", isLight ? "text-zinc-500" : "text-zinc-400")}>Current: <span className={themeClsx("", isLight ? "text-zinc-700" : "text-zinc-300")}>{updateCheckResult.currentVersion}</span></p>
+                  <p className={themeClsx("text-xs mb-2", isLight ? "text-zinc-500" : "text-zinc-400")}>Latest: <span className="text-emerald-500">{updateCheckResult.latestVersion}</span></p>
                   {updateCheckResult.releaseNotes && (
-                    <div className="bg-zinc-800 rounded p-2 mb-3 max-h-32 overflow-y-auto">
-                      <p className="text-[10px] text-zinc-400 whitespace-pre-wrap">{updateCheckResult.releaseNotes}</p>
+                    <div className={themeClsx("rounded p-2 mb-3 max-h-32 overflow-y-auto", isLight ? "bg-zinc-100" : "bg-zinc-800")}>
+                      <p className={themeClsx("text-[10px] whitespace-pre-wrap", isLight ? "text-zinc-500" : "text-zinc-400")}>{updateCheckResult.releaseNotes}</p>
                     </div>
                   )}
                   <div className="flex gap-2">
@@ -257,7 +259,7 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setUpdateCheckResult(null)}
-                      className="flex-1 px-3 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition-colors"
+                      className={themeClsx("flex-1 px-3 py-1.5 text-xs rounded hover:bg-zinc-200 transition-colors", isLight ? "bg-zinc-100 text-zinc-700" : "bg-zinc-800 text-zinc-300")}
                     >
                       Cancel
                     </button>
@@ -266,14 +268,14 @@ export default function App() {
               )}
               {updateCheckResult.status === 'error' && (
                 <>
-                  <h3 className="text-sm font-semibold text-zinc-100 mb-2">Update Check Failed</h3>
-                  <p className="text-xs text-zinc-400 mb-3">Could not check for updates. Check your internet connection and try again.</p>
+                  <h3 className={themeClsx("text-sm font-semibold mb-2", isLight ? "text-zinc-900" : "text-zinc-100")}>Update Check Failed</h3>
+                  <p className={themeClsx("text-xs mb-3", isLight ? "text-zinc-500" : "text-zinc-400")}>Could not check for updates. Check your internet connection and try again.</p>
                 </>
               )}
               {updateCheckResult.status !== 'available' && (
                 <button
                   onClick={() => setUpdateCheckResult(null)}
-                  className="w-full px-3 py-1.5 text-xs bg-zinc-800 text-zinc-300 rounded hover:bg-zinc-700 transition-colors"
+                  className={themeClsx("w-full px-3 py-1.5 text-xs rounded hover:bg-zinc-200 transition-colors", isLight ? "bg-zinc-100 text-zinc-700" : "bg-zinc-800 text-zinc-300")}
                 >
                   Close
                 </button>

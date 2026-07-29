@@ -1,4 +1,4 @@
-import { useCallback, useRef, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
@@ -39,7 +39,7 @@ const SHAPE_TYPES: { kind: ShapeKind; label: string; icon: string | ReactNode }[
 ]
 
 export default function ShapesPanel() {
-  const { isLight, clsx } = useTheme()
+  const { clsx, text, bg, isLight } = useTheme()
   const scene = useStore(safeScene)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
@@ -50,6 +50,9 @@ export default function ShapesPanel() {
   const pushHistory = useStore((s) => s.pushHistory)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingShapeRef = useRef<string | null>(null)
+
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const shapes = scene.shapes
   const maxZ = shapes.reduce((max, s) => Math.max(max, s.zIndex), -1)
@@ -131,6 +134,25 @@ export default function ShapesPanel() {
     [duplicateSelected, pushHistory]
   )
 
+  const startRename = useCallback((id: string, currentName: string) => {
+    setRenamingId(id)
+    setRenameValue(currentName)
+  }, [])
+
+  const commitRename = useCallback(() => {
+    if (!renamingId) return
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      updateShape(renamingId, { name: trimmed })
+      pushHistory('Rename shape')
+    }
+    setRenamingId(null)
+  }, [renamingId, renameValue, updateShape, pushHistory])
+
+  const cancelRename = useCallback(() => {
+    setRenamingId(null)
+  }, [])
+
   return (
     <div className="space-y-4">
       <input
@@ -143,13 +165,13 @@ export default function ShapesPanel() {
 
       {/* Add shape buttons */}
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Add Shape</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Add Shape</h3>
         <div className="grid grid-cols-5 gap-1.5">
           {SHAPE_TYPES.map((st) => (
             <button
               key={st.kind}
               onClick={() => handleAddShape(st.kind)}
-              className={clsx("flex flex-col items-center gap-0.5 px-1 py-2 text-xs rounded-lg transition-all duration-150", isLight ? "text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900" : "text-zinc-300 bg-zinc-800/60 hover:bg-zinc-700/80 hover:text-zinc-100")}
+              className={clsx("flex flex-col items-center gap-0.5 px-1 py-2 text-xs rounded-lg transition-all duration-150", bg.button)}
               title={`Add ${st.label}`}
             >
               <span className="text-lg leading-none">{st.icon}</span>
@@ -161,18 +183,18 @@ export default function ShapesPanel() {
 
       {/* Shape list */}
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>
           Shapes ({shapes.length})
         </h3>
         {shapes.length === 0 ? (
-          <p className={clsx("text-[11px]", isLight ? "text-zinc-400" : "text-zinc-600")}>No shapes yet — click a shape above to add one</p>
+          <p className={clsx("text-[11px]", text.muted)}>No shapes yet — click a shape above to add one</p>
         ) : (
           <div className="space-y-0.5">
             {shapes.map((s, i) => (
               <div
                 key={s.id}
                 onClick={() => select(s.id)}
-                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedShape?.id === s.id ? 'bg-indigo-500/10 border border-indigo-500/20' : isLight ? "hover:bg-zinc-100 border border-transparent" : "hover:bg-zinc-800/60 border border-transparent")}
+                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedShape?.id === s.id ? 'bg-indigo-500/10 border border-indigo-500/20' : clsx('bg.hover', 'border border-transparent'))}
               >
                 {/* Shape icon */}
                 <div className="w-5 h-5 flex items-center justify-center shrink-0">
@@ -190,36 +212,54 @@ export default function ShapesPanel() {
                 </div>
 
                 {/* Name + image indicator */}
-                <span className={clsx("flex-1 truncate flex items-center gap-1", !s.visible ? clsx(isLight ? "text-zinc-400" : "text-zinc-600") : isLight ? "text-zinc-800" : "text-zinc-300")}>
-                  {s.name || `Shape ${i + 1}`}
-                  {s.backgroundImage && <ImageIcon size={9} className={clsx("shrink-0", isLight ? "text-zinc-400" : "text-zinc-600")} />}
-                </span>
+                {renamingId === s.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename()
+                      if (e.key === 'Escape') cancelRename()
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                     className={clsx("flex-1 px-1 py-0.5 text-xs rounded border outline-none min-w-0", bg.input)}
+                  />
+                ) : (
+                  <span
+                    className={clsx("flex-1 truncate flex items-center gap-1", !s.visible ? text.muted : text.primary)}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename(s.id, s.name || `Shape ${i + 1}`) }}
+                  >
+                    {s.name || `Shape ${i + 1}`}
+                    {s.backgroundImage && <ImageIcon size={9} className={clsx("shrink-0", text.muted)} />}
+                  </span>
+                )}
 
                 {/* Actions */}
                 <button
                   onClick={(e) => { e.stopPropagation(); if (s.backgroundImage) { handleRemoveImage(s.id) } else { handleSetImage(s.id) } }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? (s.backgroundImage ? "text-indigo-500 hover:text-indigo-700" : "text-zinc-400 hover:text-zinc-700") : (s.backgroundImage ? "text-indigo-400 hover:text-indigo-300" : "text-zinc-600 hover:text-zinc-300"))}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", s.backgroundImage ? "text-indigo-500 hover:text-indigo-400" : "text-zinc-500 hover:text-zinc-400")}
                   title={s.backgroundImage ? 'Remove image' : 'Set background image'}
                 >
                   <ImageIcon size={10} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleVisibility(s.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={s.visible ? 'Hide' : 'Show'}
                 >
                   {s.visible ? <Eye size={11} /> : <EyeOff size={11} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleLock(s.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={s.locked ? 'Unlock' : 'Lock'}
                 >
                   {s.locked ? <Lock size={11} /> : <Unlock size={11} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(s.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title="Duplicate"
                 >
                   <Copy size={11} />

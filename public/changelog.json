@@ -1,6 +1,65 @@
 {
   "versions": [
     {
+      "version": "0.2.0",
+      "date": "2026-07-29",
+      "title": "Shape System, Advanced Editors & Interactive Guides",
+      "origin": "Major feature release adding SVG shape system, gradient/shadow/glow editors, interactive rulers and guides, theme presets, enhanced typography, and comprehensive UI polish.",
+      "sections": [
+        {
+          "heading": "Shape System",
+          "items": [
+            "11 SVG shape kinds with drag, resize, and z-order",
+            "Shape fill, opacity, rotation, blur, blend mode",
+            "Shape background image upload as SVG pattern fill",
+            "Dedicated Shapes panel and layers integration"
+          ]
+        },
+        {
+          "heading": "Advanced Editors",
+          "items": [
+            "Gradient editor with unlimited stops, 4 types, angle, presets",
+            "Multi-layer shadow editor with inset and 10 presets",
+            "Multi-layer glow editor with 10 presets",
+            "Shared ColorInput, SliderInput, ToggleSwitch primitives"
+          ]
+        },
+        {
+          "heading": "Typography & Images",
+          "items": [
+            "Letter spacing, word spacing, text-transform, stroke controls",
+            "Image opacity, border-radius, blend mode, flip",
+            "Image blur, glow, and shadow effects"
+          ]
+        },
+        {
+          "heading": "Rulers & Guides",
+          "items": [
+            "Viewport ruler bars with zoom-aware tick marks",
+            "Drag from ruler onto canvas to create guides",
+            "Interactive guide lines (drag, right-click to delete)"
+          ]
+        },
+        {
+          "heading": "Theme & UI",
+          "items": [
+            "17 color theme presets with instant apply",
+            "Device custom color theme picker",
+            "Full theme token migration across 20+ panels",
+            "Light theme support throughout sidebar and panels",
+            "Ctrl+click multi-select and nested group rendering"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "231 unit tests across 14 files",
+            "TypeScript strict, ESLint zero warnings"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.1.0",
       "date": "2026-07-28",
       "title": "Initial Release",

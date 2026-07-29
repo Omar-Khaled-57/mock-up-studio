@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import Scene from './Scene'
 import Ruler from './Ruler'
 
@@ -27,6 +28,7 @@ export default function Canvas() {
   const clearSelection = useStore((s) => s.clearSelection)
   const selectInRect = useStore((s) => s.selectInRect)
   const showRulers = useStore((s) => s.showRulers)
+  const { isLight, clsx } = useTheme()
 
   const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const zoomRef = useRef(zoom)
@@ -166,7 +168,7 @@ export default function Canvas() {
   return (
     <div
       ref={containerRef}
-      className="flex-1 bg-zinc-950 relative select-none"
+      className={clsx("flex-1 relative select-none", isLight ? "bg-zinc-100" : "bg-zinc-950")}
       style={{ touchAction: 'none' }}
     >
       {/* Guide preview overlay while dragging from ruler */}
@@ -183,13 +185,8 @@ export default function Canvas() {
         {showRulers && (
           <div className="flex flex-shrink-0" style={{ height: RULER_SIZE }}>
             <div
-              className="flex-shrink-0"
-              style={{
-                width: RULER_SIZE, height: RULER_SIZE,
-                background: '#18181b',
-                borderBottom: '1px solid #27272a',
-                borderRight: '1px solid #27272a'
-              }}
+              className={clsx("flex-shrink-0", isLight ? "bg-zinc-100 border-b border-r border-zinc-200" : "bg-zinc-900 border-b border-r border-zinc-800")}
+              style={{ width: RULER_SIZE, height: RULER_SIZE }}
             />
             <div className="flex-1 overflow-hidden">
               <Ruler orientation="horizontal" viewportLength={hRulerLength} />
@@ -201,13 +198,8 @@ export default function Canvas() {
         <div className="flex flex-1 overflow-hidden">
           {showRulers && (
             <div
-              className="flex-shrink-0"
-              style={{
-                width: RULER_SIZE,
-                background: '#18181b',
-                borderRight: '1px solid #27272a',
-                overflow: 'visible'
-              }}
+              className={clsx("flex-shrink-0 overflow-visible", isLight ? "bg-zinc-100 border-r border-zinc-200" : "bg-zinc-900 border-r border-zinc-800")}
+              style={{ width: RULER_SIZE }}
             >
               <Ruler orientation="vertical" viewportLength={vRulerLength} />
             </div>
@@ -243,8 +235,8 @@ export default function Canvas() {
                     top: Math.min(rubberBand.startY, rubberBand.currentY),
                     width: Math.abs(rubberBand.currentX - rubberBand.startX),
                     height: Math.abs(rubberBand.currentY - rubberBand.startY),
-                    border: '1px solid #3b82f6',
-                    background: 'rgba(59, 130, 246, 0.08)',
+                    border: '1px solid #6366f1',
+                    background: 'rgba(79, 70, 229, 0.1)',
                     pointerEvents: 'none',
                     zIndex: 9999
                   }}
@@ -255,9 +247,9 @@ export default function Canvas() {
         </div>
       </div>
 
-      <div className="absolute bottom-3 right-3 flex items-center gap-2 text-xs text-zinc-500 bg-zinc-900/80 px-2 py-1 rounded pointer-events-none">
+      <div className={clsx("absolute bottom-3 right-3 flex items-center gap-2 text-xs px-2 py-1 rounded pointer-events-none", isLight ? "text-zinc-500 bg-white/80 border border-zinc-200" : "text-zinc-500 bg-zinc-900/80")}>
         <span>{Math.round(zoom * 100)}%</span>
-        <span className="text-zinc-700">|</span>
+        <span className={isLight ? "text-zinc-300" : "text-zinc-700"}>|</span>
         <span>
           {scene.canvas.width} x {scene.canvas.height}
         </span>

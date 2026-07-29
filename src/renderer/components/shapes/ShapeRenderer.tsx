@@ -1,9 +1,11 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import type { Shape } from '@shared/types'
 import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
 import { useSnapping } from '../../hooks/useSnapping'
+import { useTripleClick } from '../../hooks/useTripleClick'
+import { useTheme } from '../../hooks/useTheme'
 import { getMultiDragEntries } from '../../lib/multi-drag'
 import ResizeHandles from '../shared/ResizeHandles'
 
@@ -108,6 +110,7 @@ function CrossPaths({ w, h, thickness, fill }: { w: number; h: number; thickness
 }
 
 function ShapeRenderer({ shape, onGuidesChange, onContextMenu }: Props) {
+  const { isLight, clsx } = useTheme()
   const select = useStore((s) => s.select)
   const selectDirect = useStore((s) => s.selectDirect)
   const isSelected = useStore((s) => s.selectedIds.includes(shape.id))
@@ -116,6 +119,9 @@ function ShapeRenderer({ shape, onGuidesChange, onContextMenu }: Props) {
   const zoom = useStore((s) => s.zoom)
   const scene = useStore((s) => s.scenes[s.activeSceneIndex])
   const groupName = shape.groupId ? scene.groups.find((g) => g.id === shape.groupId)?.name ?? null : null
+
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(shape.name)
 
   const { computeSnap } = useSnapping()
 
@@ -169,6 +175,29 @@ function ShapeRenderer({ shape, onGuidesChange, onContextMenu }: Props) {
     [shape.id, select]
   )
 
+  const startRename = useCallback(() => {
+    if (shape.locked) return
+    setIsRenaming(true)
+    setRenameValue(shape.name)
+  }, [shape.name, shape.locked])
+
+  const { handleClick: handleTripleClick } = useTripleClick(startRename)
+
+  const commitRename = useCallback(() => {
+    if (!isRenaming) return
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      updateShape(shape.id, { name: trimmed })
+      pushHistory('Rename')
+    }
+    setIsRenaming(false)
+  }, [isRenaming, renameValue, shape.id, updateShape, pushHistory])
+
+  const cancelRename = useCallback(() => {
+    setIsRenaming(false)
+    setRenameValue(shape.name)
+  }, [shape.name])
+
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (shape.groupId) {
@@ -181,18 +210,18 @@ function ShapeRenderer({ shape, onGuidesChange, onContextMenu }: Props) {
 
   const handleDragDown = useCallback(
     (e: React.PointerEvent) => {
-      if (shape.locked) return
+      if (shape.locked || isRenaming) return
       drag.handlePointerDown(e, shape.id, shape.x, shape.y, shape.width, shape.height)
     },
-    [shape, drag]
+    [shape, drag, isRenaming]
   )
 
   const handleResizeDown = useCallback(
     (e: React.PointerEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => {
-      if (shape.locked) return
+      if (shape.locked || isRenaming) return
       resize.handlePointerDown(e, shape.id, handle, shape.x, shape.y, shape.width, shape.height)
     },
-    [shape, resize]
+    [shape, resize, isRenaming]
   )
 
   const thickness = shape.kind === 'plus' ? (shape.plusThickness ?? 0.3) : shape.kind === 'arrow-right' ? (shape.arrowThickness ?? 0.5) : undefined
@@ -260,7 +289,7 @@ function ShapeRenderer({ shape, onGuidesChange, onContextMenu }: Props) {
   return (
     <div
       data-element-id={shape.id}
-      onClick={handleClick}
+      onClick={(e) => { handleClick(e); handleTripleClick() }}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContext}
       onPointerDown={handleDragDown}
@@ -280,6 +309,21 @@ function ShapeRenderer({ shape, onGuidesChange, onContextMenu }: Props) {
         touchAction: 'none'
       }}
     >
+      {isRenaming && (
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitRename()
+            if (e.key === 'Escape') cancelRename()
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className={clsx("absolute inset-0 w-full h-full px-2 text-xs font-semibold rounded border outline-none text-center", isLight ? "bg-white text-zinc-800 border-indigo-400" : "bg-zinc-900 text-zinc-100 border-indigo-500/50")}
+        />
+      )}
       <svg
         width={shape.width}
         height={shape.height}

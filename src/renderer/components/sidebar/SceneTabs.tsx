@@ -12,7 +12,7 @@ export default function SceneTabs() {
   const deleteScene = useStore((s) => s.deleteScene)
   const renameScene = useStore((s) => s.renameScene)
   const pushHistory = useStore((s) => s.pushHistory)
-  const { isLight, clsx } = useTheme()
+  const { clsx, bg, text, border: borderT, shadow } = useTheme()
 
   const [renamingIdx, setRenamingIdx] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -63,21 +63,18 @@ export default function SceneTabs() {
   return (
     <div className={clsx(
       "border-t px-2 py-1.5",
-      isLight ? "border-zinc-200 bg-zinc-50" : "border-zinc-800 bg-zinc-900"
+      bg.surface
     )}>
       <div className="flex items-center gap-1 overflow-x-auto">
         {scenes.map((scene, idx) => (
           <div
             key={scene.id}
-            className={`group flex items-center gap-1 px-2 py-1 text-xs rounded cursor-pointer shrink-0 transition-colors ${
+            className={clsx(
+              "group flex items-center gap-1 px-2 py-1 text-xs rounded cursor-pointer shrink-0 transition-all duration-150 border",
               idx === activeSceneIndex
-                ? isLight
-                  ? 'bg-indigo-100 text-indigo-700 border border-indigo-300'
-                  : 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                : isLight
-                  ? 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 border border-transparent'
-                  : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 border border-transparent'
-            }`}
+                ? clsx(bg.selected)
+                : clsx(text.tertiary, bg.hover, "border-transparent")
+            )}
             onClick={() => setActiveSceneIndex(idx)}
             onDoubleClick={() => handleDoubleClick(idx)}
             onContextMenu={(e) => handleContextMenu(e, idx)}
@@ -93,10 +90,8 @@ export default function SceneTabs() {
                   if (e.key === 'Escape') setRenamingIdx(null)
                 }}
                 className={clsx(
-                  "w-20 px-1 py-0.5 text-xs rounded border outline-none",
-                  isLight
-                    ? "bg-white text-zinc-900 border-zinc-300"
-                    : "bg-zinc-900 text-zinc-200 border-zinc-600"
+                  "w-20 px-1 py-0.5 text-xs rounded outline-none",
+                  bg.input
                 )}
                 onClick={(e) => e.stopPropagation()}
               />
@@ -110,9 +105,8 @@ export default function SceneTabs() {
           onClick={handleAddScene}
           className={clsx(
             "w-6 h-6 flex items-center justify-center rounded-md transition-all duration-150 shrink-0",
-            isLight
-              ? "text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100"
-              : "text-zinc-600 hover:text-zinc-300 hover:bg-zinc-800/60"
+            text.tertiary,
+            bg.button
           )}
           title="Add scene"
         >
@@ -123,10 +117,10 @@ export default function SceneTabs() {
       {contextIdx !== null && (
         <div
           className={clsx(
-            "fixed z-[9999] rounded-lg shadow-xl py-1 min-w-[140px]",
-            isLight
-              ? "bg-white border border-zinc-200"
-              : "bg-zinc-800 border border-zinc-700/80"
+            "fixed z-[9999] rounded-lg py-1 min-w-[140px]",
+            shadow.lg,
+            bg.tertiary,
+            borderT.secondary
           )}
           style={{ left: contextPos.x, top: contextPos.y }}
           onMouseLeave={() => setContextIdx(null)}
@@ -135,9 +129,8 @@ export default function SceneTabs() {
             onClick={handleDuplicate}
             className={clsx(
               "w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs transition-colors",
-              isLight
-                ? "text-zinc-700 hover:bg-zinc-100"
-                : "text-zinc-300 hover:bg-zinc-700/60"
+              text.primary,
+              bg.hover
             )}
           >
             <Copy size={12} />
@@ -146,7 +139,7 @@ export default function SceneTabs() {
           {scenes.length > 1 && (
             <button
               onClick={handleDelete}
-              className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+              className={clsx("w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs transition-colors", "text-red-500 hover:bg-red-500/10")}
             >
               <Trash2 size={12} />
               Delete

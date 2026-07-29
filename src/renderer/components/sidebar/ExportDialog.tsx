@@ -31,7 +31,7 @@ const SCOPE_OPTIONS: { value: ExportScope; label: string }[] = [
   { value: 'all', label: 'All Scenes' }
 ]
 
-function ToggleGroup<T extends string>({
+function ToggleGroup<T extends string | number>({
   options,
   value,
   onChange
@@ -40,14 +40,14 @@ function ToggleGroup<T extends string>({
   value: T
   onChange: (v: T) => void
 }) {
-  const { isLight, clsx } = useTheme()
+  const { clsx, bg } = useTheme()
   return (
     <div className="flex gap-1">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={clsx("flex-1 px-2 py-1 text-xs rounded transition-colors", value === opt.value ? 'bg-blue-600 text-white' : isLight ? "text-zinc-600 bg-zinc-100 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700")}
+          className={clsx("flex-1 px-2 py-1 text-xs rounded transition-colors", value === opt.value ? 'bg-blue-600 text-white' : bg.button)}
         >
           {opt.label}
         </button>
@@ -57,7 +57,7 @@ function ToggleGroup<T extends string>({
 }
 
 export default function ExportDialog() {
-  const { isLight, clsx } = useTheme()
+  const { clsx, bg, border, text } = useTheme()
   const exportFormat = useStore((s) => s.exportFormat)
   const exportScale = useStore((s) => s.exportScale)
   const exportQuality = useStore((s) => s.exportQuality)
@@ -216,24 +216,24 @@ export default function ExportDialog() {
 
   return (
     <div className="space-y-4">
-      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>Export</h3>
+      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", text.secondary)}>Export</h3>
 
       {sceneCount > 1 && (
         <div>
-          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Scope</label>
+          <label className={clsx("text-xs mb-1 block", text.secondary)}>Scope</label>
           <ToggleGroup options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
         </div>
       )}
 
       <div>
-          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Format</label>
+          <label className={clsx("text-xs mb-1 block", text.secondary)}>Format</label>
         <ToggleGroup options={FORMAT_OPTIONS} value={exportFormat} onChange={setExportFormat} />
       </div>
 
       <div>
-          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Scale</label>
+          <label className={clsx("text-xs mb-1 block", text.secondary)}>Scale</label>
         <ToggleGroup options={SCALE_OPTIONS} value={exportScale} onChange={setExportScale} />
-        <span className={clsx("text-[10px] mt-0.5 block", isLight ? "text-zinc-400" : "text-zinc-600")}>
+          <span className={clsx("text-[10px] mt-0.5 block", text.muted)}>
           {scope === 'all'
             ? `${sceneCount} scenes × ${scene.canvas.width * exportScale} × ${scene.canvas.height * exportScale} each`
             : `Output: ${outWidth} × ${outHeight}`}
@@ -241,13 +241,13 @@ export default function ExportDialog() {
       </div>
 
       <div>
-          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Background</label>
+          <label className={clsx("text-xs mb-1 block", text.secondary)}>Background</label>
         <ToggleGroup options={BG_OPTIONS} value={exportBackground} onChange={setExportBackground} />
       </div>
 
       {exportFormat !== 'png' && (
         <div>
-          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Quality</label>
+          <label className={clsx("text-xs mb-1 block", text.secondary)}>Quality</label>
           <input
             type="range"
             min={10}
@@ -257,34 +257,33 @@ export default function ExportDialog() {
             onChange={(e) => setExportQuality(Number(e.target.value))}
             className="w-full accent-blue-500"
           />
-          <span className={clsx("text-xs", isLight ? "text-zinc-600" : "text-zinc-500")}>{exportQuality}%</span>
+          <span className={clsx("text-xs", text.secondary)}>{exportQuality}%</span>
         </div>
       )}
 
       {exportBackground === 'solid' && (
         <div>
-          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Background Color</label>
+          <label className={clsx("text-xs mb-1 block", text.secondary)}>Background Color</label>
           <div className="flex items-center gap-2">
             <input
               type="color"
               value={exportBackgroundColor}
               onChange={(e) => setExportBackgroundColor(e.target.value)}
-              className={clsx("w-8 h-8 rounded border cursor-pointer", isLight ? "border-zinc-300" : "border-zinc-700")}
+              className={clsx("w-8 h-8 rounded border cursor-pointer", border.secondary)}
             />
-            <span className={clsx("text-xs", isLight ? "text-zinc-600" : "text-zinc-500")}>{exportBackgroundColor}</span>
+            <span className={clsx("text-xs", text.secondary)}>{exportBackgroundColor}</span>
           </div>
         </div>
       )}
 
       {/* Watermark */}
-      <div className={clsx("border-t pt-3", isLight ? "border-zinc-200" : "border-zinc-800")}>
+      <div className={clsx("border-t pt-3", border.primary)}>
         <div className="flex items-center justify-between mb-2">
-          <h3 className={clsx("text-xs font-semibold uppercase", isLight ? "text-zinc-600" : "text-zinc-400")}>Watermark</h3>
-          <button
+          <h3 className={clsx("text-xs font-semibold uppercase", text.secondary)}>Watermark</h3>
+          <          button
             onClick={() => setWatermark({ enabled: !watermark.enabled })}
-            className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
-              watermark.enabled ? 'bg-indigo-600 text-white' : clsx(isLight ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700')
-            }`}
+            className={clsx('text-[10px] px-2 py-0.5 rounded transition-colors',
+              watermark.enabled ? 'bg-indigo-600 text-white' : clsx(bg.button, border.secondary))}
           >
             {watermark.enabled ? 'On' : 'Off'}
           </button>
@@ -295,11 +294,11 @@ export default function ExportDialog() {
               type="text"
               value={watermark.text}
               onChange={(e) => setWatermark({ text: e.target.value })}
-              placeholder="Watermark text"
-              className={clsx("w-full px-2 py-1 text-xs rounded border focus:border-indigo-500 outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
+               placeholder="Watermark text"
+               className={clsx("w-full px-2 py-1 text-xs rounded border outline-none", bg.input)}
             />
             <div className="flex items-center gap-2">
-              <span className={clsx("text-[10px] w-10", isLight ? "text-zinc-600" : "text-zinc-500")}>Size</span>
+              <span className={clsx("text-[10px] w-10", text.secondary)}>Size</span>
               <input
                 type="range"
                 min={8}
@@ -310,7 +309,7 @@ export default function ExportDialog() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className={clsx("text-[10px] w-10", isLight ? "text-zinc-600" : "text-zinc-500")}>Opacity</span>
+              <span className={clsx("text-[10px] w-10", text.secondary)}>Opacity</span>
               <input
                 type="range"
                 min={5}
@@ -323,7 +322,7 @@ export default function ExportDialog() {
             <select
               value={watermark.position}
               onChange={(e) => setWatermark({ position: e.target.value as WatermarkSettings['position'] })}
-              className={clsx("w-full px-1.5 py-0.5 text-[10px] rounded border outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
+               className={clsx("w-full px-1.5 py-0.5 text-[10px] rounded border outline-none", bg.input)}
             >
               <option value="top-left">Top Left</option>
               <option value="top-right">Top Right</option>
@@ -339,7 +338,7 @@ export default function ExportDialog() {
         <button
           onClick={handlePreview}
           disabled={isExporting || scope === 'all'}
-          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", isLight ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200" : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80")}
+          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", bg.button)}
         >
           <Eye size={12} />
           Preview
@@ -347,7 +346,7 @@ export default function ExportDialog() {
         <button
           onClick={handleSave}
           disabled={isExporting}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 disabled:opacity-50 transition-all duration-150 border border-indigo-500/20"
+          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", bg.selected)}
         >
           <Download size={12} />
           Save
@@ -355,19 +354,19 @@ export default function ExportDialog() {
         <button
           onClick={handleCopy}
           disabled={isExporting || scope === 'all'}
-          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", isLight ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200" : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80")}
+          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", bg.button)}
         >
           <Clipboard size={12} />
           Copy
         </button>
       </div>
 
-      {status && (
-        <p className={clsx("text-xs text-center", isLight ? "text-zinc-500" : "text-zinc-500")}>{status}</p>
-      )}
+        {status && (
+          <p className={clsx("text-xs text-center", text.muted)}>{status}</p>
+        )}
 
-      {previewUrl && (
-        <div className={clsx("border rounded overflow-hidden", isLight ? "border-zinc-200" : "border-zinc-800")}>
+        {previewUrl && (
+          <div className={clsx("border rounded overflow-hidden", border.primary)}>
           <img
             src={previewUrl}
             alt="Export preview"

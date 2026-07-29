@@ -19,7 +19,7 @@
  */
 
 import { StateCreator } from 'zustand'
-import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, TitleText, GridSettings } from '@shared/types'
+import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, TitleText, GridSettings, ElementGroup } from '@shared/types'
 import { StoreState } from './index'
 import { DEFAULT_CANVAS } from '../lib/constants'
 import { generateId } from '../lib/id'
@@ -90,8 +90,10 @@ export function createDefaultScene(): Scene {
     background: {
       type: 'gradient',
       gradient: {
+        type: 'linear' as const,
         colors: ['#1e1b4b', '#312e81', '#4338ca'],
-        angle: 135
+        angle: 135,
+        radialShape: 'circle' as const
       }
     },
     devices: [],
@@ -190,6 +192,10 @@ export interface SceneSlice {
   ungroup: (groupId: string) => void
   renameGroup: (groupId: string, name: string) => void
   duplicateGroup: (groupId: string) => void
+  nestGroup: (parentGroupId: string, childGroupId: string) => void
+  combineGroups: (groupIds: string[]) => void
+  makeParentGroup: (groupId: string, targetGroupId: string) => void
+  reverseNesting: (groupA: string, groupB: string) => void
   addScene: () => void
   duplicateScene: (index: number) => void
   deleteScene: (index: number) => void
@@ -589,7 +595,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     if (ids.length < 2) return null
     const scene = state.scenes[state.activeSceneIndex]
     const groupId = generateId()
-    const group = { id: groupId, name: `Group ${scene.groups.length + 1}`, childIds: [...ids] }
+    const group = { id: groupId, name: `Group ${scene.groups.length + 1}`, childIds: [...ids], parentGroupId: null }
     const newDevices = scene.devices.map((d) => ids.includes(d.id) ? { ...d, groupId } : d)
     const newTextBoxes = scene.textBoxes.map((t) => ids.includes(t.id) ? { ...t, groupId } : t)
     const newImages = scene.images.map((i) => ids.includes(i.id) ? { ...i, groupId } : i)
@@ -677,6 +683,88 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
         images: newGroupImages,
         shapes: newGroupShapes,
         groups: [...scene.groups, newGroup]
+      }
+      return { scenes }
+    }),
+
+  nestGroup: (parentGroupId, childGroupId) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        groups: scene.groups.map((g) => {
+          if (g.id === childGroupId) return { ...g, parentGroupId }
+          return g
+        })
+      }
+      return { scenes }
+    }),
+
+  combineGroups: (groupIds) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const targetGroups = scene.groups.filter((g) => groupIds.includes(g.id))
+      if (targetGroups.length < 2) return {}
+      const allChildIds = targetGroups.flatMap((g) => g.childIds)
+      const mergedId = targetGroups[0].id
+      const merged = { ...targetGroups[0], childIds: allChildIds, parentGroupId: null }
+      const keepIds = new Set(groupIds)
+      keepIds.delete(mergedId)
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        groups: scene.groups
+          .filter((g) => !keepIds.has(g.id))
+          .map((g) => g.id === mergedId ? merged : g)
+      }
+      return { scenes }
+    }),
+
+  makeParentGroup: (groupId, targetGroupId) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const group = scene.groups.find((g) => g.id === groupId)
+      if (!group || group.parentGroupId) return {}
+      const childGroup = scene.groups.find((g) => g.id === targetGroupId)
+      if (!childGroup) return {}
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        groups: scene.groups.map((g) => {
+          if (g.id === targetGroupId) return { ...g, parentGroupId: groupId }
+          return g
+        })
+      }
+      return { scenes }
+    }),
+
+  reverseNesting: (groupA, groupB) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const a = scene.groups.find((g) => g.id === groupA)
+      const b = scene.groups.find((g) => g.id === groupB)
+      if (!a || !b) return {}
+      const aIsParent = a.parentGroupId === null && b.parentGroupId === groupA
+      const bIsParent = b.parentGroupId === null && a.parentGroupId === groupB
+      if (!aIsParent && !bIsParent) return {}
+      let newA: ElementGroup | null = null
+      let newB: ElementGroup | null = null
+      if (aIsParent) {
+        newA = { ...a, parentGroupId: groupB }
+        newB = { ...b, parentGroupId: null }
+      } else {
+        newA = { ...a, parentGroupId: null }
+        newB = { ...b, parentGroupId: groupA }
+      }
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        groups: scene.groups.map((g) => {
+          if (g.id === groupA) return newA!
+          if (g.id === groupB) return newB!
+          return g
+        })
       }
       return { scenes }
     }),

@@ -72,6 +72,7 @@ export interface ElementGroup {
   id: string
   name: string
   childIds: string[]
+  parentGroupId: string | null
 }
 
 export interface Device {
@@ -100,6 +101,7 @@ export interface Device {
 
 export interface TextBox {
   id: string
+  name: string
   content: string
   x: number
   y: number
@@ -136,6 +138,7 @@ export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' 
 
 export interface ImageOverlay {
   id: string
+  name: string
   src: string
   x: number
   y: number
@@ -160,8 +163,10 @@ export interface Background {
   type: 'solid' | 'gradient' | 'image' | 'preset'
   color?: string
   gradient?: {
+    type?: 'linear' | 'radial' | 'conic'
     colors: string[]
     angle: number
+    radialShape?: 'circle' | 'ellipse'
   }
   image?: {
     src: string

@@ -33,6 +33,10 @@ export function resetStore(): void {
     sidebarCollapsed: false,
     propertiesPanelOpen: false,
     showSplash: true,
+    theme: 'dark',
+    showRulers: false,
+    sidebarPanelWidth: 224,
+    propertiesPanelWidth: 208,
     // Export
     exportFormat: 'png',
     exportScale: 2,
@@ -84,6 +88,7 @@ export function makeDevice(overrides?: Partial<import('@shared/types').Device>):
 export function makeTextBox(overrides?: Partial<import('@shared/types').TextBox>): import('@shared/types').TextBox {
   return {
     id: `tb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: 'Test Text',
     content: 'Hello',
     x: 50,
     y: 50,
@@ -153,6 +158,7 @@ export function makeShape(overrides?: Partial<import('@shared/types').Shape>): i
 export function makeImage(overrides?: Partial<import('@shared/types').ImageOverlay>): import('@shared/types').ImageOverlay {
   return {
     id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    name: 'Test Image',
     src: 'data:image/png;base64,abc',
     x: 150,
     y: 150,

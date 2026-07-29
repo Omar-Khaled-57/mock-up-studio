@@ -11,6 +11,7 @@ interface RulerProps {
 }
 
 export default function Ruler({ orientation, viewportLength }: RulerProps) {
+  const isLight = useStore((s) => s.theme === 'light')
   const zoom = useStore((s) => s.zoom)
   const panX = useStore((s) => s.panX)
   const panY = useStore((s) => s.panY)
@@ -123,7 +124,7 @@ export default function Ruler({ orientation, viewportLength }: RulerProps) {
         data-ruler-tick
       >
         <div
-          className="bg-zinc-500"
+          className={isLight ? "bg-zinc-400" : "bg-zinc-500"}
           style={orientation === 'horizontal' ? { width: 1, height: 8, marginLeft: -0.5 } : { width: 8, height: 1, marginTop: -0.5 }}
         />
         <span
@@ -131,7 +132,7 @@ export default function Ruler({ orientation, viewportLength }: RulerProps) {
           style={
             orientation === 'horizontal'
               ? { left: 3, top: 9 }
-              : { left: 2, top: 3, whiteSpace: 'nowrap', background: '#18181b', paddingRight: 2 }
+              : { left: 2, top: 3, whiteSpace: 'nowrap', background: isLight ? '#f3f4f6' : '#18181b', paddingRight: 2 }
           }
         >
           {scenePos}
@@ -151,7 +152,7 @@ export default function Ruler({ orientation, viewportLength }: RulerProps) {
             style={orientation === 'horizontal' ? { left: subVp, top: 0 } : { left: 0, top: subVp }}
           >
             <div
-              className="bg-zinc-600"
+              className={isLight ? "bg-zinc-400" : "bg-zinc-600"}
               style={orientation === 'horizontal' ? { width: 1, height: 4, marginLeft: -0.5 } : { width: 4, height: 1, marginTop: -0.5 }}
             />
           </div>
@@ -163,7 +164,7 @@ export default function Ruler({ orientation, viewportLength }: RulerProps) {
   return (
     <div
       ref={rulerRef}
-      className="relative bg-zinc-900/90 select-none"
+      className={`relative select-none ${isLight ? 'bg-zinc-100/90' : 'bg-zinc-900/90'}`}
       style={{
         [orientation === 'horizontal' ? 'width' : 'height']: viewportLength,
         [orientation === 'horizontal' ? 'height' : 'width']: RULER_SIZE,

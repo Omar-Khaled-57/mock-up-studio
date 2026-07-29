@@ -8,10 +8,10 @@ interface Props {
 }
 
 export default function ToggleSwitch({ label, checked, onChange, className = '' }: Props) {
-  const { isLight, clsx } = useTheme()
+  const { isLight, clsx, text } = useTheme()
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <label className={clsx("text-[10px] cursor-pointer select-none", isLight ? "text-zinc-600" : "text-zinc-500")}>{label}</label>
+      <label className={clsx("text-[10px] cursor-pointer select-none", text.secondary)}>{label}</label>
       <button
         role="switch"
         aria-checked={checked}
@@ -19,7 +19,7 @@ export default function ToggleSwitch({ label, checked, onChange, className = '' 
         className={`relative w-8 h-[18px] rounded-full border transition-colors ${
           checked
             ? 'bg-indigo-500 border-indigo-500'
-            : clsx(isLight ? 'bg-zinc-200 border-zinc-300' : 'bg-zinc-700 border-zinc-600')
+            : isLight ? 'bg-zinc-200 border-zinc-300' : 'bg-zinc-700 border-zinc-600'
         }`}
       >
         <span

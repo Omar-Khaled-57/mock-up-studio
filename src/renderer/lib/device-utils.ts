@@ -36,7 +36,7 @@ export function buildTextStyle(t: Pick<TitleText, 'fontSize' | 'fontFamily' | 'f
   if (t.wordSpacing) style.wordSpacing = t.wordSpacing
   if (t.textTransform && t.textTransform !== 'none') style.textTransform = t.textTransform as React.CSSProperties['textTransform']
   if (t.strokeWidth && t.strokeWidth > 0) {
-    style.webkitTextStroke = `${t.strokeWidth}px ${t.strokeColor || t.color}`
+    (style as Record<string, string>).webkitTextStroke = `${t.strokeWidth}px ${t.strokeColor || t.color}`
   }
 
   if (t.gradient?.enabled) {

@@ -4,6 +4,8 @@ import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
 import { useSnapping } from '../../hooks/useSnapping'
+import { useTripleClick } from '../../hooks/useTripleClick'
+import { useTheme } from '../../hooks/useTheme'
 import { buildTextStyle } from '../../lib/device-utils'
 import { getMultiDragEntries } from '../../lib/multi-drag'
 import ResizeHandles from '../shared/ResizeHandles'
@@ -16,6 +18,7 @@ interface Props {
 }
 
 export default function TextBox({ textBox, onGuidesChange, onContextMenu }: Props) {
+  const { isLight, clsx } = useTheme()
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(textBox.id))
   const updateTextBox = useStore((s) => s.updateTextBox)
@@ -25,6 +28,8 @@ export default function TextBox({ textBox, onGuidesChange, onContextMenu }: Prop
   const zoom = useStore((s) => s.zoom)
 
   const [isEditing, setIsEditing] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(textBox.name)
   const { computeSnap } = useSnapping()
 
   const commitPosition = useCallback(
@@ -87,20 +92,43 @@ export default function TextBox({ textBox, onGuidesChange, onContextMenu }: Prop
     [textBox.id, select]
   )
 
+  const startRename = useCallback(() => {
+    if (textBox.locked || isEditing) return
+    setIsRenaming(true)
+    setRenameValue(textBox.name)
+  }, [textBox.name, textBox.locked, isEditing])
+
+  const { handleClick: handleTripleClick } = useTripleClick(startRename)
+
+  const commitRename = useCallback(() => {
+    if (!isRenaming) return
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      updateTextBox(textBox.id, { name: trimmed })
+      pushHistory('Rename')
+    }
+    setIsRenaming(false)
+  }, [isRenaming, renameValue, textBox.id, updateTextBox, pushHistory])
+
+  const cancelRename = useCallback(() => {
+    setIsRenaming(false)
+    setRenameValue(textBox.name)
+  }, [textBox.name])
+
   const handleDragDown = useCallback(
     (e: React.PointerEvent) => {
-      if (textBox.locked || isEditing) return
+      if (textBox.locked || isEditing || isRenaming) return
       drag.handlePointerDown(e, textBox.id, textBox.x, textBox.y, textBox.width, textBox.height)
     },
-    [textBox, drag, isEditing]
+    [textBox, drag, isEditing, isRenaming]
   )
 
   const handleResizeDown = useCallback(
     (e: React.PointerEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => {
-      if (textBox.locked || isEditing) return
+      if (textBox.locked || isEditing || isRenaming) return
       resize.handlePointerDown(e, textBox.id, handle, textBox.x, textBox.y, textBox.width, textBox.height)
     },
-    [textBox, resize, isEditing]
+    [textBox, resize, isEditing, isRenaming]
   )
 
   const handleContentCommit = useCallback(
@@ -143,7 +171,7 @@ export default function TextBox({ textBox, onGuidesChange, onContextMenu }: Prop
   return (
     <div
       data-element-id={textBox.id}
-      onClick={handleClick}
+      onClick={(e) => { handleClick(e); handleTripleClick() }}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContext}
       onPointerDown={handleDragDown}
@@ -151,6 +179,21 @@ export default function TextBox({ textBox, onGuidesChange, onContextMenu }: Prop
       onPointerUp={drag.handlePointerUp}
       style={outerStyle}
     >
+      {isRenaming && (
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitRename()
+            if (e.key === 'Escape') cancelRename()
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className={clsx("absolute inset-0 w-full h-full px-2 text-xs font-semibold rounded border outline-none text-center", isLight ? "bg-white text-zinc-800 border-indigo-400" : "bg-zinc-900 text-zinc-100 border-indigo-500/50")}
+        />
+      )}
       <InlineEditor
         content={textBox.content}
         isEditing={isEditing}

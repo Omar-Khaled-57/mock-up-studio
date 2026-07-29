@@ -15,6 +15,7 @@ declare global {
       writeRecovery: (projectId: string, data: string) => Promise<void>
       readRecovery: (projectId: string) => Promise<string | null>
       deleteRecovery: (projectId: string) => Promise<void>
+      saveImageDialog: (defaultName: string, blob: ArrayBuffer) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>
       onMenuAction: (callback: (action: string) => void) => (() => void)
       onRequestClose: (callback: () => void) => (() => void)
       confirmClose: () => void
@@ -135,7 +136,7 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
       const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
       set({
-        project: project as Project,
+        project: project as unknown as Project,
         scenes: scenes as never[],
         activeSceneIndex,
         filePath: result.filePath,

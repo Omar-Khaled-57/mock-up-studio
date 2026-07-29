@@ -21,7 +21,7 @@ let _nextId = Date.now()
 function genId() { return String(++_nextId) }
 
 export default function CanvasPresetsPanel() {
-  const { isLight, clsx } = useTheme()
+  const { clsx, bg, text, border } = useTheme()
   const scene = useStore(safeScene)
   const updateCanvas = useStore((s) => s.updateCanvas)
   const pushHistory = useStore((s) => s.pushHistory)
@@ -91,7 +91,7 @@ export default function CanvasPresetsPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Quick Presets</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Quick Presets</h3>
         <div className="space-y-1">
           {CANVAS_PRESETS.map((preset) => {
             const active = scene.canvas.width === preset.width && scene.canvas.height === preset.height
@@ -99,7 +99,7 @@ export default function CanvasPresetsPanel() {
               <button
                 key={preset.label}
                 onClick={() => applySize(preset.width, preset.height)}
-                className={clsx("w-full text-left px-2 py-1.5 rounded text-sm transition-colors", active ? 'bg-indigo-600 text-white' : isLight ? "text-zinc-700 hover:bg-zinc-100" : "text-zinc-300 hover:bg-zinc-800")}
+                className={clsx("w-full text-left px-2 py-1.5 rounded text-sm transition-colors", active ? 'bg-indigo-600 text-white' : bg.button)}
               >
                 <span className="block">{preset.label}</span>
                 <span className="block text-[10px] opacity-60">{preset.width} x {preset.height}</span>
@@ -110,7 +110,7 @@ export default function CanvasPresetsPanel() {
       </div>
 
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Resolution Presets</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Resolution Presets</h3>
         <div className="space-y-1">
           {[
             { label: 'Full HD', width: 1920, height: 1080 },
@@ -122,7 +122,7 @@ export default function CanvasPresetsPanel() {
               <button
                 key={preset.label}
                 onClick={() => applySize(preset.width, preset.height)}
-                className={clsx("w-full text-left px-2 py-1.5 rounded text-sm transition-colors", active ? 'bg-indigo-600 text-white' : isLight ? "text-zinc-700 hover:bg-zinc-100" : "text-zinc-300 hover:bg-zinc-800")}
+                className={clsx("w-full text-left px-2 py-1.5 rounded text-sm transition-colors", active ? 'bg-indigo-600 text-white' : bg.button)}
               >
                 <span className="block">{preset.label}</span>
                 <span className="block text-[10px] opacity-60">{preset.width} x {preset.height}</span>
@@ -133,15 +133,15 @@ export default function CanvasPresetsPanel() {
       </div>
 
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Custom</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Custom</h3>
 
         <button
           onClick={addSize}
           className={clsx(
             "w-full flex items-center justify-center gap-2 px-3 py-2 rounded border-2 border-dashed text-sm font-medium transition-colors mb-1.5",
-            isLight
-              ? "border-zinc-300 text-zinc-500 hover:border-zinc-400 hover:text-zinc-700 bg-zinc-50"
-              : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 bg-zinc-900/50"
+            border.secondary,
+            text.tertiary,
+            bg.hover
           )}
         >
           <Plus size={16} />
@@ -153,30 +153,30 @@ export default function CanvasPresetsPanel() {
 
           if (editingId === size.id) {
             return (
-              <div key={size.id} className={clsx("p-2 rounded space-y-1.5 mb-1", isLight ? "bg-zinc-100" : "bg-zinc-800")}>
-                <input
-                  value={editLabel}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                  placeholder="Label"
-                  className={clsx("w-full px-2 py-1 text-xs rounded outline-none border focus:border-indigo-500", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-900 text-zinc-200 border-zinc-700")}
-                />
-                <div className="flex gap-1 items-center">
+              <div key={size.id} className={clsx("p-2 rounded space-y-1.5 mb-1", bg.surface)}>
                   <input
-                    value={editWidth}
-                    onChange={(e) => setEditWidth(e.target.value)}
-                    placeholder="W"
-                    type="number"
-                    min={10}
-                    className={clsx("flex-1 min-w-0 px-2 py-1 text-xs rounded outline-none border focus:border-indigo-500", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-900 text-zinc-200 border-zinc-700")}
+                    value={editLabel}
+                    onChange={(e) => setEditLabel(e.target.value)}
+                    placeholder="Label"
+                    className={clsx("w-full px-2 py-1 text-xs rounded outline-none border", bg.input)}
                   />
-                  <span className={clsx("shrink-0 text-xs", isLight ? "text-zinc-400" : "text-zinc-600")}>×</span>
-                  <input
-                    value={editHeight}
-                    onChange={(e) => setEditHeight(e.target.value)}
-                    placeholder="H"
-                    type="number"
-                    min={10}
-                    className={clsx("flex-1 min-w-0 px-2 py-1 text-xs rounded outline-none border focus:border-indigo-500", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-900 text-zinc-200 border-zinc-700")}
+                <div className="flex gap-1 items-center">
+                    <input
+                      value={editWidth}
+                      onChange={(e) => setEditWidth(e.target.value)}
+                      placeholder="W"
+                      type="number"
+                      min={10}
+                      className={clsx("flex-1 min-w-0 px-2 py-1 text-xs rounded outline-none border", bg.input)}
+                    />
+                    <span className={clsx("shrink-0 text-xs", text.muted)}>×</span>
+                    <input
+                      value={editHeight}
+                      onChange={(e) => setEditHeight(e.target.value)}
+                      placeholder="H"
+                      type="number"
+                      min={10}
+                      className={clsx("flex-1 min-w-0 px-2 py-1 text-xs rounded outline-none border", bg.input)}
                   />
                   <button
                     onClick={saveEdit}
@@ -186,7 +186,7 @@ export default function CanvasPresetsPanel() {
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
-                    className={clsx("shrink-0 p-1 transition-colors", isLight ? "text-zinc-400 hover:text-zinc-600" : "text-zinc-500 hover:text-zinc-300")}
+                    className={clsx("shrink-0 p-1 transition-colors", text.muted)}
                   >
                     <X size={14} />
                   </button>
@@ -202,9 +202,7 @@ export default function CanvasPresetsPanel() {
                 "flex items-center gap-1 px-2 py-1.5 rounded text-sm transition-colors cursor-pointer group mb-1",
                 active
                   ? 'bg-indigo-600 text-white'
-                  : isLight
-                    ? "text-zinc-700 hover:bg-zinc-100"
-                    : "text-zinc-300 hover:bg-zinc-800"
+                  : bg.button
               )}
               onClick={() => applySize(size.width, size.height)}
             >
@@ -218,7 +216,7 @@ export default function CanvasPresetsPanel() {
                 onClick={(e) => { e.stopPropagation(); startEdit(size.id) }}
                 className={clsx(
                   "shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-all",
-                  active ? 'hover:bg-white/20 text-white/70' : isLight ? 'hover:bg-zinc-200 text-zinc-400' : 'hover:bg-zinc-700 text-zinc-500'
+                  active ? 'hover:bg-white/20 text-white/70' : clsx(text.muted, bg.hover)
                 )}
               >
                 <Pencil size={12} />
@@ -227,7 +225,7 @@ export default function CanvasPresetsPanel() {
                 onClick={(e) => { e.stopPropagation(); deleteSize(size.id) }}
                 className={clsx(
                   "shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-all",
-                  active ? 'hover:bg-white/20 text-white/70' : isLight ? 'hover:bg-zinc-200 text-red-400' : 'hover:bg-zinc-700 text-red-400'
+                  active ? 'hover:bg-white/20 text-white/70' : clsx('text-red-400 hover:text-red-500', bg.hover)
                 )}
               >
                 <Trash2 size={12} />
@@ -237,7 +235,7 @@ export default function CanvasPresetsPanel() {
         })}
 
         {customSizes.length === 0 && (
-          <p className={clsx("text-[10px] text-center", isLight ? "text-zinc-400" : "text-zinc-600")}>
+          <p className={clsx("text-[10px] text-center", text.muted)}>
             No custom sizes yet. Click + to add one.
           </p>
         )}

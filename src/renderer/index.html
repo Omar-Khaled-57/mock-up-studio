@@ -17,9 +17,56 @@
       *:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; border-radius: 4px; }
       button:focus:not(:focus-visible), input:focus:not(:focus-visible) { outline: none; }
       .custom-checkbox { appearance: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid #52525b; background: #27272a; cursor: pointer; flex-shrink: 0; margin-top: 2px; transition: all 0.15s; background-repeat: no-repeat; background-position: center; background-size: 10px; }
-      .custom-checkbox:checked { background-color: #3b82f6; border-color: #3b82f6; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z'/%3E%3C/svg%3E"); }
+
+      .light-theme .custom-checkbox { border-color: #d4d4d8; background: #fff; }
+
+      .custom-checkbox:checked { background-color: #6366f1; border-color: #6366f1; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='white' d='M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z'/%3E%3C/svg%3E"); }
+
       .custom-checkbox:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
       .custom-checkbox-indigo:checked { background-color: #6366f1; border-color: #6366f1; }
+
+      body.light-theme {
+        --bg-primary: #ffffff;
+        --bg-secondary: #f9fafb;
+        --bg-tertiary: #f3f4f6;
+        --bg-panel: #ffffff;
+        --bg-input: #ffffff;
+        --bg-button: #f3f4f6;
+        --bg-button-hover: #e5e7eb;
+        --bg-active: #eef2ff;
+        --bg-selected: #e0e7ff;
+        --bg-danger: #fef2f2;
+        --bg-danger-hover: #fee2e2;
+        --border-primary: #e5e7eb;
+        --border-secondary: #d1d5db;
+        --border-focus: #6366f1;
+        --text-primary: #111827;
+        --text-secondary: #374151;
+        --text-tertiary: #6b7280;
+        --text-muted: #9ca3af;
+        --text-inverse: #ffffff;
+        --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        --accent: #4f46e5;
+        --accent-light: #e0e7ff;
+        --accent-dark: #3730a3;
+        --scrollbar-thumb: #d1d5db;
+        --scrollbar-thumb-hover: #9ca3af;
+        --ruler-bg: #f3f4f6;
+        --ruler-border: #e5e7eb;
+        --ruler-text: #6b7280;
+        --canvas-bg: #f9fafb;
+        --rubber-band: rgba(79, 70, 229, 0.15);
+        --rubber-band-border: #6366f1;
+      }
+
+      body.light-theme ::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+      }
+      body.light-theme ::-webkit-scrollbar-thumb:hover {
+        background: var(--scrollbar-thumb-hover);
+      }
     </style>
   </head>
   <body class="bg-zinc-950 text-zinc-100">

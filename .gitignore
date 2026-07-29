@@ -6,5 +6,6 @@ release
 *.log
 dev/
 *.tsbuildinfo
+.kilo/
 AGENTS.md
 REMAINING-WORK.md

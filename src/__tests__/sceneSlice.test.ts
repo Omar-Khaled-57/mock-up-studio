@@ -537,3 +537,104 @@ describe('updateCanvas', () => {
     expect(scene.canvas.height).toBe(1080)
   })
 })
+
+// ---------- updateGuide ----------
+
+describe('updateGuide', () => {
+  it('updates position of an existing guide', () => {
+    const store = useStore.getState()
+    store.addGuide('horizontal', 100)
+    const scene = safeScene(useStore.getState())
+    const gid = scene.guides[0].id
+    store.updateGuide(gid, 250)
+    const updated = safeScene(useStore.getState())
+    expect(updated.guides[0].position).toBe(250)
+  })
+
+  it('does nothing for non-existent guide', () => {
+    useStore.getState().updateGuide('nonexistent', 999)
+    const scene = safeScene(useStore.getState())
+    expect(scene.guides).toHaveLength(0)
+  })
+})
+
+// ---------- applyThemePreset ----------
+
+describe('applyThemePreset', () => {
+  it('applies a solid background preset', () => {
+    const store = useStore.getState()
+    store.applyThemePreset({
+      name: 'Test',
+      swatches: ['#000'],
+      background: { type: 'solid', color: '#ff0000' },
+      titleColor: '#ffffff',
+      sloganColor: '#cccccc'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.background.type).toBe('solid')
+    expect(scene.background.color).toBe('#ff0000')
+    expect(scene.titleText.color).toBe('#ffffff')
+    expect(scene.sloganText.color).toBe('#cccccc')
+  })
+
+  it('applies a gradient background preset', () => {
+    const store = useStore.getState()
+    store.applyThemePreset({
+      name: 'Gradient',
+      swatches: ['#f00', '#00f'],
+      background: { type: 'gradient', colors: ['#ff0000', '#0000ff'], angle: 90 },
+      titleColor: '#111',
+      sloganColor: '#222'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.background.type).toBe('gradient')
+    expect(scene.background.gradient?.colors).toEqual(['#ff0000', '#0000ff'])
+    expect(scene.background.gradient?.angle).toBe(90)
+  })
+
+  it('applies a preset background preset', () => {
+    const store = useStore.getState()
+    store.applyThemePreset({
+      name: 'Aurora',
+      swatches: ['#333'],
+      background: { type: 'preset', presetName: 'aurora' },
+      titleColor: '#eee',
+      sloganColor: '#ddd'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.background.type).toBe('preset')
+    expect(scene.background.presetName).toBe('aurora')
+  })
+})
+
+// ---------- findElementKind ----------
+
+describe('findElementKind', () => {
+  it('finds a device by ID', () => {
+    const d = makeDevice()
+    useStore.getState().addDevice(d)
+    expect(useStore.getState().findElementKind(d.id)).toBe('device')
+  })
+
+  it('finds a text box by ID', () => {
+    const t = makeTextBox()
+    useStore.getState().addTextBox(t)
+    expect(useStore.getState().findElementKind(t.id)).toBe('textbox')
+  })
+
+  it('finds an image by ID', () => {
+    const img = makeImage()
+    useStore.getState().addImage(img)
+    expect(useStore.getState().findElementKind(img.id)).toBe('image')
+  })
+
+  it('finds a shape by ID', () => {
+    const s = makeShape()
+    useStore.getState().addShape(s)
+    expect(useStore.getState().findElementKind(s.id)).toBe('shape')
+  })
+
+  it('returns null for unknown ID', () => {
+    expect(useStore.getState().findElementKind('nonexistent')).toBeNull()
+  })
+})

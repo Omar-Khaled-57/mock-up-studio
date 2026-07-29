@@ -1,9 +1,11 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { Device } from '@shared/types'
 import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
 import { useSnapping } from '../../hooks/useSnapping'
+import { useTripleClick } from '../../hooks/useTripleClick'
+import { useTheme } from '../../hooks/useTheme'
 import { getMultiDragEntries } from '../../lib/multi-drag'
 import Monitor from './Monitor'
 import Laptop from './Laptop'
@@ -32,6 +34,7 @@ const DEVICE_COMPONENTS: Record<string, React.ComponentType<{ device: Device; ch
 }
 
 export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: Props) {
+  const { isLight, clsx } = useTheme()
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(device.id))
   const updateDevice = useStore((s) => s.updateDevice)
@@ -39,6 +42,9 @@ export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: P
   const groupName = device.groupId ? scene.groups.find((g) => g.id === device.groupId)?.name ?? null : null
   const pushHistory = useStore((s) => s.pushHistory)
   const zoom = useStore((s) => s.zoom)
+
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(device.name)
 
   const { computeSnap } = useSnapping()
 
@@ -92,6 +98,29 @@ export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: P
     [device.id, select]
   )
 
+  const startRename = useCallback(() => {
+    if (device.locked) return
+    setIsRenaming(true)
+    setRenameValue(device.name)
+  }, [device.name, device.locked])
+
+  const { handleClick: handleTripleClick } = useTripleClick(startRename)
+
+  const commitRename = useCallback(() => {
+    if (!isRenaming) return
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      updateDevice(device.id, { name: trimmed })
+      pushHistory('Rename')
+    }
+    setIsRenaming(false)
+  }, [isRenaming, renameValue, device.id, updateDevice, pushHistory])
+
+  const cancelRename = useCallback(() => {
+    setIsRenaming(false)
+    setRenameValue(device.name)
+  }, [device.name])
+
   const handleDoubleClick = useCallback(() => {
     if (device.locked) return
     const input = document.createElement('input')
@@ -112,18 +141,18 @@ export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: P
 
   const handleDragDown = useCallback(
     (e: React.PointerEvent) => {
-      if (device.locked) return
+      if (device.locked || isRenaming) return
       drag.handlePointerDown(e, device.id, device.x, device.y, device.width, device.height)
     },
-    [device, drag]
+    [device, drag, isRenaming]
   )
 
   const handleResizeDown = useCallback(
     (e: React.PointerEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => {
-      if (device.locked) return
+      if (device.locked || isRenaming) return
       resize.handlePointerDown(e, device.id, handle, device.x, device.y, device.width, device.height)
     },
-    [device, resize]
+    [device, resize, isRenaming]
   )
 
   const DeviceComponent = DEVICE_COMPONENTS[device.type] || Monitor
@@ -131,7 +160,7 @@ export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: P
   return (
     <div
       data-element-id={device.id}
-      onClick={handleClick}
+      onClick={(e) => { handleClick(e); handleTripleClick() }}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContext}
       onPointerDown={handleDragDown}
@@ -150,6 +179,21 @@ export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: P
         touchAction: 'none'
       }}
     >
+      {isRenaming && (
+        <input
+          autoFocus
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitRename()
+            if (e.key === 'Escape') cancelRename()
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          className={clsx("absolute inset-0 w-full h-full px-2 text-xs font-semibold rounded border outline-none text-center", isLight ? "bg-white text-zinc-800 border-indigo-400" : "bg-zinc-900 text-zinc-100 border-indigo-500/50")}
+        />
+      )}
       <DeviceComponent device={device}>
         <ScreenContainer device={device} />
       </DeviceComponent>

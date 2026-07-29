@@ -56,7 +56,7 @@ interface SerializedScene {
 interface SerializedBackground {
   type: string
   color?: string
-  gradient?: { colors: string[]; angle: number }
+  gradient?: { colors: string[]; angle: number; type?: string; radialShape?: string }
   image?: { src: string; blur: number; dim: number; overlayColor: string }
   presetName?: string
 }
@@ -84,6 +84,7 @@ interface SerializedDevice {
 
 interface SerializedTextBox {
   id: string
+  name: string
   content: string
   x: number
   y: number
@@ -114,6 +115,7 @@ interface SerializedTextBox {
 
 interface SerializedImage {
   id: string
+  name: string
   src: string | null
   x: number
   y: number
@@ -477,7 +479,7 @@ export function loadProjectFromZipResult(result: ZipProjectResult): {
       createdAt: projectData.createdAt,
       updatedAt: projectData.updatedAt,
       scenes,
-      activeSceneIndex: projectData.activeSceneIndex
+      activeSceneIndex: activeSceneIndex
     },
     scenes,
     activeSceneIndex

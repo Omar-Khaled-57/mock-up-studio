@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
@@ -9,7 +9,7 @@ import { Plus, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
 const DEFAULT_SIZE = 300
 
 export default function ImagesPanel() {
-  const { isLight, clsx } = useTheme()
+  const { clsx, text, isLight, bg } = useTheme()
   const scene = useStore(safeScene)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
@@ -20,6 +20,9 @@ export default function ImagesPanel() {
   const pushHistory = useStore((s) => s.pushHistory)
   const canvas = scene.canvas
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const images = scene.images
   const maxZ = images.reduce((max, img) => Math.max(max, img.zIndex), -1)
@@ -37,8 +40,10 @@ export default function ImagesPanel() {
           const aspect = img.width / img.height
           const w = Math.min(DEFAULT_SIZE, canvas.width * 0.5)
           const h = Math.round(w / aspect)
+          const currentImages = useStore.getState().scenes[useStore.getState().activeSceneIndex].images
           const image: ImageOverlayType = {
             id: generateId(),
+            name: `Image ${currentImages.length + 1}`,
             src: reader.result as string,
             x: Math.round((canvas.width - w) / 2),
             y: Math.round((canvas.height - h) / 2),
@@ -114,6 +119,25 @@ export default function ImagesPanel() {
     [duplicateSelected, pushHistory]
   )
 
+  const startRename = useCallback((id: string, currentName: string) => {
+    setRenamingId(id)
+    setRenameValue(currentName)
+  }, [])
+
+  const commitRename = useCallback(() => {
+    if (!renamingId) return
+    const trimmed = renameValue.trim()
+    if (trimmed) {
+      updateImage(renamingId, { name: trimmed })
+      pushHistory('Rename image')
+    }
+    setRenamingId(null)
+  }, [renamingId, renameValue, updateImage, pushHistory])
+
+  const cancelRename = useCallback(() => {
+    setRenamingId(null)
+  }, [])
+
   return (
     <div className="space-y-4">
       <input
@@ -126,10 +150,10 @@ export default function ImagesPanel() {
 
       {/* Add button */}
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Add Image</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Add Image</h3>
         <button
           onClick={handleAddClick}
-          className={clsx("w-full flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs rounded-lg transition-all duration-150", isLight ? "text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900" : "text-zinc-300 bg-zinc-800/60 hover:bg-zinc-700/80 hover:text-zinc-100")}
+          className={clsx("w-full flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs rounded-lg transition-all duration-150", bg.button)}
         >
           <Plus size={12} strokeWidth={2} />
           Upload Image
@@ -138,21 +162,21 @@ export default function ImagesPanel() {
 
       {/* Image list */}
       <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>
           Images ({images.length})
         </h3>
         {images.length === 0 ? (
-          <p className={clsx("text-[11px]", isLight ? "text-zinc-400" : "text-zinc-600")}>No images yet — click Add or paste onto canvas</p>
+          <p className={clsx("text-[11px]", text.muted)}>No images yet — click Add or paste onto canvas</p>
         ) : (
           <div className="space-y-0.5">
-            {images.map((img, i) => (
+            {images.map((img) => (
               <div
                 key={img.id}
                 onClick={() => select(img.id)}
-                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedImage?.id === img.id ? 'bg-indigo-500/10 border border-indigo-500/20' : isLight ? "hover:bg-zinc-100 border border-transparent" : "hover:bg-zinc-800/60 border border-transparent")}
+                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedImage?.id === img.id ? 'bg-indigo-500/10 border border-indigo-500/20' : clsx('bg.hover', 'border border-transparent'))}
               >
                 {/* Thumbnail */}
-                <div className={clsx("w-6 h-6 rounded overflow-hidden shrink-0 border", isLight ? "bg-zinc-100 border-zinc-200" : "bg-zinc-800 border-zinc-700/50")}>
+                <div className={clsx("w-6 h-6 rounded overflow-hidden shrink-0 border", bg.tertiary, "border-zinc-300 dark:border-zinc-700")}>
                   <img
                     src={img.src}
                     alt=""
@@ -162,35 +186,53 @@ export default function ImagesPanel() {
                 </div>
 
                 {/* Name */}
-                <span className={clsx("flex-1 truncate", !img.visible ? clsx(isLight ? "text-zinc-400" : "text-zinc-600") : isLight ? "text-zinc-800" : "text-zinc-300")}>
-                  Image {i + 1}
-                </span>
+                {renamingId === img.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename()
+                      if (e.key === 'Escape') cancelRename()
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                     className={clsx("flex-1 px-1 py-0.5 text-xs rounded border outline-none min-w-0", bg.input)}
+                  />
+                ) : (
+                  <span
+                    className={clsx("flex-1 truncate", !img.visible ? (isLight ? text.muted : text.tertiary) : (isLight ? text.primary : text.secondary))}
+                    onDoubleClick={(e) => { e.stopPropagation(); startRename(img.id, img.name) }}
+                  >
+                    {img.name}
+                  </span>
+                )}
 
                 {/* Actions */}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleVisibility(img.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={img.visible ? 'Hide' : 'Show'}
                 >
                   {img.visible ? <Eye size={11} /> : <EyeOff size={11} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleLock(img.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={img.locked ? 'Unlock' : 'Lock'}
                 >
                   {img.locked ? <Lock size={11} /> : <Unlock size={11} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(img.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title="Duplicate"
                 >
                   <Copy size={11} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(img.id) }}
-                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-red-600" : "text-zinc-600 hover:text-red-400")}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors text-red-400")}
                   title="Delete"
                 >
                   <Trash2 size={11} />

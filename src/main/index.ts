@@ -37,6 +37,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
+    mainWindow.maximize()
     mainWindow.show()
     createMenu(mainWindow)
     initAutoUpdater(mainWindow)
@@ -134,6 +135,8 @@ ipcMain.on('open-user-guide', () => {
     win.loadFile(join(__dirname, '../renderer/index.html'), { query: { guide: '1' } })
   }
 })
+
+app.commandLine.appendSwitch('disable-features', 'Autofill')
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.mockup-studio')
