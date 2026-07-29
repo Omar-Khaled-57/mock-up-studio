@@ -40,13 +40,14 @@ export function createMenu(mainWindow: BrowserWindow): void {
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => send('undo') },
+        { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', click: () => send('redo') },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' }
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', click: () => send('cut-selected') },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', click: () => send('copy-selected') },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', click: () => send('paste-clipboard') },
+        { type: 'separator' },
+        { label: 'Select All', accelerator: 'CmdOrCtrl+A', click: () => send('select-all') }
       ]
     },
     {
@@ -67,6 +68,11 @@ export function createMenu(mainWindow: BrowserWindow): void {
       label: 'Help',
       submenu: [
         {
+          label: 'User Guide',
+          accelerator: 'F1',
+          click: () => send('open-user-guide')
+        },
+        {
           label: 'Keyboard Shortcuts',
           accelerator: 'CmdOrCtrl+/',
           click: () => send('show-shortcuts')
@@ -82,6 +88,10 @@ export function createMenu(mainWindow: BrowserWindow): void {
               detail: 'Desktop device mockup scene builder.\nVersion 0.1.0'
             })
           }
+        },
+        {
+          label: 'Check for Updates…',
+          click: () => send('check-for-updates')
         }
       ]
     }

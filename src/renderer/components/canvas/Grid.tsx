@@ -27,7 +27,14 @@ export default function Grid({ grid, canvasWidth, canvasHeight }: GridProps) {
           height={grid.size}
           patternUnits="userSpaceOnUse"
         >
-          <circle cx={grid.size / 2} cy={grid.size / 2} r={0.8} fill={grid.color} />
+          {grid.style === 'lines' ? (
+            <>
+              <line x1={0} y1={0} x2={grid.size} y2={0} stroke={grid.color} strokeWidth={0.5} />
+              <line x1={0} y1={0} x2={0} y2={grid.size} stroke={grid.color} strokeWidth={0.5} />
+            </>
+          ) : (
+            <circle cx={grid.size / 2} cy={grid.size / 2} r={0.8} fill={grid.color} />
+          )}
         </pattern>
       </defs>
       <rect width={canvasWidth} height={canvasHeight} fill={`url(#${patternId})`} />

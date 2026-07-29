@@ -9,6 +9,7 @@ import { createExportSlice, ExportSlice } from './exportSlice'
 import { createClipboardSlice, ClipboardSlice } from './clipboardSlice'
 import { createVersionHistorySlice, VersionHistorySlice } from './versionHistorySlice'
 import { createWatermarkSlice, WatermarkSlice } from './watermarkSlice'
+import { createShapeSlice, ShapeSlice } from './shapeSlice'
 
 export type StoreState = ProjectSlice &
   SceneSlice &
@@ -19,7 +20,8 @@ export type StoreState = ProjectSlice &
   ExportSlice &
   ClipboardSlice &
   VersionHistorySlice &
-  WatermarkSlice
+  WatermarkSlice &
+  ShapeSlice
 
 export const useStore = create<StoreState>()((...a) => ({
   ...createProjectSlice(...a),
@@ -31,5 +33,6 @@ export const useStore = create<StoreState>()((...a) => ({
   ...createExportSlice(...a),
   ...createClipboardSlice(...a),
   ...createVersionHistorySlice(...a),
-  ...createWatermarkSlice(...a)
+  ...createWatermarkSlice(...a),
+  ...createShapeSlice(...a)
 }))

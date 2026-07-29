@@ -1,9 +1,14 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useMemo } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import type { Background } from '@shared/types'
 import { BACKGROUND_PRESETS, type BackgroundPresetName } from '../../lib/constants'
 import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
+import GradientEditor from '../shared/GradientEditor'
+import type { GradientValue } from '../shared/GradientEditor'
+import SliderInput from '../shared/SliderInput'
+import ColorInput from '../shared/ColorInput'
 
 const BG_TYPES: { value: Background['type']; label: string }[] = [
   { value: 'solid', label: 'Solid' },
@@ -12,63 +17,29 @@ const BG_TYPES: { value: Background['type']; label: string }[] = [
   { value: 'preset', label: 'Preset' }
 ]
 
-function ColorInput({ label, value, onChange }: { label: string; value: string; onChange: (c: string) => void }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-zinc-500 w-7 shrink-0">{label}</span>
-      <div className="relative flex-1">
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full h-6 rounded border border-zinc-700 cursor-pointer bg-transparent"
-        />
-      </div>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-16 px-1.5 py-0.5 text-[10px] bg-zinc-800 text-zinc-300 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
-      />
-    </div>
-  )
+function bgToGradientValue(bg: Background): GradientValue {
+  return {
+    type: 'linear',
+    stops: (bg.gradient?.colors ?? ['#1e1b4b', '#312e81']).map((color, i, arr) => ({
+      color,
+      position: arr.length === 1 ? 50 : Math.round((i / (arr.length - 1)) * 100),
+      opacity: 100
+    })),
+    angle: bg.gradient?.angle ?? 135,
+    radialShape: 'circle'
+  }
 }
 
-function SliderInput({
-  label,
-  value,
-  min,
-  max,
-  unit,
-  onChange
-}: {
-  label: string
-  value: number
-  min: number
-  max: number
-  unit: string
-  onChange: (v: number) => void
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] text-zinc-500 w-7 shrink-0">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1 h-1 accent-indigo-500"
-      />
-      <span className="text-[10px] text-zinc-400 w-10 text-right">
-        {value}
-        {unit}
-      </span>
-    </div>
-  )
+function gradientValueToBg(g: GradientValue): { colors: string[]; angle: number } {
+  const sorted = [...g.stops].sort((a, b) => a.position - b.position)
+  return {
+    colors: sorted.map((s) => s.color),
+    angle: g.angle
+  }
 }
 
 export default function ThemesPanel() {
+  const { isLight, clsx } = useTheme()
   const scene = useStore(safeScene)
   const updateBackground = useStore((s) => s.updateBackground)
   const pushHistory = useStore((s) => s.pushHistory)
@@ -76,6 +47,8 @@ export default function ThemesPanel() {
   const bg = scene.background
 
   const pushHistoryDebounced = useDebouncedHistory()
+
+  const gradientValue = useMemo(() => bgToGradientValue(bg), [bg])
 
   const setType = useCallback(
     (type: Background['type']) => {
@@ -93,41 +66,13 @@ export default function ThemesPanel() {
     [updateBackground, pushHistoryDebounced]
   )
 
-  const setGradientColor = useCallback(
-    (idx: number, color: string) => {
-      const current = bg.gradient?.colors ?? ['#1e1b4b', '#312e81']
-      const colors = [...current]
-      colors[idx] = color
-      updateBackground({ gradient: { colors, angle: bg.gradient?.angle ?? 135 } })
-      pushHistoryDebounced('Gradient color')
+  const setGradient = useCallback(
+    (g: GradientValue) => {
+      const { colors, angle } = gradientValueToBg(g)
+      updateBackground({ gradient: { colors, angle } })
+      pushHistoryDebounced('Gradient')
     },
-    [bg.gradient, updateBackground, pushHistoryDebounced]
-  )
-
-  const setGradientAngle = useCallback(
-    (angle: number) => {
-      updateBackground({ gradient: { colors: bg.gradient?.colors ?? ['#1e1b4b', '#312e81'], angle } })
-      pushHistoryDebounced('Gradient angle')
-    },
-    [bg.gradient, updateBackground, pushHistoryDebounced]
-  )
-
-  const addGradientStop = useCallback(() => {
-    const current = bg.gradient?.colors ?? ['#1e1b4b', '#312e81']
-    if (current.length >= 4) return
-    updateBackground({ gradient: { colors: [...current, '#6366f1'], angle: bg.gradient?.angle ?? 135 } })
-    pushHistory('Add gradient stop')
-  }, [bg.gradient, updateBackground, pushHistory])
-
-  const removeGradientStop = useCallback(
-    (idx: number) => {
-      const current = bg.gradient?.colors ?? ['#1e1b4b', '#312e81']
-      if (current.length <= 2) return
-      const colors = current.filter((_, i) => i !== idx)
-      updateBackground({ gradient: { colors, angle: bg.gradient?.angle ?? 135 } })
-      pushHistory('Remove gradient stop')
-    },
-    [bg.gradient, updateBackground, pushHistory]
+    [updateBackground, pushHistoryDebounced]
   )
 
   const handleImageUpload = useCallback(
@@ -196,14 +141,14 @@ export default function ThemesPanel() {
 
       {/* Type Selector */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Background Type</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Background Type</h3>
         <div className="grid grid-cols-2 gap-1">
           {BG_TYPES.map((t) => (
             <button
               key={t.value}
               onClick={() => setType(t.value)}
               className={`px-2 py-1.5 text-xs rounded-lg transition-all duration-150 ${
-                bg.type === t.value ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
+                bg.type === t.value ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
               }`}
             >
               {t.label}
@@ -215,71 +160,14 @@ export default function ThemesPanel() {
       {/* Solid Controls */}
       {bg.type === 'solid' && (
         <div>
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Color</h3>
+          <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Color</h3>
           <ColorInput label="" value={bg.color ?? '#18181b'} onChange={setSolidColor} />
         </div>
       )}
 
-      {/* Gradient Controls */}
+      {/* Gradient Controls — Advanced Gradient Editor */}
       {bg.type === 'gradient' && (
-        <div className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Colors</h3>
-              {(bg.gradient?.colors ?? []).length < 4 && (
-                <button
-                  onClick={addGradientStop}
-                  className="text-[10px] text-indigo-400 hover:text-indigo-300"
-                >
-                  + Add
-                </button>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              {(bg.gradient?.colors ?? ['#1e1b4b', '#312e81']).map((color, idx) => (
-                <div key={idx} className="flex items-center gap-1.5">
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={(e) => setGradientColor(idx, e.target.value)}
-                    className="w-6 h-6 rounded border border-zinc-700 cursor-pointer bg-transparent shrink-0"
-                  />
-                  <input
-                    type="text"
-                    value={color}
-                    onChange={(e) => setGradientColor(idx, e.target.value)}
-                    className="flex-1 px-1.5 py-0.5 text-[10px] bg-zinc-800 text-zinc-300 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
-                  />
-                  {(bg.gradient?.colors ?? []).length > 2 && (
-                    <button
-                      onClick={() => removeGradientStop(idx)}
-                      className="text-zinc-600 hover:text-red-400 text-xs px-0.5"
-                    >
-                      x
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Preview */}
-          <div
-            className="w-full h-8 rounded border border-zinc-800"
-            style={{
-              background: `linear-gradient(${bg.gradient?.angle ?? 135}deg, ${(bg.gradient?.colors ?? ['#1e1b4b', '#312e81']).join(', ')})`
-            }}
-          />
-
-          <SliderInput
-            label="Angle"
-            value={bg.gradient?.angle ?? 135}
-            min={0}
-            max={360}
-            unit="°"
-            onChange={setGradientAngle}
-          />
-        </div>
+        <GradientEditor value={gradientValue} onChange={setGradient} />
       )}
 
       {/* Image Controls */}
@@ -287,14 +175,14 @@ export default function ThemesPanel() {
         <div className="space-y-3">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full px-3 py-2 text-xs bg-zinc-800 text-zinc-300 rounded border border-zinc-700 hover:bg-zinc-700 transition-colors"
+            className={clsx("w-full px-3 py-2 text-xs rounded border transition-colors", isLight ? "bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700")}
           >
             {bg.image?.src ? 'Replace Image' : 'Upload Image'}
           </button>
 
           {bg.image?.src && (
             <>
-              <div className="w-full h-16 rounded border border-zinc-800 overflow-hidden">
+              <div className={clsx("w-full h-16 rounded border overflow-hidden", isLight ? "border-zinc-200" : "border-zinc-800")}>
                 <div
                   className="w-full h-full bg-cover bg-center"
                   style={{
@@ -334,23 +222,19 @@ export default function ThemesPanel() {
       {bg.type === 'preset' && (
         <div className="space-y-3">
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Animated</h3>
+            <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Animated</h3>
             <div className="grid grid-cols-2 gap-1.5">
               {BACKGROUND_PRESETS.filter((p) => p.category === 'animated').map((preset) => (
                 <button
                   key={preset.name}
                   onClick={() => selectPreset(preset.name)}
-                  className={`group relative rounded overflow-hidden border transition-colors ${
-                    bg.presetName === preset.name
-                      ? 'border-indigo-500 ring-1 ring-indigo-500'
-                      : 'border-zinc-800 hover:border-zinc-600'
-                  }`}
+                  className={clsx("group relative rounded overflow-hidden border transition-colors", bg.presetName === preset.name ? 'border-indigo-500 ring-1 ring-indigo-500' : isLight ? 'border-zinc-200 hover:border-zinc-400' : 'border-zinc-800 hover:border-zinc-600')}
                 >
                   <div
                     className="w-full h-14"
                     style={{ background: preset.thumbnail }}
                   />
-                  <span className="block text-[10px] text-zinc-400 py-1 px-1.5 text-left group-hover:text-zinc-200">
+                  <span className={clsx("block text-[10px] py-1 px-1.5 text-left", isLight ? "text-zinc-600 group-hover:text-zinc-900" : "text-zinc-400 group-hover:text-zinc-200")}>
                     {preset.label}
                   </span>
                 </button>
@@ -359,23 +243,19 @@ export default function ThemesPanel() {
           </div>
 
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Static</h3>
+            <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Static</h3>
             <div className="grid grid-cols-2 gap-1.5">
               {BACKGROUND_PRESETS.filter((p) => p.category === 'static').map((preset) => (
                 <button
                   key={preset.name}
                   onClick={() => selectPreset(preset.name)}
-                  className={`group relative rounded overflow-hidden border transition-colors ${
-                    bg.presetName === preset.name
-                      ? 'border-indigo-500 ring-1 ring-indigo-500'
-                      : 'border-zinc-800 hover:border-zinc-600'
-                  }`}
+                  className={clsx("group relative rounded overflow-hidden border transition-colors", bg.presetName === preset.name ? 'border-indigo-500 ring-1 ring-indigo-500' : isLight ? 'border-zinc-200 hover:border-zinc-400' : 'border-zinc-800 hover:border-zinc-600')}
                 >
                   <div
                     className="w-full h-14"
                     style={{ background: preset.thumbnail }}
                   />
-                  <span className="block text-[10px] text-zinc-400 py-1 px-1.5 text-left group-hover:text-zinc-200">
+                  <span className={clsx("block text-[10px] py-1 px-1.5 text-left", isLight ? "text-zinc-600 group-hover:text-zinc-900" : "text-zinc-400 group-hover:text-zinc-200")}>
                     {preset.label}
                   </span>
                 </button>

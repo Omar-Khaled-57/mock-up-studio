@@ -49,6 +49,12 @@ function defaultTitleText(): TitleText {
     fontFamily: 'Inter',
     fontWeight: 800,
     textAlign: 'left',
+    lineHeight: 1.1,
+    letterSpacing: 0,
+    wordSpacing: 0,
+    textTransform: 'none',
+    strokeColor: '#ffffff',
+    strokeWidth: 0,
     color: '#ffffff',
     gradient: null,
     glow: null,
@@ -63,6 +69,12 @@ function defaultSloganText(): TitleText {
     fontFamily: 'Inter',
     fontWeight: 400,
     textAlign: 'left',
+    lineHeight: 1.3,
+    letterSpacing: 0,
+    wordSpacing: 0,
+    textTransform: 'none',
+    strokeColor: '#ffffff',
+    strokeWidth: 0,
     color: '#a1a1aa',
     gradient: null,
     glow: null,
@@ -82,34 +94,19 @@ export function createDefaultScene(): Scene {
         angle: 135
       }
     },
-    devices: [
-      {
-        id: generateId(),
-        type: 'monitor',
-        name: 'Monitor 1',
-        visible: true,
-        locked: false,
-        x: 340,
-        y: 110,
-        width: 600,
-        height: 375,
-        rotation: 0,
-        zIndex: 0,
-        colorTheme: 'dark',
-        screenImage: null,
-        objectFit: 'contain'
-      }
-    ],
+    devices: [],
     textBoxes: [],
     images: [],
+    shapes: [],
     titleText: defaultTitleText(),
     sloganText: defaultSloganText(),
     guides: [],
-    grid: { enabled: false, size: 20, color: '#ffffff20', snapEnabled: false }
+    grid: { enabled: false, size: 20, color: '#ffffff20', snapEnabled: false, style: 'dotted' },
+    groups: []
   }
 }
 
-export type ElementKind = 'device' | 'textbox' | 'image'
+export type ElementKind = 'device' | 'textbox' | 'image' | 'shape' | 'group'
 
 /**
  * Flattens all element types (devices, textboxes, images) into a single
@@ -120,7 +117,8 @@ function findAllElements(scene: Scene): { id: string; kind: ElementKind; zIndex:
   const all = [
     ...scene.devices.map((d) => ({ id: d.id, kind: 'device' as const, zIndex: d.zIndex })),
     ...scene.textBoxes.map((t) => ({ id: t.id, kind: 'textbox' as const, zIndex: t.zIndex })),
-    ...scene.images.map((i) => ({ id: i.id, kind: 'image' as const, zIndex: i.zIndex }))
+    ...scene.images.map((i) => ({ id: i.id, kind: 'image' as const, zIndex: i.zIndex })),
+    ...scene.shapes.map((s) => ({ id: s.id, kind: 'shape' as const, zIndex: s.zIndex }))
   ]
   return all.sort((a, b) => a.zIndex - b.zIndex)
 }
@@ -141,6 +139,9 @@ function patchZIndex(
   if (kind === 'textbox') {
     return { ...scene, textBoxes: scene.textBoxes.map((t) => (t.id === id ? { ...t, zIndex: newZ } : t)) }
   }
+  if (kind === 'shape') {
+    return { ...scene, shapes: scene.shapes.map((s) => (s.id === id ? { ...s, zIndex: newZ } : s)) }
+  }
   return { ...scene, images: scene.images.map((i) => (i.id === id ? { ...i, zIndex: newZ } : i)) }
 }
 
@@ -148,6 +149,7 @@ function patchZIndex(
 function removeById(scene: Scene, kind: ElementKind, id: string): Scene {
   if (kind === 'device') return { ...scene, devices: scene.devices.filter((d) => d.id !== id) }
   if (kind === 'textbox') return { ...scene, textBoxes: scene.textBoxes.filter((t) => t.id !== id) }
+  if (kind === 'shape') return { ...scene, shapes: scene.shapes.filter((s) => s.id !== id) }
   return { ...scene, images: scene.images.filter((i) => i.id !== id) }
 }
 
@@ -183,6 +185,11 @@ export interface SceneSlice {
   removeGuide: (guideId: string) => void
   updateGuide: (guideId: string, position: number) => void
   clearGuides: () => void
+  applyThemePreset: (preset: import('../lib/constants').ThemePreset) => void
+  groupSelected: () => string | null
+  ungroup: (groupId: string) => void
+  renameGroup: (groupId: string, name: string) => void
+  duplicateGroup: (groupId: string) => void
   addScene: () => void
   duplicateScene: (index: number) => void
   deleteScene: (index: number) => void
@@ -355,6 +362,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     if (scene.devices.some((d) => d.id === id)) return 'device'
     if (scene.textBoxes.some((t) => t.id === id)) return 'textbox'
     if (scene.images.some((i) => i.id === id)) return 'image'
+    if (scene.shapes.some((s) => s.id === id)) return 'shape'
     return null
   },
 
@@ -366,6 +374,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
         scene = removeById(scene, 'device', id)
         scene = removeById(scene, 'textbox', id)
         scene = removeById(scene, 'image', id)
+        scene = removeById(scene, 'shape', id)
       }
       scenes[state.activeSceneIndex] = scene
       return { scenes, selectedIds: [] }
@@ -385,6 +394,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     const newDevices = [...scene.devices]
     const newTextBoxes = [...scene.textBoxes]
     const newImages = [...scene.images]
+    const newShapes = [...scene.shapes]
 
     for (const id of ids) {
       const dev = scene.devices.find((d) => d.id === id)
@@ -409,11 +419,19 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
         const dup = { ...img, id: generateId(), x: img.x + 30, y: img.y + 30, zIndex: maxZ }
         newImages.push(dup)
         newIds.push(dup.id)
+        continue
+      }
+      const shape = scene.shapes.find((s) => s.id === id)
+      if (shape) {
+        maxZ++
+        const dup = { ...shape, id: generateId(), name: `${shape.name} copy`, x: shape.x + 30, y: shape.y + 30, zIndex: maxZ }
+        newShapes.push(dup)
+        newIds.push(dup.id)
       }
     }
 
     const scenes = [...state.scenes]
-    scenes[state.activeSceneIndex] = { ...scene, devices: newDevices, textBoxes: newTextBoxes, images: newImages }
+    scenes[state.activeSceneIndex] = { ...scene, devices: newDevices, textBoxes: newTextBoxes, images: newImages, shapes: newShapes }
     set({ scenes, selectedIds: newIds })
     return newIds
   },
@@ -540,6 +558,126 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const scenes = [...state.scenes]
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = { ...scene, guides: [] }
+      return { scenes }
+    }),
+
+  applyThemePreset: (preset) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const scene = scenes[state.activeSceneIndex]
+      const bg = preset.background
+      const background: Background = bg.type === 'solid'
+        ? { type: 'solid', color: bg.color ?? '#000000' }
+        : bg.type === 'gradient'
+          ? { type: 'gradient', gradient: { colors: bg.colors ?? ['#000000', '#ffffff'], angle: bg.angle ?? 135 } }
+          : { type: 'preset', presetName: bg.presetName ?? 'aurora' }
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        background,
+        titleText: { ...scene.titleText, color: preset.titleColor },
+        sloganText: { ...scene.sloganText, color: preset.sloganColor },
+        textBoxes: scene.textBoxes.map((t) => ({ ...t, color: preset.sloganColor })),
+        shapes: scene.shapes.map((s) => ({ ...s, color: preset.accentColor })),
+        devices: scene.devices.map((d) => ({ ...d, colorTheme: preset.deviceTheme }))
+      }
+      return { scenes }
+    }),
+
+  groupSelected: () => {
+    const state = get()
+    const ids = state.selectedIds
+    if (ids.length < 2) return null
+    const scene = state.scenes[state.activeSceneIndex]
+    const groupId = generateId()
+    const group = { id: groupId, name: `Group ${scene.groups.length + 1}`, childIds: [...ids] }
+    const newDevices = scene.devices.map((d) => ids.includes(d.id) ? { ...d, groupId } : d)
+    const newTextBoxes = scene.textBoxes.map((t) => ids.includes(t.id) ? { ...t, groupId } : t)
+    const newImages = scene.images.map((i) => ids.includes(i.id) ? { ...i, groupId } : i)
+    const newShapes = scene.shapes.map((s) => ids.includes(s.id) ? { ...s, groupId } : s)
+    const scenes = [...state.scenes]
+    scenes[state.activeSceneIndex] = {
+      ...scene,
+      devices: newDevices,
+      textBoxes: newTextBoxes,
+      images: newImages,
+      shapes: newShapes,
+      groups: [...scene.groups, group]
+    }
+    set({ scenes })
+    return groupId
+  },
+
+  ungroup: (groupId) => {
+    const state = get()
+    const scene = state.scenes[state.activeSceneIndex]
+    const newDevices = scene.devices.map((d) => d.groupId === groupId ? { ...d, groupId: null } : d)
+    const newTextBoxes = scene.textBoxes.map((t) => t.groupId === groupId ? { ...t, groupId: null } : t)
+    const newImages = scene.images.map((i) => i.groupId === groupId ? { ...i, groupId: null } : i)
+    const newShapes = scene.shapes.map((s) => s.groupId === groupId ? { ...s, groupId: null } : s)
+    const scenes = [...state.scenes]
+    scenes[state.activeSceneIndex] = {
+      ...scene,
+      devices: newDevices,
+      textBoxes: newTextBoxes,
+      images: newImages,
+      shapes: newShapes,
+      groups: scene.groups.filter((g) => g.id !== groupId)
+    }
+    set({ scenes })
+  },
+
+  renameGroup: (groupId, name) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        groups: scene.groups.map((g) => g.id === groupId ? { ...g, name } : g)
+      }
+      return { scenes }
+    }),
+
+  duplicateGroup: (groupId) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const group = scene.groups.find((g) => g.id === groupId)
+      if (!group) return {}
+      const newGroupId = generateId()
+      const idMap = new Map<string, string>()
+      for (const cid of group.childIds) {
+        const newId = generateId()
+        idMap.set(cid, newId)
+      }
+      const newGroup = { ...group, id: newGroupId, childIds: group.childIds.map((cid) => idMap.get(cid)!) }
+      const newDevices = scene.devices.flatMap((d) => {
+        const newId = idMap.get(d.id)
+        return newId ? [{ ...d, id: newId, groupId: newGroupId, x: d.x + 20, y: d.y + 20 }] : []
+      })
+      const newTextBoxes = scene.textBoxes.flatMap((t) => {
+        const newId = idMap.get(t.id)
+        return newId ? [{ ...t, id: newId, groupId: newGroupId, x: t.x + 20, y: t.y + 20 }] : []
+      })
+      const newImages = scene.images.flatMap((i) => {
+        const newId = idMap.get(i.id)
+        return newId ? [{ ...i, id: newId, groupId: newGroupId, x: i.x + 20, y: i.y + 20 }] : []
+      })
+      const newShapes = scene.shapes.flatMap((s) => {
+        const newId = idMap.get(s.id)
+        return newId ? [{ ...s, id: newId, groupId: newGroupId, x: s.x + 20, y: s.y + 20 }] : []
+      })
+      const newGroupDevices = [...scene.devices, ...newDevices]
+      const newGroupTextBoxes = [...scene.textBoxes, ...newTextBoxes]
+      const newGroupImages = [...scene.images, ...newImages]
+      const newGroupShapes = [...scene.shapes, ...newShapes]
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        devices: newGroupDevices,
+        textBoxes: newGroupTextBoxes,
+        images: newGroupImages,
+        shapes: newGroupShapes,
+        groups: [...scene.groups, newGroup]
+      }
       return { scenes }
     }),
 

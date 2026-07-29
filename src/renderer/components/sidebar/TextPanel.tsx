@@ -1,8 +1,11 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
-import { AlignLeft, AlignCenter, AlignRight } from 'lucide-react'
+import { generateId } from '../../lib/id'
+import { Plus, AlignLeft, AlignCenter, AlignRight, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
+import type { TextBox as TextBoxType } from '@shared/types'
 
 const FONT_FAMILIES = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'Lato',
@@ -22,22 +25,68 @@ const FONT_WEIGHTS = [
 
 type Target = 'title' | 'slogan' | null
 
+const DEFAULT_TEXT_SIZE = 200
+
+function defaultTextBox(canvasW: number, canvasH: number, zIndex: number): TextBoxType {
+  return {
+    id: generateId(),
+    content: 'Double-click to edit',
+    x: Math.round((canvasW - DEFAULT_TEXT_SIZE) / 2),
+    y: Math.round((canvasH - DEFAULT_TEXT_SIZE) / 2),
+    width: DEFAULT_TEXT_SIZE,
+    height: 60,
+    heightAuto: true,
+    fontSize: 24,
+    fontFamily: 'Inter',
+    fontWeight: 600,
+    textAlign: 'center',
+    lineHeight: 1.3,
+    letterSpacing: 0,
+    wordSpacing: 0,
+    textTransform: 'none',
+    strokeColor: '#ffffff',
+    strokeWidth: 0,
+    color: '#ffffff',
+    gradient: null,
+    glow: null,
+    shadow: null,
+    visible: true,
+    backgroundVisible: false,
+    backgroundColor: '#00000040',
+    borderVisible: false,
+    borderColor: '#ffffff40',
+    borderRadius: 4,
+    stylePreset: 'custom',
+    zIndex,
+    locked: false,
+    groupId: null
+  }
+}
+
 export default function TextPanel() {
-  const titleText = useStore((s) => safeScene(s).titleText)
-  const sloganText = useStore((s) => safeScene(s).sloganText)
+  const { isLight, clsx } = useTheme()
+  const scene = useStore(safeScene)
+  const titleText = scene.titleText
+  const sloganText = scene.sloganText
+  const canvas = scene.canvas
+  const textBoxes = scene.textBoxes
+  const selectedIds = useStore((s) => s.selectedIds)
+  const select = useStore((s) => s.select)
   const updateTitleText = useStore((s) => s.updateTitleText)
   const updateSloganText = useStore((s) => s.updateSloganText)
-  const selectedIds = useStore((s) => s.selectedIds)
-
-  const scene = useStore(safeScene)
+  const addTextBox = useStore((s) => s.addTextBox)
+  const updateTextBox = useStore((s) => s.updateTextBox)
+  const removeTextBox = useStore((s) => s.removeTextBox)
+  const duplicateSelected = useStore((s) => s.duplicateSelected)
+  const pushHistory = useStore((s) => s.pushHistory)
+  const pushHistoryDebounced = useDebouncedHistory()
 
   const selectedTextBox = useMemo(() => {
     if (selectedIds.length !== 1) return null
-    return scene.textBoxes.find((t) => t.id === selectedIds[0]) ?? null
-  }, [selectedIds, scene.textBoxes])
+    return textBoxes.find((t) => t.id === selectedIds[0]) ?? null
+  }, [selectedIds, textBoxes])
 
-  const updateTextBox = useStore((s) => s.updateTextBox)
-  const pushHistoryDebounced = useDebouncedHistory()
+  const maxZ = textBoxes.reduce((max, t) => Math.max(max, t.zIndex), -1)
 
   const [activeTarget, setActiveTarget] = useState<Target>('title')
 
@@ -53,6 +102,10 @@ export default function TextPanel() {
         textAlign: selectedTextBox.textAlign,
         lineHeight: selectedTextBox.lineHeight,
         letterSpacing: selectedTextBox.letterSpacing,
+        wordSpacing: selectedTextBox.wordSpacing,
+        textTransform: selectedTextBox.textTransform,
+        strokeColor: selectedTextBox.strokeColor,
+        strokeWidth: selectedTextBox.strokeWidth,
         gradient: selectedTextBox.gradient,
         glow: selectedTextBox.glow,
         shadow: selectedTextBox.shadow
@@ -60,6 +113,46 @@ export default function TextPanel() {
     }
     return titleText
   }, [activeTarget, titleText, sloganText, selectedTextBox])
+
+  const handleAddText = useCallback(() => {
+    const tb = defaultTextBox(canvas.width, canvas.height, maxZ + 1)
+    addTextBox(tb)
+    pushHistory('Add text box')
+    select(tb.id)
+    setActiveTarget(null)
+  }, [canvas, maxZ, addTextBox, pushHistory, select])
+
+  const handleToggleVisibility = useCallback(
+    (id: string) => {
+      const tb = textBoxes.find((t) => t.id === id)
+      if (tb) updateTextBox(id, { visible: !tb.visible })
+    },
+    [textBoxes, updateTextBox]
+  )
+
+  const handleToggleLock = useCallback(
+    (id: string) => {
+      const tb = textBoxes.find((t) => t.id === id)
+      if (tb) updateTextBox(id, { locked: !tb.locked })
+    },
+    [textBoxes, updateTextBox]
+  )
+
+  const handleDelete = useCallback(
+    (id: string) => {
+      removeTextBox(id)
+      pushHistory('Delete text box')
+    },
+    [removeTextBox, pushHistory]
+  )
+
+  const handleDuplicate = useCallback(
+    (id: string) => {
+      const newIds = duplicateSelected([id])
+      if (newIds.length > 0) pushHistory('Duplicate text')
+    },
+    [duplicateSelected, pushHistory]
+  )
 
   const patch = useCallback(
     (field: string, value: unknown) => {
@@ -92,30 +185,33 @@ export default function TextPanel() {
   )
 
   const enableGradient = useCallback(() => {
-    const g = activeStyle.gradient?.enabled
-      ? activeStyle.gradient
+    const was = activeStyle.gradient?.enabled ?? false
+    const g = was
+      ? activeStyle.gradient!
       : { enabled: true, color1: '#ffffff', color2: '#a855f7', angle: 135 }
-    patch('gradient', { ...g, enabled: !g.enabled })
+    patch('gradient', { ...g, enabled: !was })
   }, [activeStyle.gradient, patch])
 
   const enableGlow = useCallback(() => {
-    const g = activeStyle.glow?.enabled
-      ? activeStyle.glow
+    const was = activeStyle.glow?.enabled ?? false
+    const g = was
+      ? activeStyle.glow!
       : { enabled: true, color: '#818cf8', blur: 20 }
-    patch('glow', { ...g, enabled: !g.enabled })
+    patch('glow', { ...g, enabled: !was })
   }, [activeStyle.glow, patch])
 
   const enableShadow = useCallback(() => {
-    const s = activeStyle.shadow?.enabled
-      ? activeStyle.shadow
+    const was = activeStyle.shadow?.enabled ?? false
+    const s = was
+      ? activeStyle.shadow!
       : { enabled: true, color: '#00000080', offsetX: 2, offsetY: 4, blur: 8 }
-    patch('shadow', { ...s, enabled: !s.enabled })
+    patch('shadow', { ...s, enabled: !was })
   }, [activeStyle.shadow, patch])
 
   const targetButtons: { id: Target; label: string }[] = [
     { id: 'title', label: 'Title' },
     { id: 'slogan', label: 'Slogan' },
-    ...(selectedTextBox ? [{ id: null, label: `Text: ${selectedTextBox.content.slice(0, 12) || 'Empty'}` } as const] : [])
+    ...(selectedTextBox ? [{ id: null, label: 'Text' } as const] : [])
   ]
 
   const ALIGN_ICONS = {
@@ -127,7 +223,7 @@ export default function TextPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Edit Target</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Edit Target</h3>
         <div className="flex gap-1">
           {targetButtons.map((btn) => (
             <button
@@ -136,7 +232,7 @@ export default function TextPanel() {
               className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-all duration-150 ${
                 activeTarget === btn.id
                   ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                  : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
+                  : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
               }`}
             >
               {btn.label}
@@ -145,12 +241,71 @@ export default function TextPanel() {
         </div>
       </div>
 
+      {/* Add Text */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Font</h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>Text Boxes ({textBoxes.length})</h3>
+          <button
+            onClick={handleAddText}
+            className={clsx("flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-all", isLight ? "text-zinc-700 bg-zinc-100 hover:bg-zinc-200" : "text-zinc-300 bg-zinc-800/60 hover:bg-zinc-700/80")}
+          >
+            <Plus size={10} strokeWidth={2} />
+            Add
+          </button>
+        </div>
+        {textBoxes.length === 0 ? (
+          <p className={clsx("text-[11px]", isLight ? "text-zinc-400" : "text-zinc-600")}>No text boxes yet — click Add to create one</p>
+        ) : (
+          <div className="space-y-0.5">
+            {textBoxes.map((tb, i) => (
+              <div
+                key={tb.id}
+                onClick={() => { select(tb.id); setActiveTarget(null) }}
+                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedTextBox?.id === tb.id ? 'bg-indigo-500/10 border border-indigo-500/20' : isLight ? "hover:bg-zinc-100 border border-transparent" : "hover:bg-zinc-800/60 border border-transparent")}
+              >
+                <span className={clsx("flex-1 truncate", !tb.visible ? clsx(isLight ? "text-zinc-400" : "text-zinc-600") : isLight ? "text-zinc-800" : "text-zinc-300")}>
+                  Text {i + 1}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleToggleVisibility(tb.id) }}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  title={tb.visible ? 'Hide' : 'Show'}
+                >
+                  {tb.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleToggleLock(tb.id) }}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  title={tb.locked ? 'Unlock' : 'Lock'}
+                >
+                  {tb.locked ? <Lock size={11} /> : <Unlock size={11} />}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDuplicate(tb.id) }}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  title="Duplicate"
+                >
+                  <Copy size={11} />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(tb.id) }}
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-red-600" : "text-zinc-600 hover:text-red-400")}
+                  title="Delete"
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Font</h3>
         <select
           value={activeStyle.fontFamily}
           onChange={(e) => patch('fontFamily', e.target.value)}
-          className="w-full px-2 py-1.5 text-sm bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+          className={clsx("w-full px-2 py-1.5 text-sm rounded border focus:border-indigo-500 outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-200 border-zinc-700")}
         >
           {FONT_FAMILIES.map((f) => (
             <option key={f} value={f}>{f}</option>
@@ -158,7 +313,7 @@ export default function TextPanel() {
         </select>
 
         <div className="mt-2">
-          <label className="text-[10px] text-zinc-500 mb-1 block">Weight: {activeStyle.fontWeight}</label>
+          <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Weight: {activeStyle.fontWeight}</label>
           <input
             type="range"
             min={300}
@@ -168,7 +323,7 @@ export default function TextPanel() {
             onChange={(e) => patch('fontWeight', parseInt(e.target.value, 10))}
             className="w-full accent-indigo-500"
           />
-          <div className="flex justify-between text-[9px] text-zinc-600">
+            <div className={clsx("flex justify-between text-[9px]", isLight ? "text-zinc-400" : "text-zinc-600")}>
             {FONT_WEIGHTS.map((w) => (
               <span key={w.value}>{w.label.split(' ')[0]}</span>
             ))}
@@ -177,21 +332,21 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Size & Spacing</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Size & Spacing</h3>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">Size</label>
+            <label className={clsx("text-[10px] mb-0.5 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Size</label>
             <input
               type="number"
               min={8}
               max={400}
               value={activeStyle.fontSize}
               onChange={(e) => patch('fontSize', parseInt(e.target.value, 10) || 16)}
-              className="w-full px-2 py-1.5 text-sm bg-zinc-800/60 text-zinc-200 rounded-lg border border-zinc-700/50 focus:border-indigo-500/50 outline-none transition-colors"
+              className={clsx("w-full px-2 py-1.5 text-sm rounded-lg border outline-none transition-colors", isLight ? "bg-white text-zinc-800 border-zinc-300 focus:border-indigo-500" : "bg-zinc-800/60 text-zinc-200 border-zinc-700/50 focus:border-indigo-500/50")}
             />
           </div>
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">Align</label>
+            <label className={clsx("text-[10px] mb-0.5 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Align</label>
             <div className="flex gap-0.5">
               {(['left', 'center', 'right'] as const).map((align) => {
                 const Icon = ALIGN_ICONS[align]
@@ -202,7 +357,7 @@ export default function TextPanel() {
                     className={`flex-1 flex items-center justify-center py-1.5 rounded-lg transition-all duration-150 ${
                       activeStyle.textAlign === align
                         ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                        : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
+                        : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
                     }`}
                   >
                     <Icon size={14} strokeWidth={1.5} />
@@ -212,31 +367,111 @@ export default function TextPanel() {
             </div>
           </div>
         </div>
+        <div className="mt-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <span className={clsx("text-[10px] w-10 shrink-0", isLight ? "text-zinc-600" : "text-zinc-500")}>Height</span>
+            <input
+              type="range"
+              min={0.5}
+              max={3}
+              step={0.1}
+              value={activeStyle.lineHeight ?? 1.2}
+              onChange={(e) => patch('lineHeight', parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-indigo-500"
+            />
+            <span className={clsx("text-[10px] w-8 text-right", isLight ? "text-zinc-500" : "text-zinc-400")}>{(activeStyle.lineHeight ?? 1.2).toFixed(1)}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={clsx("text-[10px] w-10 shrink-0", isLight ? "text-zinc-600" : "text-zinc-500")}>Letters</span>
+            <input
+              type="range"
+              min={-5}
+              max={20}
+              step={0.5}
+              value={activeStyle.letterSpacing ?? 0}
+              onChange={(e) => patch('letterSpacing', parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-indigo-500"
+            />
+            <span className={clsx("text-[10px] w-8 text-right", isLight ? "text-zinc-500" : "text-zinc-400")}>{activeStyle.letterSpacing ?? 0}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={clsx("text-[10px] w-10 shrink-0", isLight ? "text-zinc-600" : "text-zinc-500")}>Words</span>
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={0.5}
+              value={activeStyle.wordSpacing ?? 0}
+              onChange={(e) => patch('wordSpacing', parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-indigo-500"
+            />
+            <span className={clsx("text-[10px] w-8 text-right", isLight ? "text-zinc-500" : "text-zinc-400")}>{activeStyle.wordSpacing ?? 0}</span>
+          </div>
+        </div>
+        <div className="mt-2">
+          <label className={clsx("text-[10px] mb-0.5 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Transform</label>
+          <div className="flex gap-0.5">
+            {(['none', 'uppercase', 'lowercase', 'capitalize'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => patch('textTransform', t)}
+                className={`flex-1 px-1 py-1 text-[9px] rounded transition-colors ${
+                  (activeStyle.textTransform ?? 'none') === t
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                    : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
+                }`}
+              >
+                {t === 'none' ? 'Aa' : t === 'uppercase' ? 'AA' : t === 'lowercase' ? 'aa' : 'Ab'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-2">
+          <label className={clsx("text-[10px] mb-0.5 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Stroke</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={activeStyle.strokeColor ?? '#ffffff'}
+              onChange={(e) => patch('strokeColor', e.target.value)}
+              className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent", isLight ? "border-zinc-300" : "border-zinc-700")}
+            />
+            <input
+              type="range"
+              min={0}
+              max={10}
+              step={0.5}
+              value={activeStyle.strokeWidth ?? 0}
+              onChange={(e) => patch('strokeWidth', parseFloat(e.target.value))}
+              className="flex-1 h-1 accent-indigo-500"
+            />
+            <span className={clsx("text-[10px] w-8 text-right", isLight ? "text-zinc-500" : "text-zinc-400")}>{activeStyle.strokeWidth ?? 0}px</span>
+          </div>
+        </div>
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Color</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Color</h3>
         <div className="flex items-center gap-2">
           <input
             type="color"
             value={activeStyle.color}
             onChange={(e) => patch('color', e.target.value)}
-            className="w-8 h-8 rounded border border-zinc-700 cursor-pointer bg-transparent"
+            className={clsx("w-8 h-8 rounded border cursor-pointer bg-transparent", isLight ? "border-zinc-300" : "border-zinc-700")}
           />
           <input
             value={activeStyle.color}
             onChange={(e) => patch('color', e.target.value)}
-            className="flex-1 px-2 py-1 text-sm font-mono bg-zinc-800 text-zinc-200 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+            className={clsx("flex-1 px-2 py-1 text-sm font-mono rounded border focus:border-indigo-500 outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-200 border-zinc-700")}
           />
         </div>
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Gradient</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Gradient</h3>
         <button
           onClick={enableGradient}
           className={`w-full px-2 py-1.5 text-xs rounded transition-colors mb-2 ${
-            activeStyle.gradient?.enabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400'
+            activeStyle.gradient?.enabled ? 'bg-green-600 text-white' : clsx(isLight ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-800 text-zinc-400')
           }`}
         >
           {activeStyle.gradient?.enabled ? 'Gradient On' : 'Gradient Off'}
@@ -248,22 +483,22 @@ export default function TextPanel() {
                 type="color"
                 value={activeStyle.gradient.color1}
                 onChange={(e) => patchNested('gradient', 'color1', e.target.value)}
-                className="w-6 h-6 rounded border border-zinc-700 cursor-pointer bg-transparent"
+                className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent", isLight ? "border-zinc-300" : "border-zinc-700")}
               />
               <input
                 type="color"
                 value={activeStyle.gradient.color2}
                 onChange={(e) => patchNested('gradient', 'color2', e.target.value)}
-                className="w-6 h-6 rounded border border-zinc-700 cursor-pointer bg-transparent"
+                className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent", isLight ? "border-zinc-300" : "border-zinc-700")}
               />
-              <span className="text-[10px] text-zinc-500">Angle</span>
+              <span className={clsx("text-[10px]", isLight ? "text-zinc-600" : "text-zinc-500")}>Angle</span>
               <input
                 type="number"
                 min={0}
                 max={360}
                 value={activeStyle.gradient.angle}
                 onChange={(e) => patchNested('gradient', 'angle', parseInt(e.target.value, 10) || 0)}
-                className="flex-1 px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 outline-none"
+                className={clsx("flex-1 px-1.5 py-0.5 text-xs rounded border outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-200 border-zinc-700")}
               />
             </div>
           </div>
@@ -271,11 +506,11 @@ export default function TextPanel() {
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Glow</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Glow</h3>
         <button
           onClick={enableGlow}
           className={`w-full px-2 py-1.5 text-xs rounded transition-colors mb-2 ${
-            activeStyle.glow?.enabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400'
+            activeStyle.glow?.enabled ? 'bg-green-600 text-white' : clsx(isLight ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-800 text-zinc-400')
           }`}
         >
           {activeStyle.glow?.enabled ? 'Glow On' : 'Glow Off'}
@@ -287,9 +522,9 @@ export default function TextPanel() {
                 type="color"
                 value={activeStyle.glow.color}
                 onChange={(e) => patchNested('glow', 'color', e.target.value)}
-                className="w-6 h-6 rounded border border-zinc-700 cursor-pointer bg-transparent"
+                className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent", isLight ? "border-zinc-300" : "border-zinc-700")}
               />
-              <span className="text-[10px] text-zinc-500">Blur</span>
+              <span className={clsx("text-[10px]", isLight ? "text-zinc-600" : "text-zinc-500")}>Blur</span>
               <input
                 type="range"
                 min={0}
@@ -298,18 +533,18 @@ export default function TextPanel() {
                 onChange={(e) => patchNested('glow', 'blur', parseInt(e.target.value, 10))}
                 className="flex-1 accent-indigo-500"
               />
-              <span className="text-[10px] text-zinc-400 w-6 text-right">{activeStyle.glow.blur}</span>
+              <span className={clsx("text-[10px] w-6 text-right", isLight ? "text-zinc-500" : "text-zinc-400")}>{activeStyle.glow.blur}</span>
             </div>
           </div>
         )}
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Shadow</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Shadow</h3>
         <button
           onClick={enableShadow}
           className={`w-full px-2 py-1.5 text-xs rounded transition-colors mb-2 ${
-            activeStyle.shadow?.enabled ? 'bg-green-600 text-white' : 'bg-zinc-800 text-zinc-400'
+            activeStyle.shadow?.enabled ? 'bg-green-600 text-white' : clsx(isLight ? 'bg-zinc-100 text-zinc-600' : 'bg-zinc-800 text-zinc-400')
           }`}
         >
           {activeStyle.shadow?.enabled ? 'Shadow On' : 'Shadow Off'}
@@ -321,25 +556,25 @@ export default function TextPanel() {
                 type="color"
                 value={activeStyle.shadow.color}
                 onChange={(e) => patchNested('shadow', 'color', e.target.value)}
-                className="w-6 h-6 rounded border border-zinc-700 cursor-pointer bg-transparent"
+                className={clsx("w-6 h-6 rounded border cursor-pointer bg-transparent", isLight ? "border-zinc-300" : "border-zinc-700")}
               />
-              <span className="text-[10px] text-zinc-500">X</span>
+              <span className={clsx("text-[10px]", isLight ? "text-zinc-600" : "text-zinc-500")}>X</span>
               <input
                 type="number"
                 value={activeStyle.shadow.offsetX}
                 onChange={(e) => patchNested('shadow', 'offsetX', parseInt(e.target.value, 10) || 0)}
-                className="w-12 px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 outline-none"
+                className={clsx("w-12 px-1.5 py-0.5 text-xs rounded border outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-200 border-zinc-700")}
               />
-              <span className="text-[10px] text-zinc-500">Y</span>
+              <span className={clsx("text-[10px]", isLight ? "text-zinc-600" : "text-zinc-500")}>Y</span>
               <input
                 type="number"
                 value={activeStyle.shadow.offsetY}
                 onChange={(e) => patchNested('shadow', 'offsetY', parseInt(e.target.value, 10) || 0)}
-                className="w-12 px-1.5 py-0.5 text-xs bg-zinc-800 text-zinc-200 rounded border border-zinc-700 outline-none"
+                className={clsx("w-12 px-1.5 py-0.5 text-xs rounded border outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-200 border-zinc-700")}
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-zinc-500 w-10">Blur</span>
+              <span className={clsx("text-[10px] w-10", isLight ? "text-zinc-600" : "text-zinc-500")}>Blur</span>
               <input
                 type="range"
                 min={0}
@@ -348,7 +583,7 @@ export default function TextPanel() {
                 onChange={(e) => patchNested('shadow', 'blur', parseInt(e.target.value, 10))}
                 className="flex-1 accent-indigo-500"
               />
-              <span className="text-[10px] text-zinc-400 w-6 text-right">{activeStyle.shadow.blur}</span>
+              <span className={clsx("text-[10px] w-6 text-right", isLight ? "text-zinc-500" : "text-zinc-400")}>{activeStyle.shadow.blur}</span>
             </div>
           </div>
         )}

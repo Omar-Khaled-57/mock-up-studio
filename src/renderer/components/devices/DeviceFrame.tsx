@@ -4,6 +4,7 @@ import { useStore } from '../../store'
 import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
 import { useSnapping } from '../../hooks/useSnapping'
+import { getMultiDragEntries } from '../../lib/multi-drag'
 import Monitor from './Monitor'
 import Laptop from './Laptop'
 import Phone from './Phone'
@@ -17,6 +18,7 @@ import ResizeHandles from '../shared/ResizeHandles'
 interface Props {
   device: Device
   onGuidesChange?: (guides: { verticalGuides: number[]; horizontalGuides: number[] }) => void
+  onContextMenu?: (e: React.MouseEvent, type: string, id: string) => void
 }
 
 const DEVICE_COMPONENTS: Record<string, React.ComponentType<{ device: Device; children?: React.ReactNode }>> = {
@@ -29,10 +31,12 @@ const DEVICE_COMPONENTS: Record<string, React.ComponentType<{ device: Device; ch
   terminal: Terminal
 }
 
-export default function DeviceFrame({ device, onGuidesChange }: Props) {
+export default function DeviceFrame({ device, onGuidesChange, onContextMenu }: Props) {
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(device.id))
   const updateDevice = useStore((s) => s.updateDevice)
+  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const groupName = device.groupId ? scene.groups.find((g) => g.id === device.groupId)?.name ?? null : null
   const pushHistory = useStore((s) => s.pushHistory)
   const zoom = useStore((s) => s.zoom)
 
@@ -58,7 +62,7 @@ export default function DeviceFrame({ device, onGuidesChange }: Props) {
     [computeSnap, onGuidesChange]
   )
 
-  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange })
+  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange, getMultiDrag: () => getMultiDragEntries(device.id) })
 
   const commitResize = useCallback(
     (id: string, x: number, y: number, w: number, h: number) => {
@@ -73,10 +77,17 @@ export default function DeviceFrame({ device, onGuidesChange }: Props) {
 
   const resize = useResize({ zoom, onResize: commitResize, onEnd: resizeEnd })
 
+  const handleContext = useCallback(
+    (e: React.MouseEvent) => {
+      onContextMenu?.(e, 'device', device.id)
+    },
+    [onContextMenu, device.id]
+  )
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
-      select(device.id, e.shiftKey)
+      select(device.id, e.shiftKey || e.ctrlKey || e.metaKey)
     },
     [device.id, select]
   )
@@ -119,8 +130,10 @@ export default function DeviceFrame({ device, onGuidesChange }: Props) {
 
   return (
     <div
+      data-element-id={device.id}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContext}
       onPointerDown={handleDragDown}
       onPointerMove={drag.handlePointerMove}
       onPointerUp={drag.handlePointerUp}
@@ -142,7 +155,7 @@ export default function DeviceFrame({ device, onGuidesChange }: Props) {
       </DeviceComponent>
 
       {isSelected && !device.locked && (
-        <ResizeHandles onMouseDown={handleResizeDown} />
+        <ResizeHandles onMouseDown={handleResizeDown} groupId={device.groupId} groupName={groupName} />
       )}
     </div>
   )

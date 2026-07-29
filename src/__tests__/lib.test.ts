@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { CANVAS_PRESETS, DEVICE_ASPECT_RATIOS, DEFAULT_CANVAS, SNAP_THRESHOLD, BACKGROUND_PRESETS } from '../renderer/lib/constants'
 import { THEME_COLORS, resolveThemeColors, buildTextStyle } from '../renderer/lib/device-utils'
 import { generateId } from '../renderer/lib/id'

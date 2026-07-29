@@ -2,13 +2,15 @@ import { type ElementType } from 'react'
 import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import type { SidebarTab } from '../../store/uiSlice'
-import { Palette, Monitor, Image, Type, Layers, Grid3X3, Clock, Download, Zap, Sun, Moon } from 'lucide-react'
+import { Palette, Monitor, Image, Type, Hexagon, Layers, Grid3X3, Clock, Download, Proportions, Sun, Moon, Sparkles } from 'lucide-react'
 import ImagesPanel from './ImagesPanel'
 import DevicesPanel from './DevicesPanel'
 import TextPanel from './TextPanel'
+import ShapesPanel from './ShapesPanel'
 import CanvasPresetsPanel from './CanvasPresetsPanel'
 import LayersPanel from './LayersPanel'
 import ThemesPanel from './ThemesPanel'
+import ThemePresetsPanel from './ThemePresetsPanel'
 import ExportDialog from './ExportDialog'
 import GridPanel from './GridPanel'
 import VersionHistoryPanel from './VersionHistoryPanel'
@@ -16,19 +18,22 @@ import SceneTabs from './SceneTabs'
 
 const TABS: { id: SidebarTab; label: string; icon: ElementType }[] = [
   { id: 'themes', label: 'Themes', icon: Palette },
+  { id: 'theme-presets', label: 'Presets', icon: Sparkles },
   { id: 'devices', label: 'Devices', icon: Monitor },
   { id: 'images', label: 'Images', icon: Image },
   { id: 'text', label: 'Text', icon: Type },
+  { id: 'shapes', label: 'Shapes', icon: Hexagon },
   { id: 'layers', label: 'Layers', icon: Layers },
   { id: 'grid', label: 'Grid', icon: Grid3X3 },
   { id: 'history', label: 'History', icon: Clock },
   { id: 'export', label: 'Export', icon: Download },
-  { id: 'presets', label: 'Presets', icon: Zap }
+  { id: 'presets', label: 'Canvas', icon: Proportions }
 ]
 
 export default function Sidebar() {
   const sidebarTab = useStore((s) => s.sidebarTab)
   const setSidebarTab = useStore((s) => s.setSidebarTab)
+  const sidebarPanelWidth = useStore((s) => s.sidebarPanelWidth)
   const { isLight, toggleTheme, clsx, bg } = useTheme()
 
   return (
@@ -56,7 +61,7 @@ export default function Sidebar() {
               >
                 {active && (
                   <div className={clsx(
-                    "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-indigo-500 rounded-r-full",
+                    "absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-5 bg-indigo-500 rounded-full",
                     isLight && "!bg-indigo-600"
                   )} />
                 )}
@@ -85,16 +90,18 @@ export default function Sidebar() {
 
         {/* Panel content */}
         <div className={clsx(
-          "w-56 p-3 overflow-y-auto",
+          "p-3 overflow-y-auto",
           "bg-zinc-900/50 border-r border-zinc-800/60",
           bg.panel && "bg-white/80 border-zinc-200"
-        )}>
+        )} style={{ width: sidebarPanelWidth }}>
           {sidebarTab === 'devices' && <DevicesPanel />}
           {sidebarTab === 'layers' && <LayersPanel />}
           {sidebarTab === 'themes' && <ThemesPanel />}
+          {sidebarTab === 'theme-presets' && <ThemePresetsPanel />}
           {sidebarTab === 'export' && <ExportDialog />}
           {sidebarTab === 'text' && <TextPanel />}
           {sidebarTab === 'images' && <ImagesPanel />}
+          {sidebarTab === 'shapes' && <ShapesPanel />}
           {sidebarTab === 'presets' && <CanvasPresetsPanel />}
           {sidebarTab === 'grid' && <GridPanel />}
           {sidebarTab === 'history' && <VersionHistoryPanel />}

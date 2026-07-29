@@ -14,15 +14,15 @@
  */
 
 import { StateCreator } from 'zustand'
-import { Device, TextBox, ImageOverlay } from '@shared/types'
+import { Device, TextBox, ImageOverlay, Shape } from '@shared/types'
 import { StoreState } from './index'
 import { safeScene } from './sceneSlice'
 import { generateId } from '../lib/id'
 
 interface ClipboardEntry {
   id: string
-  kind: 'device' | 'textbox' | 'image'
-  data: Device | TextBox | ImageOverlay
+  kind: 'device' | 'textbox' | 'image' | 'shape'
+  data: Device | TextBox | ImageOverlay | Shape
 }
 
 export interface ClipboardSlice {
@@ -48,7 +48,6 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
     const scene = safeScene(state)
     const entries: ClipboardEntry[] = []
 
-    // Look up each selected element across all three typed arrays.
     for (const id of state.selectedIds) {
       const dev = scene.devices.find((d) => d.id === id)
       if (dev) {
@@ -63,6 +62,11 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
       const img = scene.images.find((i) => i.id === id)
       if (img) {
         entries.push({ id: img.id, kind: 'image', data: { ...img } })
+        continue
+      }
+      const shape = scene.shapes.find((s) => s.id === id)
+      if (shape) {
+        entries.push({ id: shape.id, kind: 'shape', data: { ...shape } })
       }
     }
 
@@ -88,10 +92,14 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
       const img = scene.images.find((i) => i.id === id)
       if (img) {
         entries.push({ id: img.id, kind: 'image', data: { ...img } })
+        continue
+      }
+      const shape = scene.shapes.find((s) => s.id === id)
+      if (shape) {
+        entries.push({ id: shape.id, kind: 'shape', data: { ...shape } })
       }
     }
 
-    // History contract: push BEFORE mutation so undo restores pre-state.
     if (entries.length > 0) {
       state.pushHistory('Cut')
       state.deleteSelected(state.selectedIds)
@@ -110,11 +118,11 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
     for (const d of scene.devices) maxZ = Math.max(maxZ, d.zIndex)
     for (const t of scene.textBoxes) maxZ = Math.max(maxZ, t.zIndex)
     for (const i of scene.images) maxZ = Math.max(maxZ, i.zIndex)
+    for (const s of scene.shapes) maxZ = Math.max(maxZ, s.zIndex)
 
     const newIds: string[] = []
     const offset = 30
 
-    // Each pasted element gets a fresh ID and is placed on top.
     for (const entry of clipboard) {
       const newId = generateId()
       maxZ++
@@ -153,10 +161,21 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
         }
         state.addImage(dup)
         newIds.push(newId)
+      } else if (entry.kind === 'shape') {
+        const orig = entry.data as Shape
+        const dup: Shape = {
+          ...orig,
+          id: newId,
+          name: `${orig.name} copy`,
+          x: orig.x + offset,
+          y: orig.y + offset,
+          zIndex: maxZ
+        }
+        state.addShape(dup)
+        newIds.push(newId)
       }
     }
 
-    // Clear clipboard after cut-paste (move semantics).
     if (clipboardMode === 'cut') {
       set({ clipboard: [], clipboardMode: null })
     }

@@ -5,18 +5,22 @@ import { useDrag } from '../../hooks/useDrag'
 import { useResize } from '../../hooks/useResize'
 import { useSnapping } from '../../hooks/useSnapping'
 import { buildTextStyle } from '../../lib/device-utils'
+import { getMultiDragEntries } from '../../lib/multi-drag'
 import ResizeHandles from '../shared/ResizeHandles'
 import InlineEditor from './InlineEditor'
 
 interface Props {
   textBox: TextBoxType
   onGuidesChange?: (guides: { verticalGuides: number[]; horizontalGuides: number[] }) => void
+  onContextMenu?: (e: React.MouseEvent, type: string, id: string) => void
 }
 
-export default function TextBox({ textBox, onGuidesChange }: Props) {
+export default function TextBox({ textBox, onGuidesChange, onContextMenu }: Props) {
   const select = useStore((s) => s.select)
   const isSelected = useStore((s) => s.selectedIds.includes(textBox.id))
   const updateTextBox = useStore((s) => s.updateTextBox)
+  const scene = useStore((s) => s.scenes[s.activeSceneIndex])
+  const groupName = textBox.groupId ? scene.groups.find((g) => g.id === textBox.groupId)?.name ?? null : null
   const pushHistory = useStore((s) => s.pushHistory)
   const zoom = useStore((s) => s.zoom)
 
@@ -43,7 +47,7 @@ export default function TextBox({ textBox, onGuidesChange }: Props) {
     [computeSnap, onGuidesChange]
   )
 
-  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange })
+  const drag = useDrag({ zoom, onDrag: commitPosition, onEnd: commitEnd, snapFn, onGuidesChange, getMultiDrag: () => getMultiDragEntries(textBox.id) })
 
   const commitResize = useCallback(
     (id: string, x: number, y: number, w: number, h: number) => {
@@ -58,10 +62,27 @@ export default function TextBox({ textBox, onGuidesChange }: Props) {
 
   const resize = useResize({ zoom, onResize: commitResize, onEnd: resizeEnd })
 
+  const handleContext = useCallback(
+    (e: React.MouseEvent) => {
+      onContextMenu?.(e, 'textbox', textBox.id)
+    },
+    [onContextMenu, textBox.id]
+  )
+
+  const handleDoubleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (textBox.locked) return
+      e.stopPropagation()
+      setIsEditing(true)
+      select(textBox.id)
+    },
+    [textBox.id, textBox.locked, select]
+  )
+
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
-      select(textBox.id, e.shiftKey)
+      select(textBox.id, e.shiftKey || e.ctrlKey || e.metaKey)
     },
     [textBox.id, select]
   )
@@ -121,7 +142,10 @@ export default function TextBox({ textBox, onGuidesChange }: Props) {
 
   return (
     <div
+      data-element-id={textBox.id}
       onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      onContextMenu={handleContext}
       onPointerDown={handleDragDown}
       onPointerMove={drag.handlePointerMove}
       onPointerUp={drag.handlePointerUp}
@@ -139,7 +163,7 @@ export default function TextBox({ textBox, onGuidesChange }: Props) {
       />
 
       {isSelected && !textBox.locked && !isEditing && (
-        <ResizeHandles onMouseDown={handleResizeDown} />
+        <ResizeHandles onMouseDown={handleResizeDown} groupId={textBox.groupId} groupName={groupName} />
       )}
     </div>
   )

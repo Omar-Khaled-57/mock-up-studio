@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
+import { useTheme } from '../../hooks/useTheme'
 import { loadProjectFromZipResult } from '../../lib/project-serialization'
 
 interface RecentEntry {
@@ -10,6 +11,7 @@ interface RecentEntry {
 }
 
 export default function SplashScreen() {
+  const { isLight, clsx } = useTheme()
   const [recentProjects, setRecentProjects] = useState<RecentEntry[]>([])
 
   useEffect(() => {
@@ -59,13 +61,13 @@ export default function SplashScreen() {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950">
+    <div className={clsx("fixed inset-0 z-50 flex items-center justify-center", isLight ? "bg-white" : "bg-zinc-950")}>
       <div className="w-full max-w-lg space-y-8 px-6">
         <div className="text-center space-y-3">
-          <img src="/logo.png" alt="Mockup Studio" className="w-16 h-16 mx-auto" />
+          <img src="./logo.png" alt="Mockup Studio" className="w-16 h-16 mx-auto" />
           <div className="space-y-1">
-            <h1 className="text-3xl font-bold text-zinc-100 tracking-tight">Mockup Studio</h1>
-            <p className="text-sm text-zinc-500">Desktop device mockup scene builder</p>
+            <h1 className={clsx("text-3xl font-bold tracking-tight", isLight ? "text-zinc-900" : "text-zinc-100")}>Mockup Studio</h1>
+            <p className={clsx("text-sm", isLight ? "text-zinc-500" : "text-zinc-500")}>Desktop device mockup scene builder</p>
           </div>
         </div>
 
@@ -78,7 +80,7 @@ export default function SplashScreen() {
           </button>
           <button
             onClick={handleOpen}
-            className="w-full px-4 py-3 bg-zinc-800 text-zinc-200 text-sm font-medium rounded-lg hover:bg-zinc-700 transition-colors border border-zinc-700"
+            className={clsx("w-full px-4 py-3 text-sm font-medium rounded-lg transition-colors border", isLight ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 border-zinc-200" : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700 border-zinc-700")}
           >
             Open Project
           </button>
@@ -86,16 +88,16 @@ export default function SplashScreen() {
 
         {recentProjects.length > 0 && (
           <div>
-            <h3 className="text-xs font-semibold text-zinc-500 uppercase mb-2">Recent Projects</h3>
+            <h3 className={clsx("text-xs font-semibold uppercase mb-2", isLight ? "text-zinc-600" : "text-zinc-500")}>Recent Projects</h3>
             <div className="space-y-1 max-h-60 overflow-y-auto">
               {recentProjects.map((entry) => (
                 <button
                   key={entry.path}
                   onClick={() => handleOpenRecent(entry.path)}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-zinc-300 hover:bg-zinc-800 transition-colors flex items-center justify-between"
+                  className={clsx("w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center justify-between", isLight ? "text-zinc-700 hover:bg-zinc-100" : "text-zinc-300 hover:bg-zinc-800")}
                 >
                   <span className="truncate">{entry.name}</span>
-                  <span className="text-[10px] text-zinc-600 shrink-0 ml-2">
+                  <span className={clsx("text-[10px] shrink-0 ml-2", isLight ? "text-zinc-400" : "text-zinc-600")}>
                     {new Date(entry.lastOpened).toLocaleDateString()}
                   </span>
                 </button>
@@ -104,7 +106,7 @@ export default function SplashScreen() {
           </div>
         )}
 
-        <p className="text-center text-[10px] text-zinc-700">
+        <p className={clsx("text-center text-[10px]", isLight ? "text-zinc-400" : "text-zinc-700")}>
           Ctrl+N new &middot; Ctrl+O open &middot; Ctrl+S save
         </p>
       </div>

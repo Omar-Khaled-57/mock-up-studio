@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useStore } from '../renderer/store'
 import { safeScene } from '../renderer/store/sceneSlice'
-import { resetStore, makeDevice, makeTextBox, makeImage } from './helpers'
+import { resetStore, makeDevice, makeShape } from './helpers'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -42,6 +42,41 @@ describe('cutSelected', () => {
   })
 })
 
+describe('shape clipboard operations', () => {
+  it('copies and pastes shapes', () => {
+    useStore.getState().addShape(makeShape({ id: 's1' }))
+    useStore.getState().select('s1')
+    useStore.getState().copySelected()
+    const newIds = useStore.getState().pasteClipboard()
+    expect(newIds).toHaveLength(1)
+    expect(newIds[0]).not.toBe('s1')
+    const scene = safeScene(useStore.getState())
+    expect(scene.shapes).toHaveLength(2)
+  })
+
+  it('cuts and pastes shapes (move semantics)', () => {
+    useStore.getState().addShape(makeShape({ id: 's1' }))
+    useStore.getState().select('s1')
+    useStore.getState().cutSelected()
+    const scene = safeScene(useStore.getState())
+    expect(scene.shapes).toHaveLength(0)
+    const newIds = useStore.getState().pasteClipboard()
+    expect(newIds).toHaveLength(1)
+    const scene2 = safeScene(useStore.getState())
+    expect(scene2.shapes).toHaveLength(1)
+  })
+
+  it('copies shapes with backgroundImage', () => {
+    useStore.getState().addShape(makeShape({ id: 's1', backgroundImage: 'data:img/png;base64,abc' }))
+    useStore.getState().select('s1')
+    useStore.getState().copySelected()
+    useStore.getState().pasteClipboard()
+    const scene = safeScene(useStore.getState())
+    const pasted = scene.shapes.find((s) => s.id !== 's1')!
+    expect(pasted.backgroundImage).toBe('data:img/png;base64,abc')
+  })
+})
+
 describe('pasteClipboard', () => {
   it('pastes clipboard elements with new IDs', () => {
     const dev = makeDevice({ id: 'paste-dev', x: 0, y: 0 })
@@ -52,7 +87,7 @@ describe('pasteClipboard', () => {
     expect(newIds).toHaveLength(1)
     expect(newIds[0]).not.toBe('paste-dev')
     const scene = safeScene(useStore.getState())
-    expect(scene.devices).toHaveLength(3) // default + original + pasted
+    expect(scene.devices).toHaveLength(2) // original + pasted
   })
 
   it('offsets pasted elements by 30px', () => {

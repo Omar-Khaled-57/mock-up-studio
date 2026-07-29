@@ -37,11 +37,11 @@ describe('restoreSnapshot', () => {
   it('restores scenes from snapshot', () => {
     useStore.getState().createSnapshot('Before add')
     useStore.getState().addDevice(makeDevice({ id: 'snap-dev' }))
-    expect(safeScene(useStore.getState()).devices).toHaveLength(2)
+    expect(safeScene(useStore.getState()).devices).toHaveLength(1)
 
     const snapId = useStore.getState().snapshots[0].id
     useStore.getState().restoreSnapshot(snapId)
-    expect(safeScene(useStore.getState()).devices).toHaveLength(1)
+    expect(safeScene(useStore.getState()).devices).toHaveLength(0)
   })
 
   it('clears selection on restore', () => {

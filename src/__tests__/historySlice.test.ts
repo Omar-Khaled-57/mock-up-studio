@@ -35,10 +35,10 @@ describe('undo', () => {
     useStore.getState().pushHistory('before add')
     const dev = makeDevice({ id: 'undo-dev' })
     useStore.getState().addDevice(dev)
-    expect(safeScene(useStore.getState()).devices).toHaveLength(2)
+    expect(safeScene(useStore.getState()).devices).toHaveLength(1)
 
     useStore.getState().undo()
-    expect(safeScene(useStore.getState()).devices).toHaveLength(1)
+    expect(safeScene(useStore.getState()).devices).toHaveLength(0)
   })
 
   it('returns false when nothing to undo', () => {
@@ -58,10 +58,10 @@ describe('redo', () => {
     useStore.getState().pushHistory('before')
     useStore.getState().addDevice(makeDevice({ id: 'redo-dev' }))
     useStore.getState().undo()
-    expect(safeScene(useStore.getState()).devices).toHaveLength(1)
+    expect(safeScene(useStore.getState()).devices).toHaveLength(0)
 
     useStore.getState().redo()
-    expect(safeScene(useStore.getState()).devices).toHaveLength(2)
+    expect(safeScene(useStore.getState()).devices).toHaveLength(1)
   })
 
   it('returns false when nothing to redo', () => {

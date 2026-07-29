@@ -75,6 +75,7 @@ export function makeDevice(overrides?: Partial<import('@shared/types').Device>):
     colorTheme: 'dark',
     screenImage: null,
     objectFit: 'contain',
+    groupId: null,
     ...overrides
   }
 }
@@ -95,6 +96,10 @@ export function makeTextBox(overrides?: Partial<import('@shared/types').TextBox>
     textAlign: 'left',
     lineHeight: 1.2,
     letterSpacing: 0,
+    wordSpacing: 0,
+    textTransform: 'none',
+    strokeColor: '#ffffff',
+    strokeWidth: 0,
     color: '#ffffff',
     gradient: null,
     glow: null,
@@ -108,6 +113,38 @@ export function makeTextBox(overrides?: Partial<import('@shared/types').TextBox>
     stylePreset: 'custom',
     zIndex: 1,
     locked: false,
+    groupId: null,
+    ...overrides
+  }
+}
+
+/** Returns a minimal shape for testing. */
+export function makeShape(overrides?: Partial<import('@shared/types').Shape>): import('@shared/types').Shape {
+  return {
+    id: `shp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    kind: 'rectangle',
+    name: 'Test Shape',
+    x: 200,
+    y: 200,
+    width: 120,
+    height: 120,
+    rotation: 0,
+    opacity: 100,
+    color: '#6366f1',
+    gradient: null,
+    blur: 0,
+    glow: [],
+    shadow: [],
+    zIndex: 3,
+    locked: false,
+    visible: true,
+    cornerRadius: 0,
+    backgroundImage: null,
+    angles: [60, 60, 60],
+    crossThickness: 0.3,
+    plusThickness: 0.3,
+    arrowThickness: 0.5,
+    groupId: null,
     ...overrides
   }
 }
@@ -122,9 +159,18 @@ export function makeImage(overrides?: Partial<import('@shared/types').ImageOverl
     width: 300,
     height: 200,
     rotation: 0,
+    opacity: 100,
+    borderRadius: 0,
+    blendMode: 'normal',
+    flipX: false,
+    flipY: false,
+    blur: 0,
+    glow: [],
+    shadow: [],
     zIndex: 2,
     locked: false,
     visible: true,
+    groupId: null,
     ...overrides
   }
 }

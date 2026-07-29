@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react'
+import { useTheme } from '../../hooks/useTheme'
 
 interface Props {
   onClose: () => void
@@ -41,6 +42,7 @@ const SECTIONS = [
 ]
 
 export default function ShortcutsModal({ onClose }: Props) {
+  const { isLight, clsx } = useTheme()
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -59,14 +61,14 @@ export default function ShortcutsModal({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6"
+        className={clsx("rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6", isLight ? "bg-white border border-zinc-200" : "bg-zinc-900 border border-zinc-700")}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-sm font-semibold text-zinc-200">Keyboard Shortcuts</h2>
+          <h2 className={clsx("text-sm font-semibold", isLight ? "text-zinc-800" : "text-zinc-200")}>Keyboard Shortcuts</h2>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 text-xs"
+            className={clsx("text-xs", isLight ? "text-zinc-400 hover:text-zinc-600" : "text-zinc-500 hover:text-zinc-300")}
           >
             Close
           </button>
@@ -75,14 +77,14 @@ export default function ShortcutsModal({ onClose }: Props) {
         <div className="space-y-5">
           {SECTIONS.map((section) => (
             <div key={section.title}>
-              <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-2">
+              <h3 className={clsx("text-[10px] font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-500")}>
                 {section.title}
               </h3>
               <div className="space-y-1">
                 {section.shortcuts.map((s) => (
                   <div key={s.action} className="flex items-center justify-between py-1">
-                    <span className="text-xs text-zinc-400">{s.action}</span>
-                    <kbd className="px-1.5 py-0.5 text-[10px] font-mono text-zinc-300 bg-zinc-800 border border-zinc-700 rounded">
+                    <span className={clsx("text-xs", isLight ? "text-zinc-600" : "text-zinc-400")}>{s.action}</span>
+                    <kbd className={clsx("px-1.5 py-0.5 text-[10px] font-mono rounded", isLight ? "text-zinc-700 bg-zinc-100 border border-zinc-200" : "text-zinc-300 bg-zinc-800 border border-zinc-700")}>
                       {s.keys}
                     </kbd>
                   </div>

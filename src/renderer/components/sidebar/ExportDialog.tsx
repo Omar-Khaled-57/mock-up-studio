@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import { exportScene, exportAllScenes, copyExportToClipboard, getExportFilename } from '../../lib/export-engine'
 import type { ExportFormat, ExportScale, ExportBackground, ExportScope } from '../../lib/export-engine'
 import type { WatermarkSettings } from '../../store/watermarkSlice'
@@ -39,17 +40,14 @@ function ToggleGroup<T extends string>({
   value: T
   onChange: (v: T) => void
 }) {
+  const { isLight, clsx } = useTheme()
   return (
     <div className="flex gap-1">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`flex-1 px-2 py-1 text-xs rounded transition-colors ${
-            value === opt.value
-              ? 'bg-blue-600 text-white'
-              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-          }`}
+          className={clsx("flex-1 px-2 py-1 text-xs rounded transition-colors", value === opt.value ? 'bg-blue-600 text-white' : isLight ? "text-zinc-600 bg-zinc-100 hover:bg-zinc-200" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700")}
         >
           {opt.label}
         </button>
@@ -59,6 +57,7 @@ function ToggleGroup<T extends string>({
 }
 
 export default function ExportDialog() {
+  const { isLight, clsx } = useTheme()
   const exportFormat = useStore((s) => s.exportFormat)
   const exportScale = useStore((s) => s.exportScale)
   const exportQuality = useStore((s) => s.exportQuality)
@@ -217,24 +216,24 @@ export default function ExportDialog() {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Export</h3>
+      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>Export</h3>
 
       {sceneCount > 1 && (
         <div>
-          <label className="text-xs text-zinc-500 mb-1 block">Scope</label>
+          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Scope</label>
           <ToggleGroup options={SCOPE_OPTIONS} value={scope} onChange={setScope} />
         </div>
       )}
 
       <div>
-        <label className="text-xs text-zinc-500 mb-1 block">Format</label>
+          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Format</label>
         <ToggleGroup options={FORMAT_OPTIONS} value={exportFormat} onChange={setExportFormat} />
       </div>
 
       <div>
-        <label className="text-xs text-zinc-500 mb-1 block">Scale</label>
+          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Scale</label>
         <ToggleGroup options={SCALE_OPTIONS} value={exportScale} onChange={setExportScale} />
-        <span className="text-[10px] text-zinc-600 mt-0.5 block">
+        <span className={clsx("text-[10px] mt-0.5 block", isLight ? "text-zinc-400" : "text-zinc-600")}>
           {scope === 'all'
             ? `${sceneCount} scenes × ${scene.canvas.width * exportScale} × ${scene.canvas.height * exportScale} each`
             : `Output: ${outWidth} × ${outHeight}`}
@@ -242,13 +241,13 @@ export default function ExportDialog() {
       </div>
 
       <div>
-        <label className="text-xs text-zinc-500 mb-1 block">Background</label>
+          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Background</label>
         <ToggleGroup options={BG_OPTIONS} value={exportBackground} onChange={setExportBackground} />
       </div>
 
       {exportFormat !== 'png' && (
         <div>
-          <label className="text-xs text-zinc-500 mb-1 block">Quality</label>
+          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Quality</label>
           <input
             type="range"
             min={10}
@@ -258,33 +257,33 @@ export default function ExportDialog() {
             onChange={(e) => setExportQuality(Number(e.target.value))}
             className="w-full accent-blue-500"
           />
-          <span className="text-xs text-zinc-500">{exportQuality}%</span>
+          <span className={clsx("text-xs", isLight ? "text-zinc-600" : "text-zinc-500")}>{exportQuality}%</span>
         </div>
       )}
 
       {exportBackground === 'solid' && (
         <div>
-          <label className="text-xs text-zinc-500 mb-1 block">Background Color</label>
+          <label className={clsx("text-xs mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Background Color</label>
           <div className="flex items-center gap-2">
             <input
               type="color"
               value={exportBackgroundColor}
               onChange={(e) => setExportBackgroundColor(e.target.value)}
-              className="w-8 h-8 rounded border border-zinc-700 cursor-pointer"
+              className={clsx("w-8 h-8 rounded border cursor-pointer", isLight ? "border-zinc-300" : "border-zinc-700")}
             />
-            <span className="text-xs text-zinc-500">{exportBackgroundColor}</span>
+            <span className={clsx("text-xs", isLight ? "text-zinc-600" : "text-zinc-500")}>{exportBackgroundColor}</span>
           </div>
         </div>
       )}
 
       {/* Watermark */}
-      <div className="border-t border-zinc-800 pt-3">
+      <div className={clsx("border-t pt-3", isLight ? "border-zinc-200" : "border-zinc-800")}>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase">Watermark</h3>
+          <h3 className={clsx("text-xs font-semibold uppercase", isLight ? "text-zinc-600" : "text-zinc-400")}>Watermark</h3>
           <button
             onClick={() => setWatermark({ enabled: !watermark.enabled })}
             className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
-              watermark.enabled ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
+              watermark.enabled ? 'bg-indigo-600 text-white' : clsx(isLight ? 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200' : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700')
             }`}
           >
             {watermark.enabled ? 'On' : 'Off'}
@@ -297,10 +296,10 @@ export default function ExportDialog() {
               value={watermark.text}
               onChange={(e) => setWatermark({ text: e.target.value })}
               placeholder="Watermark text"
-              className="w-full px-2 py-1 text-xs bg-zinc-800 text-zinc-300 rounded border border-zinc-700 focus:border-indigo-500 outline-none"
+              className={clsx("w-full px-2 py-1 text-xs rounded border focus:border-indigo-500 outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
             />
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-zinc-500 w-10">Size</span>
+              <span className={clsx("text-[10px] w-10", isLight ? "text-zinc-600" : "text-zinc-500")}>Size</span>
               <input
                 type="range"
                 min={8}
@@ -311,7 +310,7 @@ export default function ExportDialog() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-zinc-500 w-10">Opacity</span>
+              <span className={clsx("text-[10px] w-10", isLight ? "text-zinc-600" : "text-zinc-500")}>Opacity</span>
               <input
                 type="range"
                 min={5}
@@ -324,7 +323,7 @@ export default function ExportDialog() {
             <select
               value={watermark.position}
               onChange={(e) => setWatermark({ position: e.target.value as WatermarkSettings['position'] })}
-              className="w-full px-1.5 py-0.5 text-[10px] bg-zinc-800 text-zinc-300 rounded border border-zinc-700 outline-none"
+              className={clsx("w-full px-1.5 py-0.5 text-[10px] rounded border outline-none", isLight ? "bg-white text-zinc-800 border-zinc-300" : "bg-zinc-800 text-zinc-300 border-zinc-700")}
             >
               <option value="top-left">Top Left</option>
               <option value="top-right">Top Right</option>
@@ -336,11 +335,11 @@ export default function ExportDialog() {
         )}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button
           onClick={handlePreview}
           disabled={isExporting || scope === 'all'}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-zinc-800/60 text-zinc-300 rounded-lg hover:bg-zinc-700/80 disabled:opacity-50 transition-all duration-150"
+          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", isLight ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200" : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80")}
         >
           <Eye size={12} />
           Preview
@@ -356,7 +355,7 @@ export default function ExportDialog() {
         <button
           onClick={handleCopy}
           disabled={isExporting || scope === 'all'}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-zinc-800/60 text-zinc-300 rounded-lg hover:bg-zinc-700/80 disabled:opacity-50 transition-all duration-150"
+          className={clsx("flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 transition-all duration-150", isLight ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200" : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80")}
         >
           <Clipboard size={12} />
           Copy
@@ -364,11 +363,11 @@ export default function ExportDialog() {
       </div>
 
       {status && (
-        <p className="text-xs text-zinc-500 text-center">{status}</p>
+        <p className={clsx("text-xs text-center", isLight ? "text-zinc-500" : "text-zinc-500")}>{status}</p>
       )}
 
       {previewUrl && (
-        <div className="border border-zinc-800 rounded overflow-hidden">
+        <div className={clsx("border rounded overflow-hidden", isLight ? "border-zinc-200" : "border-zinc-800")}>
           <img
             src={previewUrl}
             alt="Export preview"

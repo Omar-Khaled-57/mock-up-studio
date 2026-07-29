@@ -55,7 +55,25 @@ const api = {
     const handler = (_event: Electron.IpcRendererEvent, filePath: string): void => callback(filePath)
     ipcRenderer.on('open-file-path', handler)
     return () => ipcRenderer.removeListener('open-file-path', handler)
-  }
+  },
+
+  openUserGuide: (): void => {
+    ipcRenderer.send('open-user-guide')
+  },
+
+  checkForUpdates: (): Promise<{ status: 'available' | 'up-to-date' | 'error'; currentVersion: string; latestVersion?: string; releaseNotes?: string; downloadUrl?: string; error?: string }> =>
+    ipcRenderer.invoke('check-for-updates'),
+
+  downloadUpdate: (url: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('download-update', url),
+
+  onUpdateProgress: (callback: (percent: number) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, percent: number): void => callback(percent)
+    ipcRenderer.on('update-progress', handler)
+    return () => ipcRenderer.removeListener('update-progress', handler)
+  },
+
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update')
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import { generateId } from '../../lib/id'
 import { ImageOverlay as ImageOverlayType } from '@shared/types'
 import { Plus, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
@@ -8,6 +9,7 @@ import { Plus, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
 const DEFAULT_SIZE = 300
 
 export default function ImagesPanel() {
+  const { isLight, clsx } = useTheme()
   const scene = useStore(safeScene)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
@@ -43,9 +45,18 @@ export default function ImagesPanel() {
             width: w,
             height: h,
             rotation: 0,
+            opacity: 100,
+            borderRadius: 0,
+            blendMode: 'normal',
+            flipX: false,
+            flipY: false,
+            blur: 0,
+            glow: [],
+            shadow: [],
             zIndex: maxZ + 1,
             locked: false,
-            visible: true
+            visible: true,
+            groupId: null
           }
           addImage(image)
           pushHistory('Add image')
@@ -115,10 +126,10 @@ export default function ImagesPanel() {
 
       {/* Add button */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Add Image</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Add Image</h3>
         <button
           onClick={handleAddClick}
-          className="w-full flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs text-zinc-300 bg-zinc-800/60 rounded-lg hover:bg-zinc-700/80 hover:text-zinc-100 transition-all duration-150"
+          className={clsx("w-full flex items-center justify-center gap-1.5 px-2.5 py-2 text-xs rounded-lg transition-all duration-150", isLight ? "text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900" : "text-zinc-300 bg-zinc-800/60 hover:bg-zinc-700/80 hover:text-zinc-100")}
         >
           <Plus size={12} strokeWidth={2} />
           Upload Image
@@ -127,25 +138,21 @@ export default function ImagesPanel() {
 
       {/* Image list */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>
           Images ({images.length})
         </h3>
         {images.length === 0 ? (
-          <p className="text-[11px] text-zinc-600">No images yet — click Add or paste onto canvas</p>
+          <p className={clsx("text-[11px]", isLight ? "text-zinc-400" : "text-zinc-600")}>No images yet — click Add or paste onto canvas</p>
         ) : (
           <div className="space-y-0.5">
             {images.map((img, i) => (
               <div
                 key={img.id}
                 onClick={() => select(img.id)}
-                className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150 ${
-                  selectedImage?.id === img.id
-                    ? 'bg-indigo-500/10 border border-indigo-500/20'
-                    : 'hover:bg-zinc-800/60 border border-transparent'
-                }`}
+                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedImage?.id === img.id ? 'bg-indigo-500/10 border border-indigo-500/20' : isLight ? "hover:bg-zinc-100 border border-transparent" : "hover:bg-zinc-800/60 border border-transparent")}
               >
                 {/* Thumbnail */}
-                <div className="w-6 h-6 rounded bg-zinc-800 overflow-hidden shrink-0 border border-zinc-700/50">
+                <div className={clsx("w-6 h-6 rounded overflow-hidden shrink-0 border", isLight ? "bg-zinc-100 border-zinc-200" : "bg-zinc-800 border-zinc-700/50")}>
                   <img
                     src={img.src}
                     alt=""
@@ -155,35 +162,35 @@ export default function ImagesPanel() {
                 </div>
 
                 {/* Name */}
-                <span className={`flex-1 truncate ${!img.visible ? 'text-zinc-600' : 'text-zinc-300'}`}>
+                <span className={clsx("flex-1 truncate", !img.visible ? clsx(isLight ? "text-zinc-400" : "text-zinc-600") : isLight ? "text-zinc-800" : "text-zinc-300")}>
                   Image {i + 1}
                 </span>
 
                 {/* Actions */}
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleVisibility(img.id) }}
-                  className="w-4 h-4 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
                   title={img.visible ? 'Hide' : 'Show'}
                 >
                   {img.visible ? <Eye size={11} /> : <EyeOff size={11} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleLock(img.id) }}
-                  className="w-4 h-4 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
                   title={img.locked ? 'Unlock' : 'Lock'}
                 >
                   {img.locked ? <Lock size={11} /> : <Unlock size={11} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(img.id) }}
-                  className="w-4 h-4 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
                   title="Duplicate"
                 >
                   <Copy size={11} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(img.id) }}
-                  className="w-4 h-4 flex items-center justify-center text-zinc-600 hover:text-red-400 transition-colors"
+                  className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-red-600" : "text-zinc-600 hover:text-red-400")}
                   title="Delete"
                 >
                   <Trash2 size={11} />

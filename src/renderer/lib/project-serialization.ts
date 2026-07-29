@@ -45,10 +45,12 @@ interface SerializedScene {
   devices: SerializedDevice[]
   textBoxes: SerializedTextBox[]
   images: SerializedImage[]
+  shapes?: SerializedShape[]
   titleText: SerializedTitleText
   sloganText: SerializedTitleText
   guides: SerializedGuide[]
   grid: SerializedGrid
+  groups?: { id: string; name: string; childIds: string[] }[]
 }
 
 interface SerializedBackground {
@@ -77,6 +79,7 @@ interface SerializedDevice {
   screenImage: string | null
   objectFit: string
   customFrame?: { svgData: string; screenRegion: { x: number; y: number; w: number; h: number } }
+  groupId: string | null
 }
 
 interface SerializedTextBox {
@@ -106,11 +109,12 @@ interface SerializedTextBox {
   stylePreset: string
   zIndex: number
   locked: boolean
+  groupId: string | null
 }
 
 interface SerializedImage {
   id: string
-  src: string
+  src: string | null
   x: number
   y: number
   width: number
@@ -119,6 +123,50 @@ interface SerializedImage {
   zIndex: number
   locked: boolean
   visible: boolean
+  opacity?: number
+  borderRadius?: number
+  blendMode?: string
+  flipX?: boolean
+  flipY?: boolean
+  blur?: number
+  glow?: SerializedImageGlow[]
+  shadow?: SerializedImageShadow[]
+}
+
+interface SerializedShape {
+  id: string
+  kind: string
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  opacity: number
+  color: string
+  gradient: { enabled: boolean; colors: string[]; angle: number } | null
+  blur: number
+  glow: { enabled: boolean; color: string; blur: number; spread: number; opacity: number } | null
+  shadow: { enabled: boolean; color: string; offsetX: number; offsetY: number; blur: number; spread: number; opacity: number } | null
+  zIndex: number
+  locked: boolean
+  visible: boolean
+  cornerRadius: number
+  backgroundImage: string | null
+  angles: [number, number, number]
+  crossThickness: number
+  plusThickness: number
+  arrowThickness: number
+  glowArray?: SerializedImageGlow[]
+  shadowArray?: SerializedImageShadow[]
+  groupId: string | null
+}
+
+interface SerializedImageGlow {
+  enabled: boolean; color: string; blur: number; spread: number; opacity: number
+}
+interface SerializedImageShadow {
+  enabled: boolean; color: string; offsetX: number; offsetY: number; blur: number; spread: number; opacity: number; inset: boolean
 }
 
 interface SerializedTitleText {
@@ -221,6 +269,7 @@ export function serializeProject(
       devices: SerializedDevice[]
       textBoxes: SerializedTextBox[]
       images: SerializedImage[]
+      shapes: SerializedShape[]
       titleText: SerializedTitleText
       sloganText: SerializedTitleText
       guides: SerializedGuide[]
@@ -253,10 +302,12 @@ export function serializeProject(
       devices,
       textBoxes: s.textBoxes,
       images,
+      shapes: s.shapes ?? [],
       titleText: s.titleText,
       sloganText: s.sloganText,
       guides: s.guides,
-      grid: s.grid
+      grid: s.grid,
+      groups: (s as unknown as Record<string, unknown>).groups as { id: string; name: string; childIds: string[] }[] ?? []
     }
   })
 
@@ -279,8 +330,8 @@ export function serializeProject(
  * Converts an `asset://` reference back to a base64 data URL by looking up
  * the binary buffer in the assets map. Non-asset references are returned as-is.
  */
-function resolveAssetRef(ref: string, assets: Map<string, Buffer>): string {
-  if (!ref.startsWith('asset://')) return ref
+function resolveAssetRef(ref: string | null, assets: Map<string, Buffer>): string | null {
+  if (!ref || !ref.startsWith('asset://')) return ref
   const name = ref.replace('asset://', '')
   const buffer = assets.get(name)
   if (!buffer) return ref
@@ -295,6 +346,43 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Buf
   activeSceneIndex: number
 } {
   const manifest = JSON.parse(manifestJson) as SerializedProject
+
+  function normalizeShapeShadow(shadow: unknown): SerializedImageShadow[] {
+    if (Array.isArray(shadow)) return shadow as SerializedImageShadow[]
+    if (shadow && typeof shadow === 'object') {
+      const s = shadow as Record<string, unknown>
+      if (s.offsetX !== undefined) {
+        return [{
+          enabled: Boolean(s.enabled),
+          color: String(s.color ?? '#000'),
+          offsetX: Number(s.offsetX ?? 0),
+          offsetY: Number(s.offsetY ?? 0),
+          blur: Number(s.blur ?? 0),
+          spread: Number(s.spread ?? 0),
+          opacity: Number(s.opacity ?? 100),
+          inset: false
+        }]
+      }
+    }
+    return []
+  }
+
+  function normalizeShapeGlow(glow: unknown): SerializedImageGlow[] {
+    if (Array.isArray(glow)) return glow as SerializedImageGlow[]
+    if (glow && typeof glow === 'object') {
+      const g = glow as Record<string, unknown>
+      if (g.color !== undefined) {
+        return [{
+          enabled: Boolean(g.enabled),
+          color: String(g.color ?? '#000'),
+          blur: Number(g.blur ?? 0),
+          spread: Number(g.spread ?? 0),
+          opacity: Number(g.opacity ?? 100)
+        }]
+      }
+    }
+    return []
+  }
 
   const scenes = manifest.scenes.map((scene) => {
     const devices = scene.devices.map((d) => ({
@@ -311,14 +399,23 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Buf
     if (background.image?.src) {
       background.image = {
         ...background.image,
-        src: resolveAssetRef(background.image.src, assets)
+        src: resolveAssetRef(background.image.src, assets) ?? ''
       }
     }
+
+    const shapes = (scene.shapes ?? []).map((shape) => ({
+      ...shape,
+      shadow: normalizeShapeShadow(shape.shadow),
+      glow: normalizeShapeGlow(shape.glow),
+      glowArray: undefined,
+      shadowArray: undefined
+    }))
 
     return {
       ...scene,
       devices,
       images,
+      shapes,
       background
     }
   })

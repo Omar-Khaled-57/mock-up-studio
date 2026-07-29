@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useStore } from '../renderer/store'
 import { safeScene, createDefaultScene } from '../renderer/store/sceneSlice'
-import { resetStore, makeDevice, makeTextBox, makeImage } from './helpers'
+import { resetStore, makeDevice, makeTextBox, makeImage, makeShape } from './helpers'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -15,7 +15,7 @@ describe('safeScene', () => {
     useStore.setState({ scenes: [], activeSceneIndex: 0 })
     const scene = safeScene(useStore.getState())
     expect(scene.name).toBe('Scene 1')
-    expect(scene.devices).toHaveLength(1)
+    expect(scene.devices).toHaveLength(0)
   })
 
   it('returns the active scene when index is valid', () => {
@@ -51,10 +51,9 @@ describe('createDefaultScene', () => {
     expect(s1.id).not.toBe(s2.id)
   })
 
-  it('has a default device (monitor)', () => {
+  it('has no default devices', () => {
     const scene = createDefaultScene()
-    expect(scene.devices).toHaveLength(1)
-    expect(scene.devices[0].type).toBe('monitor')
+    expect(scene.devices).toHaveLength(0)
   })
 
   it('has empty text boxes and images', () => {
@@ -93,7 +92,7 @@ describe('addDevice', () => {
     const dev = makeDevice({ id: 'test-dev' })
     useStore.getState().addDevice(dev)
     const scene = safeScene(useStore.getState())
-    expect(scene.devices).toHaveLength(2) // default + new
+    expect(scene.devices).toHaveLength(1) // new
     expect(scene.devices.find((d) => d.id === 'test-dev')).toBeTruthy()
   })
 })
@@ -289,7 +288,7 @@ describe('duplicateSelected', () => {
     expect(newIds).toHaveLength(1)
     expect(newIds[0]).not.toBe('dup-dev')
     const scene = safeScene(useStore.getState())
-    expect(scene.devices).toHaveLength(3) // default + original + duplicate
+    expect(scene.devices).toHaveLength(2) // original + duplicate
   })
 
   it('offsets duplicates by 30px', () => {
@@ -350,6 +349,142 @@ describe('renameScene', () => {
   it('renames a scene', () => {
     useStore.getState().renameScene(0, 'My Scene')
     expect(useStore.getState().scenes[0].name).toBe('My Scene')
+  })
+})
+
+// ---------- Theme Presets ----------
+
+describe('applyThemePreset', () => {
+  it('applies solid background preset', () => {
+    useStore.getState().applyThemePreset({
+      id: 'test', name: 'Test', description: '',
+      background: { type: 'solid', color: '#ff0000' },
+      titleColor: '#ffffff', sloganColor: '#cccccc', accentColor: '#aaaaaa',
+      deviceTheme: 'dark'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.background.type).toBe('solid')
+    expect(scene.background.color).toBe('#ff0000')
+  })
+
+  it('applies gradient background preset', () => {
+    useStore.getState().applyThemePreset({
+      id: 'test', name: 'Test', description: '',
+      background: { type: 'gradient', colors: ['#000', '#fff'], angle: 90 },
+      titleColor: '#111111', sloganColor: '#222222', accentColor: '#333333',
+      deviceTheme: 'light'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.background.type).toBe('gradient')
+    expect(scene.background.gradient?.colors).toEqual(['#000', '#fff'])
+    expect(scene.background.gradient?.angle).toBe(90)
+  })
+
+  it('applies preset background type', () => {
+    useStore.getState().applyThemePreset({
+      id: 'test', name: 'Test', description: '',
+      background: { type: 'preset', presetName: 'aurora' },
+      titleColor: '#ffffff', sloganColor: '#cccccc', accentColor: '#aaaaaa',
+      deviceTheme: 'dark'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.background.type).toBe('preset')
+    expect(scene.background.presetName).toBe('aurora')
+  })
+
+  it('updates title and slogan', () => {
+    useStore.getState().applyThemePreset({
+      id: 'test', name: 'Test', description: '',
+      background: { type: 'solid', color: '#000' },
+      titleColor: '#ff0000', sloganColor: '#00ff00', accentColor: '#0000ff',
+      deviceTheme: 'light'
+    })
+    const scene = safeScene(useStore.getState())
+    expect(scene.titleText.color).toBe('#ff0000')
+    expect(scene.sloganText.color).toBe('#00ff00')
+  })
+
+  it('updates existing textBox colors to slogan color', () => {
+    useStore.getState().addTextBox(useStore.getState().scenes[0].textBoxes.length > 0
+      ? makeTextBox({ id: 'tb1' }) : makeTextBox({ id: 'tb1' }))
+    useStore.getState().applyThemePreset({
+      id: 'test', name: 'Test', description: '',
+      background: { type: 'solid', color: '#000' },
+      titleColor: '#ffffff', sloganColor: '#ff00ff', accentColor: '#0000ff',
+      deviceTheme: 'dark'
+    })
+    const scene = safeScene(useStore.getState())
+    const tb = scene.textBoxes.find((t) => t.id === 'tb1')
+    expect(tb?.color).toBe('#ff00ff')
+  })
+
+  it('updates shape colors to accent color', () => {
+    useStore.getState().addShape(makeShape({ id: 'sh1', color: '#ffffff' }))
+    useStore.getState().applyThemePreset({
+      id: 'test', name: 'Test', description: '',
+      background: { type: 'solid', color: '#000' },
+      titleColor: '#ffffff', sloganColor: '#cccccc', accentColor: '#ff6600',
+      deviceTheme: 'dark'
+    })
+    const scene = safeScene(useStore.getState())
+    const shape = scene.shapes.find((s) => s.id === 'sh1')
+    expect(shape?.color).toBe('#ff6600')
+  })
+})
+
+// ---------- Image Property Updates ----------
+
+describe('updateImage (v0.2.0 properties)', () => {
+  it('updates image opacity', () => {
+    useStore.getState().addImage(makeImage({ id: 'img1', opacity: 100 }))
+    useStore.getState().updateImage('img1', { opacity: 50 })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].opacity).toBe(50)
+  })
+
+  it('updates image borderRadius', () => {
+    useStore.getState().addImage(makeImage({ id: 'img1', borderRadius: 0 }))
+    useStore.getState().updateImage('img1', { borderRadius: 16 })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].borderRadius).toBe(16)
+  })
+
+  it('updates image blendMode', () => {
+    useStore.getState().addImage(makeImage({ id: 'img1', blendMode: 'normal' }))
+    useStore.getState().updateImage('img1', { blendMode: 'multiply' })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].blendMode).toBe('multiply')
+  })
+
+  it('toggles flipX and flipY', () => {
+    useStore.getState().addImage(makeImage({ id: 'img1', flipX: false, flipY: false }))
+    useStore.getState().updateImage('img1', { flipX: true, flipY: true })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].flipX).toBe(true)
+    expect(scene.images[0].flipY).toBe(true)
+  })
+
+  it('updates image blur', () => {
+    useStore.getState().addImage(makeImage({ id: 'img1', blur: 0 }))
+    useStore.getState().updateImage('img1', { blur: 8 })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].blur).toBe(8)
+  })
+
+  it('sets shadow on image', () => {
+    const shadow = { enabled: true, color: '#000', offsetX: 2, offsetY: 4, blur: 8 }
+    useStore.getState().addImage(makeImage({ id: 'img1', shadow: null }))
+    useStore.getState().updateImage('img1', { shadow })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].shadow).toEqual(shadow)
+  })
+
+  it('sets glow on image', () => {
+    const glow = { enabled: true, color: '#818cf8', blur: 20 }
+    useStore.getState().addImage(makeImage({ id: 'img1', glow: null }))
+    useStore.getState().updateImage('img1', { glow })
+    const scene = safeScene(useStore.getState())
+    expect(scene.images[0].glow).toEqual(glow)
   })
 })
 

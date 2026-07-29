@@ -139,6 +139,9 @@ export function useResize({ zoom, onResize, onEnd }: UseResizeOptions) {
       const s = state.current
       if (!s) return
 
+      // Push history BEFORE committing final dimensions.
+      onEndRef.current(s.id)
+
       const result = compute(e.clientX, e.clientY, e.shiftKey)
       if (result) {
         s.el.style.width = `${result.newWidth}px`
@@ -150,7 +153,6 @@ export function useResize({ zoom, onResize, onEnd }: UseResizeOptions) {
 
       s.el.style.cursor = ''
       state.current = null
-      onEndRef.current(s.id)
     }
 
     window.addEventListener('pointermove', handlePointerMove)

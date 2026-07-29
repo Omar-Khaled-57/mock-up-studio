@@ -33,11 +33,21 @@ interface DragState {
   elemHeight: number
   /** The DOM element being dragged (for direct style mutation). */
   el: HTMLElement
+  /** Captured multi-drag followers (move in parallel). */
+  followers: { id: string; startX: number; startY: number; el: HTMLElement; commit: (id: string, x: number, y: number) => void }[]
 }
 
 interface SnapInfo {
   verticalGuides: number[]
   horizontalGuides: number[]
+}
+
+export interface MultiDragEntry {
+  id: string
+  startElemX: number
+  startElemY: number
+  el: HTMLElement
+  commit: (id: string, x: number, y: number) => void
 }
 
 interface UseDragOptions {
@@ -52,9 +62,11 @@ interface UseDragOptions {
   snapFn?: (id: string, x: number, y: number, w: number, h: number) => { x: number; y: number }
   /** Called when snap guide lines should be shown or cleared. */
   onGuidesChange?: (guides: SnapInfo) => void
+  /** Optional multi-element drag — moves all tracked elements in parallel. Called at drag start. */
+  getMultiDrag?: () => MultiDragEntry[]
 }
 
-export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }: UseDragOptions) {
+export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange, getMultiDrag }: UseDragOptions) {
   const state = useRef<DragState | null>(null)
 
   const handlePointerDown = useCallback(
@@ -65,6 +77,17 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
       const el = e.currentTarget as HTMLElement
       el.setPointerCapture(e.pointerId)
 
+      // Capture multi-drag followers at drag start.
+      const followers: DragState['followers'] = []
+      const getMd = getMultiDragRef.current
+      if (getMd) {
+        const entries = getMd()
+        for (const entry of entries) {
+          if (entry.id === id) continue
+          followers.push({ id: entry.id, startX: entry.startElemX, startY: entry.startElemY, el: entry.el, commit: entry.commit })
+        }
+      }
+
       state.current = {
         id,
         startX: e.clientX,
@@ -73,13 +96,17 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
         startElemY: elemY,
         elemWidth: elemW ?? el.offsetWidth,
         elemHeight: elemH ?? el.offsetHeight,
-        el
+        el,
+        followers
       }
 
       onStart?.(id)
     },
     [onStart]
   )
+
+  const getMultiDragRef = useRef<UseDragOptions['getMultiDrag']>(getMultiDrag)
+  getMultiDragRef.current = getMultiDrag
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
@@ -102,6 +129,12 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
       // Direct DOM mutation — no React render, no store update (60fps).
       s.el.style.left = `${newX}px`
       s.el.style.top = `${newY}px`
+
+      // Move all multi-drag followers by the same raw delta.
+      for (const f of s.followers) {
+        f.el.style.left = `${f.startX + dx}px`
+        f.el.style.top = `${f.startY + dy}px`
+      }
     },
     [zoom, snapFn]
   )
@@ -114,6 +147,9 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
       s.el.releasePointerCapture(e.pointerId)
       state.current = null
 
+      // Push history BEFORE any store mutations (captures pre-drag state).
+      onEnd(s.id)
+
       // Recompute final position (pointer may have moved since last move event).
       const dx = (e.clientX - s.startX) / zoom
       const dy = (e.clientY - s.startY) / zoom
@@ -124,6 +160,24 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
         const snapped = snapFn(s.id, finalX, finalY, s.elemWidth, s.elemHeight)
         finalX = snapped.x
         finalY = snapped.y
+        // Recompute followers delta after snap.
+        const sDx = finalX - s.startElemX
+        const sDy = finalY - s.startElemY
+        for (const f of s.followers) {
+          const ex = f.startX + sDx
+          const ey = f.startY + sDy
+          f.el.style.left = `${ex}px`
+          f.el.style.top = `${ey}px`
+          f.commit(f.id, Math.round(ex), Math.round(ey))
+        }
+      } else {
+        for (const f of s.followers) {
+          const ex = f.startX + dx
+          const ey = f.startY + dy
+          f.el.style.left = `${ex}px`
+          f.el.style.top = `${ey}px`
+          f.commit(f.id, Math.round(ex), Math.round(ey))
+        }
       }
 
       s.el.style.left = `${finalX}px`
@@ -132,9 +186,8 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
       // Clear snap guide lines.
       onGuidesChange?.({ verticalGuides: [], horizontalGuides: [] })
 
-      // Commit final position to store and push history.
+      // Commit final position to store.
       onDrag(s.id, finalX, finalY)
-      onEnd(s.id)
     },
     [zoom, snapFn, onDrag, onEnd, onGuidesChange]
   )
@@ -147,6 +200,11 @@ export function useDrag({ zoom, onStart, onDrag, onEnd, snapFn, onGuidesChange }
     state.current = null
     s.el.style.left = `${s.startElemX}px`
     s.el.style.top = `${s.startElemY}px`
+
+    for (const f of s.followers) {
+      f.el.style.left = `${f.startX}px`
+      f.el.style.top = `${f.startY}px`
+    }
 
     onGuidesChange?.({ verticalGuides: [], horizontalGuides: [] })
   }, [onGuidesChange])

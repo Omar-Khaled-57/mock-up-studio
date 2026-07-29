@@ -19,8 +19,10 @@
  *     the recent list up to date.
  */
 
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, app } from 'electron'
 import { writeFile } from 'fs/promises'
+import { join } from 'path'
+import { get } from 'https'
 import {
   writeRecovery,
   readRecovery,
@@ -58,8 +60,8 @@ export function registerIpcHandlers(): void {
    * and returns the manifest + assets to the renderer. Also adds
    * the file to the recent projects list.
    */
-  ipcMain.handle('open-project', async () => {
-    const win = BrowserWindow.getFocusedWindow()
+  ipcMain.handle('open-project', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0]
     if (!win) return null
 
     const { filePaths } = await dialog.showOpenDialog(win, {
@@ -98,8 +100,8 @@ export function registerIpcHandlers(): void {
    * Opens the native Save dialog (for "Save As" or first-time save),
    * then writes the .mockup ZIP to the chosen path.
    */
-  ipcMain.handle('save-project-as', async (_event, projectJSON: string, assetsJson: string) => {
-    const win = BrowserWindow.getFocusedWindow()
+  ipcMain.handle('save-project-as', async (event, projectJSON: string, assetsJson: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
 
     const { filePath } = await dialog.showSaveDialog(win, {
@@ -173,8 +175,8 @@ export function registerIpcHandlers(): void {
    * Returns the chosen filePath on success, or { canceled: true } if the
    * user dismissed the dialog.
    */
-  ipcMain.handle('save-image-dialog', async (_event, defaultName: string, blob: ArrayBuffer) => {
-    const win = BrowserWindow.getFocusedWindow()
+  ipcMain.handle('save-image-dialog', async (event, defaultName: string, blob: ArrayBuffer) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { success: false, error: 'No window' }
 
     const { filePath, canceled } = await dialog.showSaveDialog(win, {
@@ -212,5 +214,114 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('delete-recovery', async (_event, projectId: string) => {
     await deleteRecovery(projectId)
+  })
+
+  /**
+   * Checks the latest GitHub release against the installed version.
+   */
+  ipcMain.handle('check-for-updates', async () => {
+    const currentVersion = app.getVersion()
+    const repo = 'anomalyco/mockup-studio'
+
+    try {
+      const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+        signal: AbortSignal.timeout(10000)
+      })
+
+      if (!response.ok) {
+        return { status: 'error' as const, currentVersion, error: `GitHub API responded with ${response.status}` }
+      }
+
+      const data = await response.json()
+      const latestVersion = data.tag_name?.replace(/^v/, '') || '0.0.0'
+      const releaseNotes = data.body?.slice(0, 2000) || ''
+      const downloadUrl = data.html_url || ''
+
+      const currentParts = currentVersion.split('.').map(Number)
+      const latestParts = latestVersion.split('.').map(Number)
+
+      let isNewer = false
+      for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
+        const c = currentParts[i] || 0
+        const l = latestParts[i] || 0
+        if (l > c) { isNewer = true; break }
+        if (l < c) break
+      }
+
+      if (isNewer) {
+        return {
+          status: 'available' as const,
+          currentVersion,
+          latestVersion,
+          releaseNotes,
+          downloadUrl
+        }
+      }
+
+      return { status: 'up-to-date' as const, currentVersion }
+    } catch (err) {
+      return { status: 'error' as const, currentVersion, error: String(err) }
+    }
+  })
+
+  /**
+   * Downloads an update from a given URL to the app's temp directory.
+   */
+  let activeDownload: { abort: () => void; bytesDownloaded: number; totalBytes: number } | null = null
+
+  ipcMain.handle('download-update', async (event, url: string) => {
+    const sender = event.sender
+    const dest = join(app.getPath('temp'), `mockup-studio-update-${Date.now()}.exe`)
+
+    return new Promise((resolve) => {
+      const req = get(url, (response) => {
+        const totalBytes = parseInt(response.headers['content-length'] || '0', 10)
+        let bytesDownloaded = 0
+        const chunks: Buffer[] = []
+
+        activeDownload = {
+          abort: () => req.destroy(),
+          bytesDownloaded: 0,
+          totalBytes
+        }
+
+        response.on('data', (chunk: Buffer) => {
+          bytesDownloaded += chunk.length
+          chunks.push(chunk)
+          if (activeDownload) activeDownload.bytesDownloaded = bytesDownloaded
+          if (totalBytes > 0) {
+            sender.send('update-progress', Math.round((bytesDownloaded / totalBytes) * 100))
+          }
+        })
+
+        response.on('end', async () => {
+          activeDownload = null
+          try {
+            const buffer = Buffer.concat(chunks)
+            await writeFile(dest, buffer)
+            resolve({ success: true })
+          } catch (err) {
+            resolve({ success: false, error: String(err) })
+          }
+        })
+
+        response.on('error', (err) => {
+          activeDownload = null
+          resolve({ success: false, error: err.message })
+        })
+      })
+
+      req.on('error', (err) => {
+        activeDownload = null
+        resolve({ success: false, error: err.message })
+      })
+
+      req.end()
+    })
+  })
+
+  ipcMain.handle('install-update', async () => {
+    app.quit()
   })
 }

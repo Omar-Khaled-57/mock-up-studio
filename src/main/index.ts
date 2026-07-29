@@ -29,7 +29,7 @@ function createWindow(): void {
     show: false,
     icon: join(__dirname, '../../public/logo.ico'),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true
@@ -104,6 +104,34 @@ app.on('second-instance', (_event, argv) => {
   if (win) {
     if (win.isMinimized()) win.restore()
     win.focus()
+  }
+})
+
+ipcMain.on('open-user-guide', () => {
+  const existing = BrowserWindow.getAllWindows().find((w) => w.title === 'Mockup Studio Guide')
+  if (existing && !existing.isDestroyed()) {
+    existing.focus()
+    return
+  }
+  const win = new BrowserWindow({
+    width: 960,
+    height: 700,
+    minWidth: 640,
+    minHeight: 400,
+    title: 'Mockup Studio Guide',
+    icon: join(__dirname, '../../public/logo.ico'),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
+    }
+  })
+  win.setMenuBarVisibility(false)
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'] + '?guide=1')
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), { query: { guide: '1' } })
   }
 })
 

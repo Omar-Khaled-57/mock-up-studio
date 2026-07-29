@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import { generateId } from '../../lib/id'
 import { DEVICE_ASPECT_RATIOS } from '../../lib/constants'
 import type { Device } from '@shared/types'
@@ -17,6 +18,10 @@ const DEVICE_TYPES: { type: Device['type']; label: string }[] = [
   { type: 'terminal', label: 'Terminal' }
 ]
 
+const DEVICE_NAMES: Record<string, string> = Object.fromEntries(
+  DEVICE_TYPES.map((d) => [d.type, d.label])
+)
+
 const DEFAULT_WIDTH = 300
 
 function getDefaultHeight(type: Device['type']): number {
@@ -25,6 +30,7 @@ function getDefaultHeight(type: Device['type']): number {
 }
 
 export default function DevicesPanel() {
+  const { isLight, clsx } = useTheme()
   const scene = useStore(safeScene)
   const select = useStore((s) => s.select)
   const addDevice = useStore((s) => s.addDevice)
@@ -59,7 +65,8 @@ export default function DevicesPanel() {
         zIndex: maxZ + 1,
         colorTheme: 'dark',
         screenImage: null,
-        objectFit: 'contain'
+        objectFit: 'contain',
+        groupId: null
       }
       addDevice(device)
       pushHistory(`Add ${type}`)
@@ -144,13 +151,13 @@ export default function DevicesPanel() {
     <div className="space-y-4">
       {/* Add buttons */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Add Device</h3>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Add Device</h3>
         <div className="grid grid-cols-2 gap-1.5">
           {DEVICE_TYPES.map(({ type, label }) => (
             <button
               key={type}
               onClick={() => handleAdd(type)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-zinc-300 bg-zinc-800/60 rounded-lg hover:bg-zinc-700/80 hover:text-zinc-100 transition-all duration-150"
+              className={clsx("flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150", isLight ? "text-zinc-700 bg-zinc-100 hover:bg-zinc-200 hover:text-zinc-900" : "text-zinc-300 bg-zinc-800/60 hover:bg-zinc-700/80 hover:text-zinc-100")}
             >
               <Plus size={12} strokeWidth={2} />
               {label}
@@ -161,64 +168,68 @@ export default function DevicesPanel() {
 
       {/* Device list */}
       <div>
-        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>
           Devices ({scene.devices.length})
         </h3>
-        <div className="space-y-0.5">
-          {scene.devices.map((device) => (
-            <div
-              key={device.id}
-              className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm transition-all duration-150 ${
-                selectedDevice?.id === device.id
-                  ? 'bg-indigo-500/10 border border-indigo-500/20'
-                  : 'hover:bg-zinc-800/60 border border-transparent'
-              }`}
-            >
-              <button
-                onClick={() => select(device.id)}
-                className="flex-1 text-left text-zinc-300 truncate text-xs"
+        {scene.devices.length === 0 ? (
+          <p className={clsx("text-[11px]", isLight ? "text-zinc-400" : "text-zinc-600")}>No devices yet — click a device above to add one</p>
+        ) : (
+          <div className="space-y-0.5">
+            {scene.devices.map((device) => (
+              <div
+                key={device.id}
+                className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm transition-all duration-150", selectedDevice?.id === device.id ? 'bg-indigo-500/10 border border-indigo-500/20' : isLight ? "hover:bg-zinc-100 border border-transparent" : "hover:bg-zinc-800/60 border border-transparent")}
               >
-                {device.name}
-              </button>
-              <button
-                onClick={() => handleToggleVisibility(device.id)}
-                className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
-                title={device.visible ? 'Hide' : 'Show'}
-              >
-                {device.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-              </button>
-              <button
-                onClick={() => handleToggleLock(device.id)}
-                className="w-5 h-5 flex items-center justify-center text-zinc-600 hover:text-zinc-300 transition-colors"
-                title={device.locked ? 'Unlock' : 'Lock'}
-              >
-                {device.locked ? <Lock size={12} /> : <Unlock size={12} />}
-              </button>
-            </div>
-          ))}
-        </div>
+                <div className="flex-1 min-w-0 flex items-center gap-1.5">
+                  <span
+                    className="text-xs cursor-pointer truncate"
+                    onClick={() => select(device.id)}
+                  >
+                    {DEVICE_NAMES[device.type] ?? device.type}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleToggleVisibility(device.id)}
+                  className={clsx("w-5 h-5 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  title={device.visible ? 'Hide' : 'Show'}
+                  aria-label={device.visible ? `Hide ${DEVICE_NAMES[device.type] ?? device.type}` : `Show ${DEVICE_NAMES[device.type] ?? device.type}`}
+                >
+                  {device.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+                </button>
+                <button
+                  onClick={() => handleToggleLock(device.id)}
+                  className={clsx("w-5 h-5 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-zinc-700" : "text-zinc-600 hover:text-zinc-300")}
+                  title={device.locked ? 'Unlock' : 'Lock'}
+                  aria-label={device.locked ? 'Unlock device' : 'Lock device'}
+                >
+                  {device.locked ? <Lock size={12} /> : <Unlock size={12} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Selected device controls */}
       {selectedDevice && (
-        <div className="space-y-3 border-t border-zinc-800/60 pt-3">
-          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+        <div className={clsx("space-y-3 border-t pt-3", isLight ? "border-zinc-200" : "border-zinc-800/60")}>
+          <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", isLight ? "text-zinc-600" : "text-zinc-400")}>
             Properties: {selectedDevice.name}
           </h3>
 
           {/* Rename */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-0.5 block">Name</label>
+            <label className={clsx("text-[10px] mb-0.5 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Name</label>
             <input
               value={selectedDevice.name}
               onChange={(e) => handleRename(selectedDevice.id, e.target.value)}
-              className="w-full px-2 py-1.5 text-xs bg-zinc-800/60 text-zinc-200 rounded-lg border border-zinc-700/50 focus:border-indigo-500/50 outline-none transition-colors"
+              className={clsx("w-full px-2 py-1.5 text-xs rounded-lg border outline-none transition-colors", isLight ? "bg-white text-zinc-800 border-zinc-300 focus:border-indigo-500" : "bg-zinc-800/60 text-zinc-200 border-zinc-700/50 focus:border-indigo-500/50")}
             />
           </div>
 
           {/* Width slider */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-1 block">
+            <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>
               Width: {selectedDevice.width}px
             </label>
             <input
@@ -233,7 +244,7 @@ export default function DevicesPanel() {
 
           {/* Object fit */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-1 block">Object Fit</label>
+            <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Object Fit</label>
             <div className="flex gap-1">
               {(['contain', 'cover', 'stretch'] as const).map((fit) => (
                 <button
@@ -242,7 +253,7 @@ export default function DevicesPanel() {
                   className={`flex-1 px-2 py-1.5 text-xs rounded-lg transition-all duration-150 ${
                     selectedDevice.objectFit === fit
                       ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                      : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
+                      : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
                   }`}
                 >
                   {fit}
@@ -253,7 +264,7 @@ export default function DevicesPanel() {
 
           {/* Rotation */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-1 block">
+            <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>
               Rotation: {selectedDevice.rotation}°
             </label>
             <input
@@ -268,7 +279,7 @@ export default function DevicesPanel() {
 
           {/* Color theme */}
           <div>
-            <label className="text-[10px] text-zinc-500 mb-1 block">Theme</label>
+            <label className={clsx("text-[10px] mb-1 block", isLight ? "text-zinc-600" : "text-zinc-500")}>Theme</label>
             <div className="grid grid-cols-3 gap-1">
               {(['dark', 'light', 'space-gray', 'midnight', 'custom'] as const).map((theme) => (
                 <button
@@ -277,7 +288,7 @@ export default function DevicesPanel() {
                   className={`px-1.5 py-1.5 text-[10px] rounded-lg transition-all duration-150 ${
                     selectedDevice.colorTheme === theme
                       ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
-                      : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80'
+                      : clsx(isLight ? 'bg-zinc-100 text-zinc-600 border border-transparent hover:bg-zinc-200' : 'bg-zinc-800/60 text-zinc-400 border border-transparent hover:bg-zinc-700/80')
                   }`}
                 >
                   {theme}
@@ -290,14 +301,14 @@ export default function DevicesPanel() {
           <div className="flex gap-1.5 pt-1">
             <button
               onClick={handleDuplicate}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-zinc-800/60 text-zinc-300 rounded-lg hover:bg-zinc-700/80 transition-all duration-150"
+              className={clsx("flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded-lg transition-all duration-150", isLight ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200" : "bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/80")}
             >
               <Copy size={12} />
               Duplicate
             </button>
             <button
               onClick={handleDelete}
-              className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-all duration-150"
+              className={clsx("flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs rounded-lg transition-all duration-150", isLight ? "bg-red-100 text-red-600 hover:bg-red-200" : "bg-red-500/10 text-red-400 hover:bg-red-500/20")}
             >
               <Trash2 size={12} />
               Delete
@@ -306,7 +317,7 @@ export default function DevicesPanel() {
         </div>
       )}
 
-      <div className="border-t border-zinc-800/60 pt-3 mt-3">
+      <div className={clsx("border-t pt-3 mt-3", isLight ? "border-zinc-200" : "border-zinc-800/60")}>
         <LayoutTemplates />
       </div>
     </div>

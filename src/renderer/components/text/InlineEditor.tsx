@@ -75,7 +75,7 @@ export default function InlineEditor({
     []
   )
 
-  const showPlaceholder = !isEditing && !content
+  const showPlaceholder = isEditing && !content
 
   return (
     <div

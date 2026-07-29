@@ -1,6 +1,7 @@
 import { useCallback, type ElementType } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useTheme } from '../../hooks/useTheme'
 import type { Device } from '@shared/types'
 import { LayoutDashboard, Grid3X3, Rows3, ArrowDownRight, MoveHorizontal } from 'lucide-react'
 
@@ -84,6 +85,7 @@ const TEMPLATES: LayoutTemplate[] = [
 ]
 
 export default function LayoutTemplates() {
+  const { isLight, clsx } = useTheme()
   const scene = useStore(safeScene)
   const updateDevice = useStore((s) => s.updateDevice)
   const pushHistory = useStore((s) => s.pushHistory)
@@ -104,7 +106,7 @@ export default function LayoutTemplates() {
 
   return (
     <div>
-      <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-2">Layout Templates</h3>
+      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-400")}>Layout Templates</h3>
       <div className="grid grid-cols-3 gap-1.5">
         {TEMPLATES.map((t) => {
           const Icon = t.icon
@@ -112,7 +114,7 @@ export default function LayoutTemplates() {
             <button
               key={t.name}
               onClick={() => applyLayout(t)}
-              className="flex flex-col items-center gap-1.5 px-2 py-2.5 text-xs bg-zinc-800/40 text-zinc-400 rounded-lg hover:bg-zinc-700/60 hover:text-zinc-200 border border-zinc-800/40 hover:border-zinc-700/60 transition-all duration-150"
+              className={clsx("flex flex-col items-center gap-1.5 px-2 py-2.5 text-xs rounded-lg transition-all duration-150", isLight ? "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-800 border border-zinc-200 hover:border-zinc-300" : "bg-zinc-800/40 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-200 border border-zinc-800/40 hover:border-zinc-700/60")}
             >
               <Icon size={16} strokeWidth={1.5} />
               <span className="text-[10px] font-medium">{t.name}</span>

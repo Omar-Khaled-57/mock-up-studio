@@ -20,6 +20,11 @@ declare global {
       confirmClose: () => void
       cancelClose: () => void
       onOpenFile: (callback: (filePath: string) => void) => (() => void)
+      openUserGuide: () => void
+      checkForUpdates: () => Promise<{ status: 'available' | 'up-to-date' | 'error'; currentVersion: string; latestVersion?: string; releaseNotes?: string; downloadUrl?: string; error?: string }>
+      downloadUpdate: (url: string) => Promise<{ success: boolean; error?: string }>
+      onUpdateProgress: (callback: (percent: number) => void) => (() => void)
+      installUpdate: () => Promise<void>
     }
   }
 }
@@ -123,24 +128,29 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
   },
 
   openProject: async () => {
-    const result = await window.api.openProject()
-    if (!result) return false
+    try {
+      const result = await window.api.openProject()
+      if (!result) return false
 
-    const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
+      const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
-    set({
-      project: project as Project,
-      scenes: scenes as never[],
-      activeSceneIndex,
-      filePath: result.filePath,
-      dirty: false,
-      lastSaved: Date.now(),
-      undoStack: [],
-      redoStack: [],
-      selectedIds: []
-    })
+      set({
+        project: project as Project,
+        scenes: scenes as never[],
+        activeSceneIndex,
+        filePath: result.filePath,
+        dirty: false,
+        lastSaved: Date.now(),
+        undoStack: [],
+        redoStack: [],
+        selectedIds: []
+      })
 
-    return true
+      return true
+    } catch (err) {
+      console.error('openProject error:', err)
+      return false
+    }
   },
 
   newProject: () => {

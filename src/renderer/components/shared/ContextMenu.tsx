@@ -1,4 +1,6 @@
 import React, { useEffect, useCallback, useRef, useState, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { useTheme } from '../../hooks/useTheme'
 
 export interface ContextMenuItem {
   label: string
@@ -15,6 +17,7 @@ interface MenuProps {
 }
 
 export function ContextMenu({ items, x, y, onClose }: MenuProps) {
+  const { isLight, clsx } = useTheme()
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ x, y })
 
@@ -38,20 +41,20 @@ export function ContextMenu({ items, x, y, onClose }: MenuProps) {
   useLayoutEffect(() => {
     if (!ref.current) return
     const rect = ref.current.getBoundingClientRect()
-    const adjustedX = Math.min(x, window.innerWidth - rect.width - 8)
-    const adjustedY = Math.min(y, window.innerHeight - rect.height - 8)
-    setPos({ x: Math.max(0, adjustedX), y: Math.max(0, adjustedY) })
+    const adjustedX = Math.min(x, window.innerWidth - rect.width - 12)
+    const adjustedY = Math.min(y, window.innerHeight - rect.height - 12)
+    setPos({ x: Math.max(2, adjustedX), y: Math.max(2, adjustedY) })
   }, [x, y])
 
-  return (
+  const menu = (
     <div
       ref={ref}
-      className="fixed z-[9999] bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+      className={clsx("fixed z-[9999] rounded-lg shadow-lg py-1 min-w-[150px]", isLight ? "bg-white border border-zinc-200" : "bg-zinc-800 border border-zinc-700")}
       style={{ left: pos.x, top: pos.y }}
     >
       {items.map((item, i) => {
         if (item.divider) {
-          return <div key={i} className="my-1 border-t border-zinc-700" />
+          return <div key={i} className={clsx("my-1 border-t", isLight ? "border-zinc-200" : "border-zinc-700")} />
         }
         return (
           <button
@@ -60,10 +63,10 @@ export function ContextMenu({ items, x, y, onClose }: MenuProps) {
               item.action()
               onClose()
             }}
-            className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+            className={`w-full text-left px-2.5 py-1.5 text-[11px] transition-colors ${
               item.danger
-                ? 'text-red-400 hover:bg-red-900/30'
-                : 'text-zinc-300 hover:bg-zinc-700'
+                ? clsx(isLight ? 'text-red-600 hover:bg-red-50' : 'text-red-400 hover:bg-red-900/30')
+                : clsx(isLight ? 'text-zinc-700 hover:bg-zinc-100' : 'text-zinc-300 hover:bg-zinc-700')
             }`}
           >
             {item.label}
@@ -72,8 +75,11 @@ export function ContextMenu({ items, x, y, onClose }: MenuProps) {
       })}
     </div>
   )
+
+  return createPortal(menu, document.body)
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useContextMenu() {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
 

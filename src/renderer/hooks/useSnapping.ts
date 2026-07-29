@@ -65,23 +65,8 @@ function gatherSnapTargets(scene: Scene, excludeId: string) {
   for (const d of scene.devices) addElement(d)
   for (const t of scene.textBoxes) addElement(t)
   for (const i of scene.images) addElement(i)
+  for (const s of scene.shapes) addElement(s)
 
-  return { verticals, horizontals }
-}
-
-/**
- * Generates grid intersection points across the full canvas dimensions.
- * Each grid line becomes a snap target.
- */
-function gatherGridSnapTargets(
-  canvasWidth: number,
-  canvasHeight: number,
-  gridSize: number
-) {
-  const verticals: number[] = []
-  const horizontals: number[] = []
-  for (let x = 0; x <= canvasWidth; x += gridSize) verticals.push(x)
-  for (let y = 0; y <= canvasHeight; y += gridSize) horizontals.push(y)
   return { verticals, horizontals }
 }
 
@@ -166,37 +151,29 @@ export function useSnapping(options?: UseSnappingOptions) {
       const scene = safeScene(useStore.getState())
       const { verticals, horizontals } = gatherSnapTargets(scene, input.id)
 
-      // Merge grid snap targets if enabled.
+      // Element-to-element snapping with 5px threshold.
+      const xResult = snapAxis(input.x, input.width, verticals, scene.canvas.width, SNAP_THRESHOLD)
+      const yResult = snapAxis(input.y, input.height, horizontals, scene.canvas.height, SNAP_THRESHOLD)
+
+      let snappedX = xResult.snapped
+      let snappedY = yResult.snapped
+      const vGuides: number[] = xResult.guide !== null ? [xResult.guide] : []
+      const hGuides: number[] = yResult.guide !== null ? [yResult.guide] : []
+
+      // Grid snapping — rounds element position to the nearest grid line.
+      // Active regardless of distance so elements always align to the grid.
       if (scene.grid.snapEnabled && scene.grid.size > 0) {
-        const gridTargets = gatherGridSnapTargets(
-          scene.canvas.width,
-          scene.canvas.height,
-          scene.grid.size
-        )
-        verticals.push(...gridTargets.verticals)
-        horizontals.push(...gridTargets.horizontals)
+        snappedX = Math.round(input.x / scene.grid.size) * scene.grid.size
+        snappedY = Math.round(input.y / scene.grid.size) * scene.grid.size
+        vGuides.push(snappedX)
+        hGuides.push(snappedY)
       }
 
-      const xResult = snapAxis(
-        input.x,
-        input.width,
-        verticals,
-        scene.canvas.width,
-        SNAP_THRESHOLD
-      )
-      const yResult = snapAxis(
-        input.y,
-        input.height,
-        horizontals,
-        scene.canvas.height,
-        SNAP_THRESHOLD
-      )
-
       const result: SnapResult = {
-        x: xResult.snapped,
-        y: yResult.snapped,
-        verticalGuides: xResult.guide !== null ? [xResult.guide] : [],
-        horizontalGuides: yResult.guide !== null ? [yResult.guide] : []
+        x: snappedX,
+        y: snappedY,
+        verticalGuides: vGuides,
+        horizontalGuides: hGuides
       }
 
       snapRef.current = result
