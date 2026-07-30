@@ -23,7 +23,6 @@ declare global {
       onOpenFile: (callback: (filePath: string) => void) => (() => void)
       openUserGuide: () => void
       checkForUpdatesNow: () => Promise<{ success: boolean; error?: string }>
-      onUpdateCheckError: (callback: (message: string) => void) => (() => void)
     }
   }
 }

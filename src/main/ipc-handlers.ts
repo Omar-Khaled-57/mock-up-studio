@@ -224,8 +224,8 @@ export function registerIpcHandlers(): void {
     try {
       await autoUpdater.checkForUpdates()
       return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
+    } catch {
+      return { success: false }
     }
   })
 }

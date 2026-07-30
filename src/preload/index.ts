@@ -62,13 +62,7 @@ const api = {
   },
 
   checkForUpdatesNow: (): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('check-for-updates-now'),
-
-  onUpdateCheckError: (callback: (message: string) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, message: string): void => callback(message)
-    ipcRenderer.on('update-check-error', handler)
-    return () => ipcRenderer.removeListener('update-check-error', handler)
-  }
+    ipcRenderer.invoke('check-for-updates-now')
 }
 
 contextBridge.exposeInMainWorld('api', api)

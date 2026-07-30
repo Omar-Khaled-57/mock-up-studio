@@ -122,23 +122,17 @@ export default function App() {
           window.api?.openUserGuide?.()
           break
         case 'check-for-updates':
-          window.api?.checkForUpdatesNow?.()
+          window.api?.checkForUpdatesNow?.().then((result) => {
+            if (!result.success) {
+              alert('Update Check Failed\n\nCould not check for updates. No release has been published yet.\n\nMake sure you are connected to the internet and try again.')
+            }
+          })
           break
       }
     })
 
     return cleanup
   }, [saveProject, saveProjectAs, openProject, newProject, undo, redo, cutSelected, copySelected, pasteClipboard, selectAll])
-
-  useEffect(() => {
-    if (!window.api?.onUpdateCheckError) return
-
-    const cleanup = window.api.onUpdateCheckError((message: string) => {
-      alert(`Update Check Failed\n\n${message}\n\nCheck your internet connection and try again.`)
-    })
-
-    return cleanup
-  }, [])
 
   useEffect(() => {
     if (!window.api?.onRequestClose) return

@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "version": "0.2.6",
+      "date": "2026-07-30",
+      "title": "Auto-Updater Fix & Release v0.2.6",
+      "origin": "Bug fix release. Auto-updater error dialogs now only appear on manual checks, not on automatic startup checks. Cleaner user-facing error messages.",
+      "sections": [
+        {
+          "heading": "Bug Fixes",
+          "items": [
+            "Auto-updater error dialog no longer appears on automatic startup checks — only on manual Check for Updates",
+            "Clean, user-friendly error message instead of raw stack trace"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.2.5",
       "date": "2026-07-30",
       "title": "Scene Tab Management & Release QA",
