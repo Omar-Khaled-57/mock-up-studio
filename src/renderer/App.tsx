@@ -37,6 +37,8 @@ export default function App() {
 
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [updateVersion, setUpdateVersion] = useState<ChangelogVersion | null>(null)
+  const downloadProgress = useStore((s) => s.downloadProgress)
+  const setDownloadProgress = useStore((s) => s.setDownloadProgress)
 
   const toggleShortcuts = useCallback(() => setShowShortcuts((v) => !v), [])
 
@@ -135,6 +137,22 @@ export default function App() {
   }, [saveProject, saveProjectAs, openProject, newProject, undo, redo, cutSelected, copySelected, pasteClipboard, selectAll])
 
   useEffect(() => {
+    if (!window.api?.onDownloadProgress) return
+
+    const cleanup = window.api.onDownloadProgress((percent: number) => {
+      if (percent === 0) {
+        setDownloadProgress(0)
+      } else if (percent >= 100) {
+        setDownloadProgress(null)
+      } else {
+        setDownloadProgress(percent)
+      }
+    })
+
+    return cleanup
+  }, [setDownloadProgress])
+
+  useEffect(() => {
     if (!window.api?.onRequestClose) return
 
     const cleanup = window.api.onRequestClose(() => {
@@ -209,6 +227,17 @@ export default function App() {
         <PropertiesPanel />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
+        {downloadProgress !== null && (
+          <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-2 bg-zinc-900 border-t border-zinc-700 px-4 py-2 text-xs text-zinc-400">
+            <span>Downloading update… {Math.round(downloadProgress)}%</span>
+            <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                style={{ width: `${downloadProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   )

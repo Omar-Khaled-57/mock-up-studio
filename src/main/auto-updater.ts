@@ -37,12 +37,14 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
     })
 
     if (response === 0) {
+      mainWindow.webContents.send('download-progress', 0)
       autoUpdater.downloadUpdate()
     }
   })
 
   autoUpdater.on('download-progress', (progress) => {
     mainWindow.setProgressBar(progress.percent / 100)
+    mainWindow.webContents.send('download-progress', progress.percent)
   })
 
   autoUpdater.on('update-downloaded', async () => {
@@ -65,6 +67,15 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
 
   autoUpdater.on('error', (err) => {
     console.error('Auto-updater error:', err.message)
+    if (!mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Could not download the update.',
+        detail: err.message,
+        buttons: ['OK']
+      }).catch(() => {})
+    }
   })
 
   autoUpdater.on('update-not-available', () => {

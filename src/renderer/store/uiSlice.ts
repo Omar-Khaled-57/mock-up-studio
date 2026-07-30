@@ -13,6 +13,7 @@ export interface UiSlice {
   sidebarPanelWidth: number
   propertiesPanelWidth: number
   showRulers: boolean
+  downloadProgress: number | null
   setSidebarTab: (tab: SidebarTab) => void
   toggleSidebar: () => void
   setPropertiesPanelOpen: (open: boolean) => void
@@ -23,6 +24,7 @@ export interface UiSlice {
   setPropertiesPanelWidth: (width: number) => void
   toggleRulers: () => void
   setShowRulers: (show: boolean) => void
+  setDownloadProgress: (percent: number | null) => void
 }
 
 export const createUiSlice: StateCreator<StoreState, [], [], UiSlice> = (set) => ({
@@ -34,6 +36,7 @@ export const createUiSlice: StateCreator<StoreState, [], [], UiSlice> = (set) =>
   sidebarPanelWidth: 224,
   propertiesPanelWidth: 208,
   showRulers: false,
+  downloadProgress: null,
 
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
 
@@ -56,5 +59,7 @@ export const createUiSlice: StateCreator<StoreState, [], [], UiSlice> = (set) =>
   toggleRulers: () =>
     set((state) => ({ showRulers: !state.showRulers })),
 
-  setShowRulers: (show) => set({ showRulers: show })
+  setShowRulers: (show) => set({ showRulers: show }),
+
+  setDownloadProgress: (percent) => set({ downloadProgress: percent })
 })

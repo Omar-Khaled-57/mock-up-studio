@@ -62,7 +62,13 @@ const api = {
   },
 
   checkForUpdatesNow: (): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('check-for-updates-now')
+    ipcRenderer.invoke('check-for-updates-now'),
+
+  onDownloadProgress: (callback: (percent: number) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, percent: number): void => callback(percent)
+    ipcRenderer.on('download-progress', handler)
+    return () => ipcRenderer.removeListener('download-progress', handler)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)
