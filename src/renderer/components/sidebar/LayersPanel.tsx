@@ -4,7 +4,7 @@ import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
 import { ContextMenu, useContextMenu, type ContextMenuItem } from '../shared/ContextMenu'
 import type { ElementKind } from '../../store/sceneSlice'
-import { Monitor, Type, Image, Hexagon, Eye, EyeOff, Lock, Unlock, Folder, ChevronRight, ChevronDown } from 'lucide-react'
+import { Monitor, Type, Image, Hexagon, Eye, EyeOff, Lock, Unlock, Folder, ChevronRight, ChevronDown, ChevronLeft } from 'lucide-react'
 
 interface LayerEntry {
   id: string
@@ -27,12 +27,16 @@ interface GroupEntry {
 export default function LayersPanel() {
   const { clsx, text, border, bg } = useTheme()
   const scene = useStore(safeScene)
+  const scenes = useStore((s) => s.scenes)
+  const activeSceneIndex = useStore((s) => s.activeSceneIndex)
+  const setActiveSceneIndex = useStore((s) => s.setActiveSceneIndex)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
 
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
+  const updateShape = useStore((s) => s.updateShape)
   const deleteSelected = useStore((s) => s.deleteSelected)
   const duplicateSelected = useStore((s) => s.duplicateSelected)
   const bringToFront = useStore((s) => s.bringToFront)
@@ -45,7 +49,6 @@ export default function LayersPanel() {
   const renameGroup = useStore((s) => s.renameGroup)
   const duplicateGroup = useStore((s) => s.duplicateGroup)
   const groupSelected = useStore((s) => s.groupSelected)
-  const nestGroup = useStore((s) => s.nestGroup)
   const makeParentGroup = useStore((s) => s.makeParentGroup)
 
   const { menu, open: openMenu, close: closeMenu } = useContextMenu()
@@ -61,12 +64,10 @@ export default function LayersPanel() {
   })
 
   const groupEntries: GroupEntry[] = useMemo(() => {
-    const groups: GroupEntry[] = scene.groups.map((g) => ({
-      id: g.id,
-      name: g.name,
-      children: [],
-      parentGroupId: g.parentGroupId ?? null
-    }))
+    const groups: GroupEntry[] = []
+    for (const g of scene.groups) {
+      groups.push({ id: g.id, name: g.name, children: [], parentGroupId: g.parentGroupId ?? null })
+    }
 
     const allEntries: { zIndex: number; entry: LayerEntry }[] = [
       ...scene.devices.map((d) => ({ zIndex: d.zIndex, entry: makeLayerEntry('device', d.id, d.name, d.visible, d.locked, d.zIndex, d.groupId) })),
@@ -74,12 +75,6 @@ export default function LayersPanel() {
       ...scene.images.map((i) => ({ zIndex: i.zIndex, entry: makeLayerEntry('image', i.id, 'Image', i.visible, i.locked, i.zIndex, i.groupId) })),
       ...scene.shapes.map((s) => ({ zIndex: s.zIndex, entry: makeLayerEntry('shape', s.id, s.name || 'Shape', s.visible, s.locked, s.zIndex, s.groupId) }))
     ].sort((a, b) => b.zIndex - a.zIndex)
-
-    // Reset groups
-    groups.length = 0
-    for (const g of scene.groups) {
-      groups.push({ id: g.id, name: g.name, children: [], parentGroupId: g.parentGroupId ?? null })
-    }
 
     const orphanEntries: LayerEntry[] = []
 
@@ -138,13 +133,13 @@ export default function LayersPanel() {
         if (t) updateTextBox(id, { visible: !t.visible })
       } else if (kind === 'shape') {
         const s = scene.shapes.find((sh) => sh.id === id)
-        if (s) useStore.getState().updateShape(id, { visible: !s.visible })
+        if (s) updateShape(id, { visible: !s.visible })
       } else {
         const i = scene.images.find((img) => img.id === id)
         if (i) updateImage(id, { visible: !i.visible })
       }
     },
-    [scene, updateDevice, updateTextBox, updateImage]
+    [scene, updateDevice, updateTextBox, updateImage, updateShape]
   )
 
   const toggleLock = useCallback(
@@ -157,13 +152,13 @@ export default function LayersPanel() {
         if (t) updateTextBox(id, { locked: !t.locked })
       } else if (kind === 'shape') {
         const s = scene.shapes.find((sh) => sh.id === id)
-        if (s) useStore.getState().updateShape(id, { locked: !s.locked })
+        if (s) updateShape(id, { locked: !s.locked })
       } else {
         const i = scene.images.find((img) => img.id === id)
         if (i) updateImage(id, { locked: !i.locked })
       }
     },
-    [scene, updateDevice, updateTextBox, updateImage]
+    [scene, updateDevice, updateTextBox, updateImage, updateShape]
   )
 
   const startRename = useCallback((id: string, currentName: string) => {
@@ -190,11 +185,11 @@ export default function LayersPanel() {
       if (kind === 'device') updateDevice(renamingId, { name: trimmed })
       else if (kind === 'textbox') updateTextBox(renamingId, { name: trimmed })
       else if (kind === 'image') updateImage(renamingId, { name: trimmed })
-      else if (kind === 'shape') useStore.getState().updateShape(renamingId, { name: trimmed })
+      else if (kind === 'shape') updateShape(renamingId, { name: trimmed })
       if (kind) pushHistory('Rename')
     }
     setRenamingId(null)
-  }, [renamingId, renameValue, groupEntries, scene.groups, renameGroup, pushHistory, updateDevice, updateTextBox, updateImage])
+  }, [renamingId, renameValue, groupEntries, scene.groups, renameGroup, pushHistory, updateDevice, updateTextBox, updateImage, updateShape])
 
   const handleLayerClick = useCallback(
     (e: React.MouseEvent, entry: LayerEntry) => {
@@ -239,14 +234,6 @@ export default function LayersPanel() {
           { label: 'Duplicate Group', action: () => { pushHistory('Duplicate group'); duplicateGroup(contextTarget.id) } },
           { divider: true, label: '', action: () => {} },
           { label: 'Ungroup', action: () => { pushHistory('Ungroup'); ungroup(contextTarget.id); clearSelection() } },
-          ...(scene.groups.some((g) => g.parentGroupId === null && g.id !== contextTarget.id)
-            ? [{ label: 'Nest in Group…', action: () => {}, submenu: scene.groups
-                .filter((g) => g.parentGroupId === null && g.id !== contextTarget.id)
-                .map((g) => ({
-                  label: g.name,
-                  action: () => { pushHistory('Nest group'); nestGroup(g.id, contextTarget.id) }
-                })) } as ContextMenuItem
-            ] : []),
           ...(scene.groups.some((g) => g.id !== contextTarget.id && g.parentGroupId === null)
             ? [{ label: 'Make Parent Group', action: () => {
                 const other = scene.groups.find((g) => g.id !== contextTarget.id && g.parentGroupId === null)
@@ -480,6 +467,25 @@ export default function LayersPanel() {
 
   return (
     <div>
+      <div className={clsx("flex items-center justify-between gap-2 mb-3 px-1", text.secondary)}>
+        <button
+          onClick={() => setActiveSceneIndex(Math.max(0, activeSceneIndex - 1))}
+          disabled={activeSceneIndex <= 0}
+          className={clsx("w-6 h-6 flex items-center justify-center rounded transition-colors", activeSceneIndex > 0 ? clsx(bg.hover, text.primary) : "opacity-30 cursor-default")}
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className={clsx("text-xs font-semibold truncate", text.primary)}>
+          {scenes[activeSceneIndex]?.name ?? 'Scene'}
+        </span>
+        <button
+          onClick={() => setActiveSceneIndex(Math.min(scenes.length - 1, activeSceneIndex + 1))}
+          disabled={activeSceneIndex >= scenes.length - 1}
+          className={clsx("w-6 h-6 flex items-center justify-center rounded transition-colors", activeSceneIndex < scenes.length - 1 ? clsx(bg.hover, text.primary) : "opacity-30 cursor-default")}
+        >
+          <ChevronRight size={14} />
+        </button>
+      </div>
       <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>
         Layers ({totalCount})
       </h3>

@@ -40,6 +40,7 @@ interface SerializedProject {
 interface SerializedScene {
   id: string
   name: string
+  pinned?: boolean
   canvas: { width: number; height: number; aspectRatio: string }
   background: SerializedBackground
   devices: SerializedDevice[]
@@ -97,6 +98,10 @@ interface SerializedTextBox {
   textAlign: string
   lineHeight: number
   letterSpacing: number
+  wordSpacing: number
+  textTransform: string
+  strokeColor: string
+  strokeWidth: number
   color: string
   gradient: SerializedTextGradient | null
   glow: SerializedTextGlow | null
@@ -148,8 +153,8 @@ interface SerializedShape {
   color: string
   gradient: { enabled: boolean; colors: string[]; angle: number } | null
   blur: number
-  glow: { enabled: boolean; color: string; blur: number; spread: number; opacity: number } | null
-  shadow: { enabled: boolean; color: string; offsetX: number; offsetY: number; blur: number; spread: number; opacity: number } | null
+  glow: SerializedImageGlow[]
+  shadow: SerializedImageShadow[]
   zIndex: number
   locked: boolean
   visible: boolean
@@ -159,8 +164,6 @@ interface SerializedShape {
   crossThickness: number
   plusThickness: number
   arrowThickness: number
-  glowArray?: SerializedImageGlow[]
-  shadowArray?: SerializedImageShadow[]
   groupId: string | null
 }
 
@@ -177,6 +180,12 @@ interface SerializedTitleText {
   fontFamily: string
   fontWeight: number
   textAlign: string
+  lineHeight: number
+  letterSpacing: number
+  wordSpacing: number
+  textTransform: string
+  strokeColor: string
+  strokeWidth: number
   color: string
   gradient: SerializedTextGradient | null
   glow: SerializedTextGlow | null
@@ -215,6 +224,7 @@ interface SerializedGrid {
   size: number
   color: string
   snapEnabled: boolean
+  style: string
 }
 
 /** Incrementing counter for unique asset filenames within a single save. */
@@ -299,6 +309,7 @@ export function serializeProject(
     return {
       id: s.id,
       name: s.name,
+      pinned: (scene as Record<string, unknown>).pinned as boolean ?? false,
       canvas: s.canvas,
       background,
       devices,
@@ -408,13 +419,12 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Buf
     const shapes = (scene.shapes ?? []).map((shape) => ({
       ...shape,
       shadow: normalizeShapeShadow(shape.shadow),
-      glow: normalizeShapeGlow(shape.glow),
-      glowArray: undefined,
-      shadowArray: undefined
+      glow: normalizeShapeGlow(shape.glow)
     }))
 
     return {
       ...scene,
+      pinned: scene.pinned ?? false,
       devices,
       images,
       shapes,

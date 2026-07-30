@@ -6,7 +6,6 @@ import SliderInput from '../shared/SliderInput'
 export interface GradientStop {
   color: string
   position: number
-  opacity: number
 }
 
 export interface GradientValue {
@@ -30,33 +29,24 @@ export interface GradientPreset {
 }
 
 const DEFAULT_PRESETS: GradientPreset[] = [
-  { name: 'sunset', label: 'Sunset', gradient: { type: 'linear', angle: 135, stops: [{ color: '#ff6b6b', position: 0, opacity: 100 }, { color: '#feca57', position: 50, opacity: 100 }, { color: '#ff9ff3', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'ocean', label: 'Ocean', gradient: { type: 'linear', angle: 180, stops: [{ color: '#0c2461', position: 0, opacity: 100 }, { color: '#0a3d62', position: 50, opacity: 100 }, { color: '#3dc1d3', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'forest', label: 'Forest', gradient: { type: 'linear', angle: 135, stops: [{ color: '#0d3b0d', position: 0, opacity: 100 }, { color: '#1e7b1e', position: 50, opacity: 100 }, { color: '#5cb85c', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'neon', label: 'Neon', gradient: { type: 'linear', angle: 90, stops: [{ color: '#ff00ff', position: 0, opacity: 100 }, { color: '#00ffff', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'fire', label: 'Fire', gradient: { type: 'linear', angle: 0, stops: [{ color: '#1a0000', position: 0, opacity: 100 }, { color: '#cc0000', position: 40, opacity: 100 }, { color: '#ff6600', position: 70, opacity: 100 }, { color: '#ffcc00', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'aurora', label: 'Aurora', gradient: { type: 'linear', angle: 135, stops: [{ color: '#0b1628', position: 0, opacity: 100 }, { color: '#1a0533', position: 33, opacity: 100 }, { color: '#0f3460', position: 66, opacity: 100 }, { color: '#16213e', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'peach', label: 'Peach', gradient: { type: 'linear', angle: 135, stops: [{ color: '#ffecd2', position: 0, opacity: 100 }, { color: '#fcb69f', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'midnight', label: 'Midnight', gradient: { type: 'linear', angle: 180, stops: [{ color: '#232526', position: 0, opacity: 100 }, { color: '#414345', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'royal', label: 'Royal', gradient: { type: 'linear', angle: 135, stops: [{ color: '#1e1b4b', position: 0, opacity: 100 }, { color: '#312e81', position: 50, opacity: 100 }, { color: '#4338ca', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'candy', label: 'Candy', gradient: { type: 'radial', angle: 0, stops: [{ color: '#fa709a', position: 0, opacity: 100 }, { color: '#fee140', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'steel', label: 'Steel', gradient: { type: 'linear', angle: 90, stops: [{ color: '#434343', position: 0, opacity: 100 }, { color: '#000000', position: 100, opacity: 100 }], radialShape: 'circle' } },
-  { name: 'cosmic', label: 'Cosmic', gradient: { type: 'conic', angle: 0, stops: [{ color: '#ff00cc', position: 0, opacity: 100 }, { color: '#3333cc', position: 50, opacity: 100 }, { color: '#ff00cc', position: 100, opacity: 100 }], radialShape: 'circle' } }
+  { name: 'sunset', label: 'Sunset', gradient: { type: 'linear', angle: 135, stops: [{ color: '#ff6b6b', position: 0 }, { color: '#feca57', position: 50 }, { color: '#ff9ff3', position: 100 }], radialShape: 'circle' } },
+  { name: 'ocean', label: 'Ocean', gradient: { type: 'linear', angle: 180, stops: [{ color: '#0c2461', position: 0 }, { color: '#0a3d62', position: 50 }, { color: '#3dc1d3', position: 100 }], radialShape: 'circle' } },
+  { name: 'forest', label: 'Forest', gradient: { type: 'linear', angle: 135, stops: [{ color: '#0d3b0d', position: 0 }, { color: '#1e7b1e', position: 50 }, { color: '#5cb85c', position: 100 }], radialShape: 'circle' } },
+  { name: 'neon', label: 'Neon', gradient: { type: 'linear', angle: 90, stops: [{ color: '#ff00ff', position: 0 }, { color: '#00ffff', position: 100 }], radialShape: 'circle' } },
+  { name: 'fire', label: 'Fire', gradient: { type: 'linear', angle: 0, stops: [{ color: '#1a0000', position: 0 }, { color: '#cc0000', position: 40 }, { color: '#ff6600', position: 70 }, { color: '#ffcc00', position: 100 }], radialShape: 'circle' } },
+  { name: 'aurora', label: 'Aurora', gradient: { type: 'linear', angle: 135, stops: [{ color: '#0b1628', position: 0 }, { color: '#1a0533', position: 33 }, { color: '#0f3460', position: 66 }, { color: '#16213e', position: 100 }], radialShape: 'circle' } },
+  { name: 'peach', label: 'Peach', gradient: { type: 'linear', angle: 135, stops: [{ color: '#ffecd2', position: 0 }, { color: '#fcb69f', position: 100 }], radialShape: 'circle' } },
+  { name: 'midnight', label: 'Midnight', gradient: { type: 'linear', angle: 180, stops: [{ color: '#232526', position: 0 }, { color: '#414345', position: 100 }], radialShape: 'circle' } },
+  { name: 'royal', label: 'Royal', gradient: { type: 'linear', angle: 135, stops: [{ color: '#1e1b4b', position: 0 }, { color: '#312e81', position: 50 }, { color: '#4338ca', position: 100 }], radialShape: 'circle' } },
+  { name: 'candy', label: 'Candy', gradient: { type: 'radial', angle: 0, stops: [{ color: '#fa709a', position: 0 }, { color: '#fee140', position: 100 }], radialShape: 'circle' } },
+  { name: 'steel', label: 'Steel', gradient: { type: 'linear', angle: 90, stops: [{ color: '#434343', position: 0 }, { color: '#000000', position: 100 }], radialShape: 'circle' } },
+  { name: 'cosmic', label: 'Cosmic', gradient: { type: 'conic', angle: 0, stops: [{ color: '#ff00cc', position: 0 }, { color: '#3333cc', position: 50 }, { color: '#ff00cc', position: 100 }], radialShape: 'circle' } }
 ]
 
 function buildCSSGradient(g: GradientValue): string {
   const stops = g.stops
     .sort((a, b) => a.position - b.position)
-    .map((s) => {
-      const alpha = s.opacity / 100
-      if (alpha < 1) {
-        const r = parseInt(s.color.slice(1, 3), 16)
-        const gv = parseInt(s.color.slice(3, 5), 16)
-        const b = parseInt(s.color.slice(5, 7), 16)
-        return `rgba(${r},${gv},${b},${alpha}) ${s.position}%`
-      }
-      return `${s.color} ${s.position}%`
-    })
+    .map((s) => `${s.color} ${s.position}%`)
     .join(', ')
 
   switch (g.type) {
@@ -78,8 +68,7 @@ function generateRandomGradient(): GradientValue {
   for (let i = 0; i < numStops; i++) {
     stops.push({
       color: randomColor(),
-      position: numStops === 1 ? 50 : Math.round((i / (numStops - 1)) * 100),
-      opacity: 100
+      position: numStops === 1 ? 50 : Math.round((i / (numStops - 1)) * 100)
     })
   }
   return {
@@ -109,7 +98,7 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
     const stops = [...value.stops]
     const lastPos = stops[stops.length - 1]?.position ?? 100
     const newPos = Math.min(100, lastPos + 10)
-    stops.push({ color: '#808080', position: newPos, opacity: 100 })
+    stops.push({ color: '#808080', position: newPos })
     onChange({ ...value, stops })
   }, [value, onChange])
 

@@ -51,19 +51,16 @@ export const createHistorySlice: StateCreator<StoreState, [], [], HistorySlice> 
   undoStack: [],
   redoStack: [],
 
-  pushHistory: (label) =>
+  pushHistory: (label) => {
     set((state) => {
       const snapshot = JSON.stringify(state.scenes)
       const entry: HistoryEntry = { scenesSnapshot: snapshot, timestamp: Date.now(), label }
       const stack = [...state.undoStack, entry]
       if (stack.length > MAX_HISTORY) stack.shift()
-
-      // Trigger auto-snapshot (version history) on next tick to avoid
-      // mutating state inside a set() callback.
-      setTimeout(() => get().maybeAutoSnapshot(), 0)
-
       return { undoStack: stack, redoStack: [] }
-    }),
+    })
+    setTimeout(() => get().maybeAutoSnapshot(), 0)
+  },
 
   undo: () => {
     const state = get()

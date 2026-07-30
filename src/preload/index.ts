@@ -61,19 +61,8 @@ const api = {
     ipcRenderer.send('open-user-guide')
   },
 
-  checkForUpdates: (): Promise<{ status: 'available' | 'up-to-date' | 'error'; currentVersion: string; latestVersion?: string; releaseNotes?: string; downloadUrl?: string; error?: string }> =>
-    ipcRenderer.invoke('check-for-updates'),
-
-  downloadUpdate: (url: string): Promise<{ success: boolean; error?: string }> =>
-    ipcRenderer.invoke('download-update', url),
-
-  onUpdateProgress: (callback: (percent: number) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, percent: number): void => callback(percent)
-    ipcRenderer.on('update-progress', handler)
-    return () => ipcRenderer.removeListener('update-progress', handler)
-  },
-
-  installUpdate: (): Promise<void> => ipcRenderer.invoke('install-update')
+  checkForUpdatesNow: (): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('check-for-updates-now')
 }
 
 contextBridge.exposeInMainWorld('api', api)

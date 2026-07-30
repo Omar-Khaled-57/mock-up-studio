@@ -1,6 +1,43 @@
 {
   "versions": [
     {
+      "version": "0.2.5",
+      "date": "2026-07-30",
+      "title": "Scene Tab Management & Release QA",
+      "origin": "Quality-of-life improvements to scene tab management (drag-to-reorder, pinning, collapsible bar, scroll arrows, scene switcher in LayersPanel). History contract bug fix in keyboard shortcuts. Full pre-release audit and cleanup.",
+      "sections": [
+        {
+          "heading": "Scene Tabs",
+          "items": [
+            "Drag-to-reorder tabs with visual drop indicator",
+            "Pin scenes to keep them anchored and protected from bulk delete",
+            "Collapsible tab bar with active scene header",
+            "Scroll arrows that step one tab at a time"
+          ]
+        },
+        {
+          "heading": "Layers",
+          "items": [
+            "Scene switcher in LayersPanel with ◀/▶ buttons"
+          ]
+        },
+        {
+          "heading": "Bug Fixes",
+          "items": [
+            "History contract: pushHistory called before mutations in keyboard shortcuts",
+            "Removed unused scrollbar theme tokens"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "Full pre-release audit, ESLint 0, TypeScript clean",
+            "231 tests passing, production build clean"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.2.0",
       "date": "2026-07-29",
       "title": "Shape System, Advanced Editors & Interactive Guides",

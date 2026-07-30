@@ -22,10 +22,7 @@ declare global {
       cancelClose: () => void
       onOpenFile: (callback: (filePath: string) => void) => (() => void)
       openUserGuide: () => void
-      checkForUpdates: () => Promise<{ status: 'available' | 'up-to-date' | 'error'; currentVersion: string; latestVersion?: string; releaseNotes?: string; downloadUrl?: string; error?: string }>
-      downloadUpdate: (url: string) => Promise<{ success: boolean; error?: string }>
-      onUpdateProgress: (callback: (percent: number) => void) => (() => void)
-      installUpdate: () => Promise<void>
+      checkForUpdatesNow: () => Promise<{ success: boolean; error?: string }>
     }
   }
 }
@@ -44,6 +41,14 @@ export interface ProjectSlice {
   saveProjectAs: () => Promise<boolean>
   openProject: () => Promise<boolean>
   newProject: () => void
+}
+
+function encodeAssets(assets: Map<string, Buffer>): string {
+  const assetsObj: Record<string, string> = {}
+  for (const [name, buffer] of assets) {
+    assetsObj[name] = buffer.toString('base64')
+  }
+  return JSON.stringify(assetsObj)
 }
 
 export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> = (set, get) => ({
@@ -80,11 +85,7 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
       activeSceneIndex
     )
 
-    const assetsObj: Record<string, string> = {}
-    for (const [name, buffer] of assets) {
-      assetsObj[name] = buffer.toString('base64')
-    }
-    const assetsJson = JSON.stringify(assetsObj)
+    const assetsJson = encodeAssets(assets)
 
     if (filePath) {
       const result = await window.api.saveProject(filePath, manifest, assetsJson)
@@ -114,11 +115,7 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
       activeSceneIndex
     )
 
-    const assetsObj: Record<string, string> = {}
-    for (const [name, buffer] of assets) {
-      assetsObj[name] = buffer.toString('base64')
-    }
-    const assetsJson = JSON.stringify(assetsObj)
+    const assetsJson = encodeAssets(assets)
 
     const result = await window.api.saveProjectAs(manifest, assetsJson)
     if (result?.success && result.filePath) {

@@ -10,6 +10,7 @@ export interface Project {
 export interface Scene {
   id: string
   name: string
+  pinned: boolean
   canvas: CanvasSettings
   background: Background
   devices: Device[]

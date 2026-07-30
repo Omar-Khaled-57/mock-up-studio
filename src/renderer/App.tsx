@@ -33,25 +33,12 @@ export default function App() {
   const cutSelected = useStore((s) => s.cutSelected)
   const pasteClipboard = useStore((s) => s.pasteClipboard)
   const selectAll = useStore((s) => s.selectAll)
-  const { isLight, clsx: themeClsx } = useTheme()
+  const { isLight } = useTheme()
 
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [updateVersion, setUpdateVersion] = useState<ChangelogVersion | null>(null)
 
-  const [updateCheckResult, setUpdateCheckResult] = useState<{ status: string; currentVersion: string; latestVersion?: string; releaseNotes?: string } | null>(null)
-
   const toggleShortcuts = useCallback(() => setShowShortcuts((v) => !v), [])
-
-  const handleCheckUpdates = useCallback(async () => {
-    if (!window.api?.checkForUpdates) return
-    const result = await window.api.checkForUpdates()
-    setUpdateCheckResult({
-      status: result.status,
-      currentVersion: result.currentVersion,
-      latestVersion: result.latestVersion,
-      releaseNotes: result.releaseNotes
-    })
-  }, [])
 
   // Check for version update on mount.
   useEffect(() => {
@@ -135,13 +122,13 @@ export default function App() {
           window.api?.openUserGuide?.()
           break
         case 'check-for-updates':
-          handleCheckUpdates()
+          window.api?.checkForUpdatesNow?.()
           break
       }
     })
 
     return cleanup
-  }, [saveProject, saveProjectAs, openProject, newProject, undo, redo, cutSelected, copySelected, pasteClipboard, selectAll, handleCheckUpdates])
+  }, [saveProject, saveProjectAs, openProject, newProject, undo, redo, cutSelected, copySelected, pasteClipboard, selectAll])
 
   useEffect(() => {
     if (!window.api?.onRequestClose) return
@@ -218,71 +205,6 @@ export default function App() {
         <PropertiesPanel />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
-        {updateCheckResult && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60" onClick={() => setUpdateCheckResult(null)}>
-            <div className={themeClsx("rounded-lg p-5 max-w-sm w-full mx-4", isLight ? "bg-white border border-zinc-200 shadow-lg" : "bg-zinc-900 border border-zinc-700")} onClick={(e) => e.stopPropagation()}>
-              {updateCheckResult.status === 'up-to-date' && (
-                <>
-                  <h3 className={themeClsx("text-sm font-semibold mb-2", isLight ? "text-zinc-900" : "text-zinc-100")}>Up to Date</h3>
-                  <p className={themeClsx("text-xs mb-3", isLight ? "text-zinc-500" : "text-zinc-400")}>You are using the latest version ({updateCheckResult.currentVersion}).</p>
-                </>
-              )}
-              {updateCheckResult.status === 'available' && (
-                <>
-                  <h3 className={themeClsx("text-sm font-semibold mb-2", isLight ? "text-zinc-900" : "text-zinc-100")}>Update Available</h3>
-                  <p className={themeClsx("text-xs mb-1", isLight ? "text-zinc-500" : "text-zinc-400")}>Current: <span className={themeClsx("", isLight ? "text-zinc-700" : "text-zinc-300")}>{updateCheckResult.currentVersion}</span></p>
-                  <p className={themeClsx("text-xs mb-2", isLight ? "text-zinc-500" : "text-zinc-400")}>Latest: <span className="text-emerald-500">{updateCheckResult.latestVersion}</span></p>
-                  {updateCheckResult.releaseNotes && (
-                    <div className={themeClsx("rounded p-2 mb-3 max-h-32 overflow-y-auto", isLight ? "bg-zinc-100" : "bg-zinc-800")}>
-                      <p className={themeClsx("text-[10px] whitespace-pre-wrap", isLight ? "text-zinc-500" : "text-zinc-400")}>{updateCheckResult.releaseNotes}</p>
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={async () => {
-                        if (!window.api?.downloadUpdate || !updateCheckResult.latestVersion) return
-                        const { downloadUrl } = await window.api.checkForUpdates()
-                        if (downloadUrl) {
-                          const result = await window.api.downloadUpdate(downloadUrl)
-                          if (result.success) {
-                            if (confirm('Update downloaded. Install now?')) {
-                              await window.api.installUpdate()
-                            }
-                          } else {
-                            alert('Download failed: ' + (result.error || 'unknown error'))
-                          }
-                        }
-                      }}
-                      className="flex-1 px-3 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-500 transition-colors"
-                    >
-                      Download & Install
-                    </button>
-                    <button
-                      onClick={() => setUpdateCheckResult(null)}
-                      className={themeClsx("flex-1 px-3 py-1.5 text-xs rounded hover:bg-zinc-200 transition-colors", isLight ? "bg-zinc-100 text-zinc-700" : "bg-zinc-800 text-zinc-300")}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </>
-              )}
-              {updateCheckResult.status === 'error' && (
-                <>
-                  <h3 className={themeClsx("text-sm font-semibold mb-2", isLight ? "text-zinc-900" : "text-zinc-100")}>Update Check Failed</h3>
-                  <p className={themeClsx("text-xs mb-3", isLight ? "text-zinc-500" : "text-zinc-400")}>Could not check for updates. Check your internet connection and try again.</p>
-                </>
-              )}
-              {updateCheckResult.status !== 'available' && (
-                <button
-                  onClick={() => setUpdateCheckResult(null)}
-                  className={themeClsx("w-full px-3 py-1.5 text-xs rounded hover:bg-zinc-200 transition-colors", isLight ? "bg-zinc-100 text-zinc-700" : "bg-zinc-800 text-zinc-300")}
-                >
-                  Close
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </ErrorBoundary>
   )

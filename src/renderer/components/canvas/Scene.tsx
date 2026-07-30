@@ -66,7 +66,7 @@ export default function Scene() {
       e.stopPropagation()
       const state = useStore.getState()
       const isInGroup = allElements.some(
-        (el) => el.data.id === id && 'groupId' in el.data && el.data.groupId
+        (el) => el.data.id === id && el.data.groupId
       )
       const items: ContextMenuItem[] = [
         { label: 'Bring to Front', action: () => { state.pushHistory('Bring to Front'); state.bringToFront(id) } },
@@ -78,7 +78,7 @@ export default function Scene() {
         { label: 'Delete', danger: true, action: () => { state.pushHistory('Delete'); state.deleteSelected([id]) } }
       ]
       if (isInGroup) {
-        const groupId = allElements.find((el) => el.data.id === id)?.['data']?.['groupId']
+        const groupId = allElements.find((el) => el.data.id === id)?.data.groupId
         if (groupId) {
           items.splice(5, 0, { label: '', divider: true, action: () => {} })
           items.splice(5, 0, { label: 'Ungroup', action: () => { state.pushHistory('Ungroup'); state.ungroup(groupId); state.clearSelection() } })

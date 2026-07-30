@@ -5,6 +5,26 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-07-30
+
+### Added
+- Scene tab drag-to-reorder with visual drop indicator
+- Scene pinning (pinned tabs grouped separately, not draggable, excluded from bulk delete)
+- Collapsible scene tab bar with header showing active scene name
+- Scroll arrows on tab bar (scroll one tab at a time)
+- Scene switcher in LayersPanel (◀/▶ arrows)
+- Rename scene via context menu
+
+### Fixed
+- History contract violation in keyboard shortcuts: `pushHistory` now called before `deleteSelected` and `duplicateSelected` so undo correctly restores pre-mutation state
+- Removed unused `scrollbar` theme tokens from `useTheme`
+
+### Removed
+- "Delete All Tabs" context menu option
+
+### Quality
+- Pre-release audit: ESLint 0, TypeScript clean, 231 tests passing, production build clean
+
 ## [0.2.0] - 2026-07-29
 
 ### Added

@@ -49,9 +49,5 @@ export function useTheme() {
       lg: isLight ? 'shadow-lg' : '',
       inner: isLight ? 'shadow-inner' : ''
     },
-    scrollbar: {
-      track: isLight ? 'bg-zinc-100' : 'bg-transparent',
-      thumb: isLight ? 'bg-zinc-300 hover:bg-zinc-400' : 'bg-zinc-700 hover:bg-zinc-600'
-    }
   }
 }

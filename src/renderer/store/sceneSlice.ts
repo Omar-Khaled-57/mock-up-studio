@@ -86,6 +86,7 @@ export function createDefaultScene(): Scene {
   return {
     id: generateId(),
     name: 'Scene 1',
+    pinned: false,
     canvas: { ...DEFAULT_CANVAS },
     background: {
       type: 'gradient',
@@ -200,6 +201,9 @@ export interface SceneSlice {
   duplicateScene: (index: number) => void
   deleteScene: (index: number) => void
   renameScene: (index: number, name: string) => void
+  togglePinScene: (index: number) => void
+  reorderScene: (fromIndex: number, toIndex: number) => void
+  deleteScenes: (indices: number[]) => void
 }
 
 export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (set, get) => ({
@@ -807,5 +811,40 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const scenes = [...state.scenes]
       scenes[index] = { ...scenes[index], name }
       return { scenes }
+    }),
+
+  togglePinScene: (index) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      scenes[index] = { ...scenes[index], pinned: !scenes[index].pinned }
+      return { scenes }
+    }),
+
+  reorderScene: (fromIndex, toIndex) =>
+    set((state) => {
+      const scenes = [...state.scenes]
+      const [moved] = scenes.splice(fromIndex, 1)
+      scenes.splice(toIndex, 0, moved)
+      let newActive = state.activeSceneIndex
+      if (fromIndex === state.activeSceneIndex) {
+        newActive = toIndex
+      } else {
+        if (fromIndex < state.activeSceneIndex && toIndex >= state.activeSceneIndex) {
+          newActive = state.activeSceneIndex - 1
+        } else if (fromIndex > state.activeSceneIndex && toIndex <= state.activeSceneIndex) {
+          newActive = state.activeSceneIndex + 1
+        }
+      }
+      return { scenes, activeSceneIndex: newActive }
+    }),
+
+  /** Removes multiple scenes by index. Protects against deleting the last scene. */
+  deleteScenes: (indices) =>
+    set((state) => {
+      const indicesSet = new Set(indices)
+      const remaining = state.scenes.filter((_, i) => !indicesSet.has(i))
+      if (remaining.length === 0) return state
+      const newActive = Math.min(state.activeSceneIndex, remaining.length - 1)
+      return { scenes: remaining, activeSceneIndex: newActive, selectedIds: [] }
     })
 })

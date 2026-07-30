@@ -14,12 +14,13 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Drag & Resize** — 60fps pointer-event-based dragging with direct DOM mutation
 - **Smart Snapping** — Snap to element edges, canvas center, grid, and guides
 - **Text Editing** — Inline editing with gradient, glow, shadow, and multiple font weights
-- **Image Overlays** — Upload, position, and style images on top of device screens
+- **Image Overlays** — Upload, position, and style images with effects (opacity, blur, glow, shadow, blend modes, flip)
+- **Shape System** — 11 SVG shape kinds with fill, gradient, shadow, glow, and background image
 - **Background Presets** — 7 built-in backgrounds (Aurora, Neon Grid, Blue Cyber, etc.)
-- **Themes Panel** — Solid, gradient, and preset background controls
-- **Multi-Scene** — Multiple scenes per project with tab navigation
+- **Themes Panel** — Solid, gradient, and preset background controls; 17 color theme presets
+- **Multi-Scene** — Multiple scenes per project with tab navigation, drag-to-reorder, pinning
 - **Version History** — Auto-snapshots every 5 minutes with manual save/restore
-- **Layer Management** — Z-order reordering, visibility toggle, lock, inline rename, drag reorder
+- **Layer Management** — Z-order reordering, visibility toggle, lock, inline rename, drag reorder, groups
 - **Alignment Tools** — Align selected elements (left, center, right, top, middle, bottom)
 - **Dark / Light UI** — Toggle between dark and light interface themes
 - **Export Engine** — PNG, JPEG, WebP at 1x–4x scale with solid/transparent/custom backgrounds
@@ -113,7 +114,7 @@ src/
     types.ts               Core interfaces (Scene, Device, TextBox, etc.)
   renderer/
     App.tsx                Root layout, keyboard shortcuts, close guard, file association
-    store/                 Zustand (10 slices merged)
+    store/                 Zustand (11 slices merged)
     hooks/                 useDrag, useResize, useSnapping, useKeyboardShortcuts, useDebouncedHistory, useTheme
     lib/                   constants, device-utils, export-engine, color-extraction, project-serialization
     components/
@@ -122,7 +123,7 @@ src/
       text/                InlineEditor, TitleBlock, TextBox
       images/              ImageOverlay
       backgrounds/         7 background presets + Solid/Gradient
-      sidebar/             Sidebar, 9 panels, SceneTabs, ExportDialog, LayoutTemplates
+      sidebar/             Sidebar, 11 panels, SceneTabs, ExportDialog, LayoutTemplates
       shared/              ResizeHandles, ContextMenu, ShortcutsModal, ErrorBoundary
       splash/              SplashScreen
 ```
@@ -131,12 +132,13 @@ src/
 
 ### State Management
 
-The Zustand store is composed of 10 slices merged into a single state object:
+The Zustand store is composed of 11 slices merged into a single state object:
 
 | Slice | Responsibility |
 |-------|---------------|
 | `projectSlice` | File path, dirty state, save/open/new |
 | `sceneSlice` | Scene CRUD, z-order, grid/guides, `safeScene()` |
+| `shapeSlice` | Shape CRUD (independent from sceneSlice) |
 | `selectionSlice` | Multi-select, select-all, alignment |
 | `historySlice` | Undo/redo (JSON snapshots, 500 max) |
 | `viewportSlice` | Zoom, pan, fit-to-window |
@@ -167,7 +169,7 @@ assets/                Device screens, images, thumbnails (base64 in manifest)
 
 ## Testing
 
-136 tests across 12 files covering all store slices, utility functions, and export logic.
+231 tests across 14 files covering all store slices, utility functions, export logic, shape system, and device interactions.
 
 ## License
 

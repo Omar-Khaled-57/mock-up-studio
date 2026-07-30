@@ -8,6 +8,7 @@ export function useKeyboardShortcuts() {
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
+  const updateShape = useStore((s) => s.updateShape)
   const deleteSelected = useStore((s) => s.deleteSelected)
   const duplicateSelected = useStore((s) => s.duplicateSelected)
   const pushHistory = useStore((s) => s.pushHistory)
@@ -30,6 +31,8 @@ export function useKeyboardShortcuts() {
       if (textBox) return { type: 'textbox' as const, el: textBox }
       const image = scene.images.find((i) => i.id === id)
       if (image) return { type: 'image' as const, el: image }
+      const shape = scene.shapes.find((s) => s.id === id)
+      if (shape) return { type: 'shape' as const, el: shape }
       return null
     }
 
@@ -54,6 +57,9 @@ export function useKeyboardShortcuts() {
             break
           case 'image':
             updateImage(id, { x: newX, y: newY })
+            break
+          case 'shape':
+            updateShape(id, { x: newX, y: newY })
             break
         }
       }
@@ -144,8 +150,8 @@ export function useKeyboardShortcuts() {
       if (mod && e.key === 'd') {
         e.preventDefault()
         if (selectedIds.length > 0) {
-          const newIds = duplicateSelected(selectedIds)
           pushHistory('Duplicate')
+          const newIds = duplicateSelected(selectedIds)
           useStore.setState({ selectedIds: newIds })
         }
         return
@@ -169,8 +175,8 @@ export function useKeyboardShortcuts() {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.length > 0) {
           e.preventDefault()
-          deleteSelected(selectedIds)
           pushHistory('Delete')
+          deleteSelected(selectedIds)
         }
         return
       }
@@ -209,6 +215,7 @@ export function useKeyboardShortcuts() {
     updateDevice,
     updateTextBox,
     updateImage,
+    updateShape,
     deleteSelected,
     duplicateSelected,
     pushHistory,

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback, useRef, useState, useLayoutEffect } from 'react'
+import { useEffect, useCallback, useRef, useState, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useTheme } from '../../hooks/useTheme'
 
@@ -41,9 +41,21 @@ export function ContextMenu({ items, x, y, onClose }: MenuProps) {
   useLayoutEffect(() => {
     if (!ref.current) return
     const rect = ref.current.getBoundingClientRect()
-    const adjustedX = Math.min(x, window.innerWidth - rect.width - 12)
-    const adjustedY = Math.min(y, window.innerHeight - rect.height - 12)
-    setPos({ x: Math.max(2, adjustedX), y: Math.max(2, adjustedY) })
+    const margin = 8
+    let adjustedX = x
+    let adjustedY = y
+
+    if (x + rect.width > window.innerWidth - margin) {
+      adjustedX = window.innerWidth - rect.width - margin
+    }
+    if (x < margin) adjustedX = margin
+
+    if (y + rect.height > window.innerHeight - margin) {
+      adjustedY = y - rect.height - margin
+    }
+    if (adjustedY < margin) adjustedY = margin
+
+    setPos({ x: adjustedX, y: adjustedY })
   }, [x, y])
 
   const menu = (
