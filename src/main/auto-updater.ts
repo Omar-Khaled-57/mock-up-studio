@@ -22,10 +22,18 @@ import { is } from '@electron-toolkit/utils'
 let updateCheckInterval: ReturnType<typeof setInterval> | null = null
 
 export function initAutoUpdater(mainWindow: BrowserWindow): void {
-  if (is.dev) return
-
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
+
+  /**
+   * Sends an error IPC message to the renderer so the UI can show
+   * a user-friendly dialog. Works for both automatic and manual checks.
+   */
+  const notifyError = (message: string) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-check-error', message)
+    }
+  }
 
   autoUpdater.on('update-available', async (info) => {
     const { response } = await dialog.showMessageBox(mainWindow, {
@@ -67,11 +75,15 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
 
   autoUpdater.on('error', (err) => {
     console.error('Auto-updater error:', err.message)
+    notifyError(`Could not check for updates. ${err.message}`)
   })
 
   autoUpdater.on('update-not-available', () => {
     console.log('No update available.')
   })
+
+  // Skip automatic checks in dev mode (not packaged).
+  if (is.dev) return
 
   // Check on startup (after a short delay to avoid blocking launch).
   setTimeout(() => {

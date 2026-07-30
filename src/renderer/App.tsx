@@ -131,6 +131,16 @@ export default function App() {
   }, [saveProject, saveProjectAs, openProject, newProject, undo, redo, cutSelected, copySelected, pasteClipboard, selectAll])
 
   useEffect(() => {
+    if (!window.api?.onUpdateCheckError) return
+
+    const cleanup = window.api.onUpdateCheckError((message: string) => {
+      alert(`Update Check Failed\n\n${message}\n\nCheck your internet connection and try again.`)
+    })
+
+    return cleanup
+  }, [])
+
+  useEffect(() => {
     if (!window.api?.onRequestClose) return
 
     const cleanup = window.api.onRequestClose(() => {

@@ -222,7 +222,7 @@ export function registerIpcHandlers(): void {
    */
   ipcMain.handle('check-for-updates-now', async () => {
     try {
-      autoUpdater.checkForUpdates()
+      await autoUpdater.checkForUpdates()
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }
