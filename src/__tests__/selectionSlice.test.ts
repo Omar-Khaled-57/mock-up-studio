@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useStore } from '../renderer/store'
+import { focusFilterFor } from '../renderer/services/focus'
 import { resetStore, makeDevice, makeTextBox, makeImage, makeShape } from './helpers'
 beforeEach(() => {
   vi.useFakeTimers()
@@ -267,5 +268,59 @@ describe('group-aware select', () => {
     store.select('grp-dev-1')
     store.select('grp-dev-1', true)
     expect(useStore.getState().selectedIds).toEqual([])
+  })
+})
+
+describe('focus-filtered selection', () => {
+  function focusedScene() {
+    const devIn = makeDevice({ id: 'dev-in', x: 0, y: 0, width: 100, height: 100, groupId: 'g-1' })
+    const devInSub = makeDevice({ id: 'dev-in-sub', x: 200, y: 0, width: 100, height: 100, groupId: 'g-1-1' })
+    const devOut = makeDevice({ id: 'dev-out', x: 0, y: 200, width: 100, height: 100 })
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{
+        ...scene,
+        devices: [devIn, devInSub, devOut],
+        groups: [
+          { id: 'g-1', name: 'G', childIds: ['dev-in', 'dev-in-sub'], parentGroupId: null },
+          { id: 'g-1-1', name: 'Sub', childIds: ['dev-in-sub'], parentGroupId: 'g-1' }
+        ]
+      }]
+    })
+  }
+
+  it('selectAll with a focus filter selects only the focused subtree', () => {
+    focusedScene()
+    const scene = useStore.getState().scenes[0]
+    useStore.getState().selectAll(focusFilterFor('g-1', scene))
+    expect(useStore.getState().selectedIds).toEqual(['dev-in', 'dev-in-sub'])
+  })
+
+  it('selectAll with a nested focus filter selects only that subgroup', () => {
+    focusedScene()
+    const scene = useStore.getState().scenes[0]
+    useStore.getState().selectAll(focusFilterFor('g-1-1', scene))
+    expect(useStore.getState().selectedIds).toEqual(['dev-in-sub'])
+  })
+
+  it('selectInRect with a focus filter excludes out-of-scope elements', () => {
+    focusedScene()
+    const scene = useStore.getState().scenes[0]
+    useStore.getState().selectInRect(0, 0, 400, 400, focusFilterFor('g-1', scene))
+    expect(useStore.getState().selectedIds).toEqual(['dev-in', 'dev-in-sub'])
+  })
+
+  it('select with a focus filter cannot select an out-of-scope element', () => {
+    focusedScene()
+    const scene = useStore.getState().scenes[0]
+    useStore.getState().select('dev-out', false, focusFilterFor('g-1', scene))
+    expect(useStore.getState().selectedIds).toEqual([])
+  })
+
+  it('select with a focus filter still expands group members within scope', () => {
+    focusedScene()
+    const scene = useStore.getState().scenes[0]
+    useStore.getState().select('dev-in', false, focusFilterFor('g-1', scene))
+    expect(useStore.getState().selectedIds).toEqual(['dev-in', 'dev-in-sub'])
   })
 })

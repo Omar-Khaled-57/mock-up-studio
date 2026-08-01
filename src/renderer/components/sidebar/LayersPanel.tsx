@@ -1,10 +1,11 @@
 import { useCallback, useState, useMemo } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useRuntimeStore } from '../../runtime/store'
 import { useTheme } from '../../hooks/useTheme'
 import { ContextMenu, useContextMenu, type ContextMenuItem } from '../shared/ContextMenu'
 import type { ElementKind } from '../../store/sceneSlice'
-import { Monitor, Type, Image, Hexagon, Eye, EyeOff, Lock, Unlock, Folder, ChevronRight, ChevronDown, ChevronLeft } from 'lucide-react'
+import { Monitor, Type, Image, Hexagon, Eye, EyeOff, Lock, Unlock, Folder, ChevronRight, ChevronDown, ChevronLeft, X } from 'lucide-react'
 
 interface LayerEntry {
   id: string
@@ -50,6 +51,9 @@ export default function LayersPanel() {
   const duplicateGroup = useStore((s) => s.duplicateGroup)
   const groupSelected = useStore((s) => s.groupSelected)
   const makeParentGroup = useStore((s) => s.makeParentGroup)
+  const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
+  const enterFocus = useRuntimeStore((s) => s.enterFocus)
+  const exitFocus = useRuntimeStore((s) => s.exitFocus)
 
   const { menu, open: openMenu, close: closeMenu } = useContextMenu()
   const [contextTarget, setContextTarget] = useState<{ id: string; kind: ElementKind; name: string } | null>(null)
@@ -63,7 +67,7 @@ export default function LayersPanel() {
     id, kind, name, visible, locked, zIndex, groupId
   })
 
-  const groupEntries: GroupEntry[] = useMemo(() => {
+  const { groupEntries, focusRoot } = useMemo(() => {
     const groups: GroupEntry[] = []
     for (const g of scene.groups) {
       groups.push({ id: g.id, name: g.name, children: [], parentGroupId: g.parentGroupId ?? null })
@@ -115,13 +119,23 @@ export default function LayersPanel() {
       if (!result.some((r) => r.id === g.id)) result.push(g)
     }
     result.push(...flatOrphans.filter((f) => !result.some((r) => r.id === f.id)))
-    return result.filter((g) => g.children.length > 0)
-  }, [scene.devices, scene.textBoxes, scene.images, scene.shapes, scene.groups])
 
-  const totalCount = useMemo(() =>
-    groupEntries.reduce((sum, g) => sum + g.children.length, 0),
-    [groupEntries]
-  )
+    let focusRoot: GroupEntry | null = null
+    if (focusGroupId) {
+      const entry = groups.find((g) => g.id === focusGroupId)
+      if (entry) focusRoot = { ...entry, parentGroupId: null }
+    }
+
+    return {
+      groupEntries: result.filter((g) => g.children.length > 0),
+      focusRoot
+    }
+  }, [scene.devices, scene.textBoxes, scene.images, scene.shapes, scene.groups, focusGroupId])
+
+  const totalCount = useMemo(() => {
+    const list = focusRoot ? [focusRoot] : groupEntries
+    return list.reduce((sum, g) => sum + g.children.length, 0)
+  }, [groupEntries, focusRoot])
 
   const toggleVisibility = useCallback(
     (kind: ElementKind, id: string) => {
@@ -299,8 +313,8 @@ export default function LayersPanel() {
         }
         return 0
       })()
-      useStore.getState().reorderLayer(dragId, sourceKind, targetZ)
       pushHistory('Reorder layer')
+      useStore.getState().reorderLayer(dragId, sourceKind, targetZ)
       setDragId(null)
     },
     [dragId, groupEntries, pushHistory]
@@ -405,13 +419,15 @@ export default function LayersPanel() {
       }
     }
 
-    const groupGroup = scene.groups.find((g) => g.id === group.id)
-    const parentGroup = groupGroup?.parentGroupId ? scene.groups.find((g) => g.id === groupGroup.parentGroupId) : null
+    const parentGroup = group.parentGroupId ? scene.groups.find((g) => g.id === group.parentGroupId) : null
 
     return (
       <div key={group.id}>
         <div
-          onClick={() => toggleExpand(group.id)}
+          onClick={(e) => {
+            if (e.detail >= 2) enterFocus(group.id)
+            else toggleExpand(group.id)
+          }}
           onContextMenu={(e) => handleGroupContext(e, group.id, group.name)}
           style={{ paddingLeft: parentGroup ? 24 : 0 }}
           className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", (allChildSelected || someChildSelected) ? 'bg-purple-500/10 border border-purple-500/20' : clsx("border border-transparent", bg.hover))}
@@ -489,11 +505,29 @@ export default function LayersPanel() {
       <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>
         Layers ({totalCount})
       </h3>
+      {focusGroupId && (
+        <div
+          data-focus-tree-header
+          className={clsx("flex items-center justify-between gap-2 mb-2 px-2 py-1.5 rounded-lg border", border.secondary, bg.tertiary)}
+        >
+          <span className={clsx("text-[11px] font-semibold truncate", text.primary)}>
+            Focus: {focusRoot?.name ?? 'Group'}
+          </span>
+          <button
+            type="button"
+            aria-label="Exit focus mode"
+            onClick={exitFocus}
+            className={clsx("w-5 h-5 flex items-center justify-center rounded transition-colors", bg.hover, text.muted)}
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
       {totalCount === 0 ? (
         <p className={clsx("text-[11px]", text.muted)}>No elements on canvas yet</p>
       ) : (
         <div className="space-y-0.5">
-          {groupEntries.map((group) => renderGroup(group))}
+          {(focusRoot ? [focusRoot] : groupEntries).map((group) => renderGroup(group))}
         </div>
       )}
 

@@ -1,5 +1,4 @@
 interface Props {
-  onMouseDown: (e: React.PointerEvent, handle: 'nw' | 'ne' | 'sw' | 'se') => void
   groupId?: string | null
   groupName?: string | null
 }
@@ -11,7 +10,12 @@ const HANDLES: { pos: React.CSSProperties; handle: 'nw' | 'ne' | 'sw' | 'se' }[]
   { pos: { bottom: -8, right: -8, cursor: 'se-resize' }, handle: 'se' }
 ]
 
-export default function ResizeHandles({ onMouseDown, groupId, groupName }: Props) {
+/**
+ * Presentational selection chrome. Handles carry `data-resize-handle` so the
+ * Tool Manager's dispatcher can hit-test them; they have no pointer handlers
+ * of their own.
+ */
+export default function ResizeHandles({ groupId, groupName }: Props) {
   const isGrouped = !!groupId
   const color = isGrouped ? '#a855f7' : '#3b82f6'
   const borderColor = isGrouped ? '#7e22ce' : '#1d4ed8'
@@ -21,10 +25,7 @@ export default function ResizeHandles({ onMouseDown, groupId, groupName }: Props
       {HANDLES.map(({ pos, handle }) => (
         <div
           key={handle}
-          onPointerDown={(e) => {
-            e.stopPropagation()
-            onMouseDown(e, handle)
-          }}
+          data-resize-handle={handle}
           style={{
             position: 'absolute',
             width: 12,

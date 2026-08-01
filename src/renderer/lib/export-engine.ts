@@ -3,8 +3,9 @@
  *
  * How it works:
  *   1. Finds the `[data-scene-export]` DOM node (the Scene component).
- *   2. Deep-clones it, positions it offscreen (-99999px), and removes the
- *      `data-watermark` overlay (not part of exports).
+ *   2. Deep-clones it, positions it offscreen (-99999px), and removes
+ *      transient editor chrome (`data-watermark`, `data-guide`) that must
+ *      never appear in exports.
  *   3. Applies background color override if "solid" or "transparent" mode.
  *   4. Appends the clone to `document.body` (required by modern-screenshot
  *      to resolve styles and compute layout).
@@ -67,8 +68,14 @@ export async function exportScene(options: ExportOptions): Promise<Blob | null> 
 
   document.body.appendChild(cloned)
 
-  const watermarkEl = cloned.querySelector('[data-watermark]') as HTMLElement | null
-  if (watermarkEl) watermarkEl.remove()
+  // Transient editor chrome must never appear in exports.
+  cloned.querySelectorAll('[data-watermark], [data-guide]').forEach((el) => el.remove())
+
+  // For solid/transparent exports the scene's own background layer would
+  // cover the override — remove it so the override shows through.
+  if (options.background !== 'scene') {
+    cloned.querySelectorAll('[data-scene-background]').forEach((el) => el.remove())
+  }
 
   try {
     const blob = await domToBlob(cloned, {

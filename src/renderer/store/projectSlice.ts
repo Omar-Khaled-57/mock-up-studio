@@ -3,6 +3,8 @@ import { Project } from '@shared/types'
 import { StoreState } from './index'
 import { serializeProject, loadProjectFromZipResult } from '../lib/project-serialization'
 import { createDefaultScene } from './sceneSlice'
+import { resetRuntime } from '../runtime/store'
+import { withDirtySuppressed } from './dirtyTracking'
 
 declare global {
   interface Window {
@@ -44,10 +46,15 @@ export interface ProjectSlice {
   newProject: () => void
 }
 
-function encodeAssets(assets: Map<string, Buffer>): string {
+function encodeAssets(assets: Map<string, Uint8Array>): string {
   const assetsObj: Record<string, string> = {}
-  for (const [name, buffer] of assets) {
-    assetsObj[name] = buffer.toString('base64')
+  for (const [name, bytes] of assets) {
+    let binary = ''
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    assetsObj[name] = btoa(binary)
   }
   return JSON.stringify(assetsObj)
 }
@@ -133,17 +140,21 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
 
       const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
-      set({
-        project: project as unknown as Project,
-        scenes: scenes as never[],
-        activeSceneIndex,
-        filePath: result.filePath,
-        dirty: false,
-        lastSaved: Date.now(),
-        undoStack: [],
-        redoStack: [],
-        selectedIds: []
-      })
+      withDirtySuppressed(() =>
+        set({
+          project: project as unknown as Project,
+          scenes: scenes as never[],
+          activeSceneIndex,
+          filePath: result.filePath,
+          dirty: false,
+          lastSaved: Date.now(),
+          undoStack: [],
+          redoStack: [],
+          selectedIds: []
+        })
+      )
+      // New document — restore default tool, clear focus and transient state.
+      resetRuntime('all')
 
       return true
     } catch (err) {
@@ -156,23 +167,26 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
     const id = crypto.randomUUID()
     const now = Date.now()
     const defaultScene = createDefaultScene()
-    set({
-      project: {
-        id,
-        name: 'Untitled',
-        createdAt: now,
-        updatedAt: now,
+    withDirtySuppressed(() =>
+      set({
+        project: {
+          id,
+          name: 'Untitled',
+          createdAt: now,
+          updatedAt: now,
+          scenes: [defaultScene],
+          activeSceneIndex: 0
+        },
         scenes: [defaultScene],
-        activeSceneIndex: 0
-      },
-      scenes: [defaultScene],
-      activeSceneIndex: 0,
-      filePath: null,
-      dirty: false,
-      lastSaved: null,
-      undoStack: [],
-      redoStack: [],
-      selectedIds: []
-    })
+        activeSceneIndex: 0,
+        filePath: null,
+        dirty: false,
+        lastSaved: null,
+        undoStack: [],
+        redoStack: [],
+        selectedIds: []
+      })
+    )
+    resetRuntime('all')
   }
 })

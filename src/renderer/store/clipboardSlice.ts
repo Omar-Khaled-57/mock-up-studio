@@ -14,7 +14,7 @@
  */
 
 import { StateCreator } from 'zustand'
-import { Device, TextBox, ImageOverlay, Shape } from '@shared/types'
+import { Device, TextBox, ImageOverlay, Shape, Mask } from '@shared/types'
 import { StoreState } from './index'
 import { safeScene } from './sceneSlice'
 import { generateId } from '../lib/id'
@@ -23,6 +23,8 @@ interface ClipboardEntry {
   id: string
   kind: 'device' | 'textbox' | 'image' | 'shape'
   data: Device | TextBox | ImageOverlay | Shape
+  /** Masks targeting the copied element, cloned so paste can re-target them. */
+  masks: Mask[]
 }
 
 export interface ClipboardSlice {
@@ -49,24 +51,25 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
     const entries: ClipboardEntry[] = []
 
     for (const id of state.selectedIds) {
+      const masks = scene.masks.filter((m) => m.targetId === id).map((m) => ({ ...m }))
       const dev = scene.devices.find((d) => d.id === id)
       if (dev) {
-        entries.push({ id: dev.id, kind: 'device', data: { ...dev } })
+        entries.push({ id: dev.id, kind: 'device', data: { ...dev }, masks })
         continue
       }
       const tb = scene.textBoxes.find((t) => t.id === id)
       if (tb) {
-        entries.push({ id: tb.id, kind: 'textbox', data: { ...tb } })
+        entries.push({ id: tb.id, kind: 'textbox', data: { ...tb }, masks })
         continue
       }
       const img = scene.images.find((i) => i.id === id)
       if (img) {
-        entries.push({ id: img.id, kind: 'image', data: { ...img } })
+        entries.push({ id: img.id, kind: 'image', data: { ...img }, masks })
         continue
       }
       const shape = scene.shapes.find((s) => s.id === id)
       if (shape) {
-        entries.push({ id: shape.id, kind: 'shape', data: { ...shape } })
+        entries.push({ id: shape.id, kind: 'shape', data: { ...shape }, masks })
       }
     }
 
@@ -79,24 +82,25 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
     const entries: ClipboardEntry[] = []
 
     for (const id of state.selectedIds) {
+      const masks = scene.masks.filter((m) => m.targetId === id).map((m) => ({ ...m }))
       const dev = scene.devices.find((d) => d.id === id)
       if (dev) {
-        entries.push({ id: dev.id, kind: 'device', data: { ...dev } })
+        entries.push({ id: dev.id, kind: 'device', data: { ...dev }, masks })
         continue
       }
       const tb = scene.textBoxes.find((t) => t.id === id)
       if (tb) {
-        entries.push({ id: tb.id, kind: 'textbox', data: { ...tb } })
+        entries.push({ id: tb.id, kind: 'textbox', data: { ...tb }, masks })
         continue
       }
       const img = scene.images.find((i) => i.id === id)
       if (img) {
-        entries.push({ id: img.id, kind: 'image', data: { ...img } })
+        entries.push({ id: img.id, kind: 'image', data: { ...img }, masks })
         continue
       }
       const shape = scene.shapes.find((s) => s.id === id)
       if (shape) {
-        entries.push({ id: shape.id, kind: 'shape', data: { ...shape } })
+        entries.push({ id: shape.id, kind: 'shape', data: { ...shape }, masks })
       }
     }
 
@@ -122,6 +126,8 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
 
     const newIds: string[] = []
     const offset = 30
+
+    state.pushHistory('Paste')
 
     for (const entry of clipboard) {
       const newId = generateId()
@@ -174,13 +180,16 @@ export const createClipboardSlice: StateCreator<StoreState, [], [], ClipboardSli
         state.addShape(dup)
         newIds.push(newId)
       }
+
+      for (const m of entry.masks ?? []) {
+        state.addMask({ ...m, id: generateId(), targetId: newId })
+      }
     }
 
     if (clipboardMode === 'cut') {
       set({ clipboard: [], clipboardMode: null })
     }
 
-    state.pushHistory('Paste')
     set({ selectedIds: newIds })
     return newIds
   }

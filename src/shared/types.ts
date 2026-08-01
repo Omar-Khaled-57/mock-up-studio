@@ -22,6 +22,7 @@ export interface Scene {
   guides: Guide[]
   grid: GridSettings
   groups: ElementGroup[]
+  masks: Mask[]
 }
 
 export interface TitleText {
@@ -137,6 +138,24 @@ export interface TextBox {
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion'
 
+/**
+ * Non-destructive per-element image effects. Linear adjustments use a
+ * normalized range with 100 = neutral (0–200); bipolar axes (hue,
+ * temperature, tint) use 0 = neutral; blur uses 0 = neutral (px).
+ * Gamma/temperature/tint are CSS approximations (architecture §11).
+ */
+export interface ImageEffects {
+  brightness: number
+  contrast: number
+  exposure: number
+  saturation: number
+  hue: number
+  gamma: number
+  temperature: number
+  tint: number
+  blur: number
+}
+
 export interface ImageOverlay {
   id: string
   name: string
@@ -158,6 +177,7 @@ export interface ImageOverlay {
   locked: boolean
   visible: boolean
   groupId: string | null
+  effects?: ImageEffects
 }
 
 export interface Background {
@@ -219,6 +239,33 @@ export interface GlowLayer {
   opacity: number
 }
 
+export type MaskShape = 'rectangle' | 'ellipse' | 'brush'
+
+export interface MaskPoint {
+  x: number
+  y: number
+}
+
+/**
+ * A first-class, reusable mask applied to a target element as a CSS clip.
+ * Geometry lives in the target element's LOCAL coordinate frame (0..target
+ * width/height) so the clip rotates with the element. `x/y/width/height`
+ * define the bounding box for rectangle/ellipse masks and the bounds of a
+ * brush (freehand) mask; `points` carries the brush polygon. `inverted`
+ * toggles punch (inverse) rendering via evenodd clip-path compositing.
+ */
+export interface Mask {
+  id: string
+  targetId: string
+  shape: MaskShape
+  x: number
+  y: number
+  width: number
+  height: number
+  points: MaskPoint[]
+  inverted: boolean
+}
+
 export interface Shape {
   id: string
   kind: ShapeKind
@@ -244,4 +291,5 @@ export interface Shape {
   plusThickness: number
   arrowThickness: number
   groupId: string | null
+  effects?: ImageEffects
 }

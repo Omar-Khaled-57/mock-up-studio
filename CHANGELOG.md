@@ -5,6 +5,33 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 2026-07-31
+
+### Fixed
+- **Unsaved-changes guard now catches scene edits** — editing the canvas (move/resize/brush/mask/effects, etc.) marks the project dirty, so closing/new/open no longer silently discards changes (critical data-loss fix)
+- User guides no longer leak into exported images
+- Export background overrides (solid color / transparent) now actually apply instead of being covered by the scene background
+- Resize now commits to the store only on pointer-up (like drag), so a cancelled resize leaves the document untouched
+- Escape / window blur / full reset cancel in-flight gestures (drag, resize, pan, marquee, brush strokes, mask strokes) so no stranded session can commit against a later scene
+- Window blur no longer leaves the app stuck in a temporary Hand tool
+- Removed an unvalidated `save-image` IPC channel that could write to arbitrary absolute paths (security fix)
+- Scene edits now surface correctly in undo/redo dirty tracking after a save
+
+### Quality
+- 618 tests / 39 files passing (was 602/39); lint, typecheck, and production build clean; NSIS + portable packaging verified
+
+## [0.2.7] - 2026-07-30
+
+### Added
+- Download progress bar in the app footer during auto-update downloads
+- Error dialog when auto-update download fails
+
+### Fixed
+- Auto-update "Download" button now shows visible progress instead of appearing to do nothing
+
+### Changed
+- Version bump from 0.2.6 → 0.2.7
+
 ## [0.2.6] - 2026-07-30
 
 ### Fixed

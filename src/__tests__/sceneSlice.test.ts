@@ -638,3 +638,40 @@ describe('findElementKind', () => {
     expect(useStore.getState().findElementKind('nonexistent')).toBeNull()
   })
 })
+
+// ---------- addToGroup ----------
+
+describe('addToGroup', () => {
+  it('appends an element id to the group member list', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{ ...scene, groups: [{ id: 'g-1', name: 'G', childIds: [] }] }]
+    })
+
+    useStore.getState().addToGroup('g-1', 'img-1')
+
+    expect(useStore.getState().scenes[0].groups[0].childIds).toEqual(['img-1'])
+  })
+
+  it('is a no-op when the element is already a member', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{ ...scene, groups: [{ id: 'g-1', name: 'G', childIds: ['img-1'] }] }]
+    })
+
+    useStore.getState().addToGroup('g-1', 'img-1')
+
+    expect(useStore.getState().scenes[0].groups[0].childIds).toEqual(['img-1'])
+  })
+
+  it('is a no-op when the group does not exist', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{ ...scene, groups: [{ id: 'g-1', name: 'G', childIds: [] }] }]
+    })
+
+    useStore.getState().addToGroup('missing', 'img-1')
+
+    expect(useStore.getState().scenes[0].groups[0].childIds).toEqual([])
+  })
+})

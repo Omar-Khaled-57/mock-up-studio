@@ -12,7 +12,11 @@ import type { ChangelogVersion } from './components/shared/UpdateModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useStore } from './store'
 import { loadProjectFromZipResult } from './lib/project-serialization'
+import { resetRuntime } from './runtime/store'
+import { withDirtySuppressed } from './store/dirtyTracking'
 import { useTheme } from './hooks/useTheme'
+import BottomToolbar from './components/toolbar/BottomToolbar'
+import ToolOptionsPanel from './components/toolbar/ToolOptionsPanel'
 
 const STORAGE_KEY = 'mockup-studio-last-seen-version'
 
@@ -184,18 +188,21 @@ export default function App() {
 
       const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
-      useStore.setState({
-        project: project as unknown as import('@shared/types').Project,
-        scenes: scenes as never[],
-        activeSceneIndex,
-        filePath: result.filePath,
-        dirty: false,
-        lastSaved: Date.now(),
-        undoStack: [],
-        redoStack: [],
-        selectedIds: [],
-        showSplash: false
-      })
+      withDirtySuppressed(() =>
+        useStore.setState({
+          project: project as unknown as import('@shared/types').Project,
+          scenes: scenes as never[],
+          activeSceneIndex,
+          filePath: result.filePath,
+          dirty: false,
+          lastSaved: Date.now(),
+          undoStack: [],
+          redoStack: [],
+          selectedIds: [],
+          showSplash: false
+        })
+      )
+      resetRuntime('all')
     })
 
     return cleanup
@@ -218,7 +225,11 @@ export default function App() {
           useStore.getState().setSidebarPanelWidth(Math.max(160, Math.min(400, current + delta)))
         }} />
         <ErrorBoundary label="Canvas">
-          <Canvas />
+          <div className="flex flex-col flex-1 min-w-0">
+            <Canvas />
+            <ToolOptionsPanel />
+            <BottomToolbar />
+          </div>
         </ErrorBoundary>
         <ResizeHandle position="left" onResize={(delta) => {
           const current = useStore.getState().propertiesPanelWidth

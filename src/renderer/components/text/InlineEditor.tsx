@@ -4,8 +4,9 @@ interface Props {
   content: string
   isEditing: boolean
   onCommit: (text: string) => void
-  onStartEdit: () => void
   onStopEdit: () => void
+  onStartEdit?: () => void
+  selfStart?: boolean
   style?: React.CSSProperties
   className?: string
   placeholder?: string
@@ -15,8 +16,9 @@ export default function InlineEditor({
   content,
   isEditing,
   onCommit,
-  onStartEdit,
   onStopEdit,
+  onStartEdit,
+  selfStart = true,
   style,
   className,
   placeholder = 'Type here...'
@@ -54,11 +56,12 @@ export default function InlineEditor({
 
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
+      if (!selfStart) return
       e.stopPropagation()
       e.preventDefault()
-      onStartEdit()
+      onStartEdit?.()
     },
-    [onStartEdit]
+    [selfStart, onStartEdit]
   )
 
   const handleKeyDown = useCallback(
@@ -85,6 +88,9 @@ export default function InlineEditor({
       onDoubleClick={handleDoubleClick}
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
+      onPointerDown={(e) => {
+        if (isEditing) e.stopPropagation()
+      }}
       className={className}
       style={{
         ...style,

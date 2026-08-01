@@ -1,0 +1,289 @@
+import { Tool, ResizeHandleName } from '../types'
+import { getCapabilities, MOVE_LABELS, RESIZE_LABELS } from '../../services/capabilities'
+import { computeSnapForScene } from '../../services/snapping'
+import { createDragSession, createResizeSession, DragSession, ResizeSession } from '../../services/transform'
+import { useStore } from '../../store'
+import { useRuntimeStore } from '../../runtime/store'
+import { safeScene } from '../../store/sceneSlice'
+import { getMultiDragEntries } from '../../lib/multi-drag'
+import { RuntimeContextMenuItem } from '../../runtime/runtimeSlice'
+import type { Scene } from '@shared/types'
+
+export const SELECT_VARIANTS = ['select', 'marquee', 'hand', 'focus']
+
+interface PendingDrag {
+  pointerId: number
+  session: DragSession
+}
+
+interface PendingResize {
+  pointerId: number
+  session: ResizeSession
+}
+
+let pendingDrag: PendingDrag | null = null
+let pendingResize: PendingResize | null = null
+let lastDblClick: { id: string; time: number } | null = null
+
+function findElementGroupId(scene: Scene, id: string): string | null {
+  const d = scene.devices.find((el) => el.id === id)
+  if (d?.groupId) return d.groupId
+  const t = scene.textBoxes.find((el) => el.id === id)
+  if (t?.groupId) return t.groupId
+  const i = scene.images.find((el) => el.id === id)
+  if (i?.groupId) return i.groupId
+  const s = scene.shapes.find((el) => el.id === id)
+  return s?.groupId ?? null
+}
+
+export const selectTool: Tool = {
+  id: 'select',
+  group: 'select',
+  label: 'Select / Move',
+  icon: 'cursor',
+  cursor: 'default',
+  shortcut: 'v',
+  variants: SELECT_VARIANTS,
+
+  onPointerDown(ctx, e) {
+    if (e.button !== 0) return
+    const rt = ctx.getRuntime()
+
+    if (ctx.hitResult) {
+      const hit = ctx.hitResult
+      const caps = getCapabilities(hit.kind)
+
+      // Focus mode: elements outside the focused subtree are dimmed. Clicking
+      // one clears the selection and never starts a drag or resize (the
+      // capability gate centralizes this for all present and future tools).
+      if (!ctx.focusEditable(hit.id)) {
+        ctx.actions.clearSelection()
+        return
+      }
+
+      // Locked elements can be selected but never dragged or resized.
+      if (hit.locked) {
+        ctx.actions.select(hit.id, e.ctrlKey || e.shiftKey || e.metaKey)
+        return
+      }
+
+      if (!ctx.claimPointer(e.pointerId)) return
+
+      // Resize via corner handle.
+      if (ctx.resizeHandle && caps.resizable) {
+        const bounds = ctx.actions.getElementBounds(hit.id)
+        const el = document.querySelector(`[data-element-id="${hit.id}"]`) as HTMLElement | null
+        if (bounds && el) {
+          // Push BEFORE the final resize commit so undo restores the
+          // pre-resize geometry (resize commits once on pointer-up).
+          ctx.actions.pushHistory(RESIZE_LABELS[hit.kind])
+          const session = createResizeSession({
+            zoom: ctx.actions.getViewport().zoom,
+            element: bounds,
+            el,
+            onResize: (id, x, y, w, h) =>
+              ctx.actions.updateElement(id, {
+                x: Math.round(x),
+                y: Math.round(y),
+                width: Math.round(w),
+                height: Math.round(h)
+              }),
+            onEnd: () => {}
+          })
+          session.begin(ctx.resizeHandle as ResizeHandleName, { clientX: e.clientX, clientY: e.clientY })
+          pendingResize = { pointerId: e.pointerId, session }
+          rt.beginInteraction({ toolId: 'select', pointerId: e.pointerId, kind: 'resize', startedAt: Date.now() })
+          return
+        }
+      }
+
+      // Selection semantics before dragging. Ctrl/Shift+click adds to the
+      // selection (group-aware via selectionSlice.select); an already-selected
+      // element keeps the multi-selection so the whole group drags together.
+      if (!ctx.actions.getSelectedIds().includes(hit.id)) {
+        ctx.actions.select(hit.id, e.ctrlKey || e.shiftKey || e.metaKey)
+      }
+
+      const bounds = ctx.actions.getElementBounds(hit.id)
+      const el = document.querySelector(`[data-element-id="${hit.id}"]`) as HTMLElement | null
+      if (!bounds || !el) {
+        ctx.releasePointer(e.pointerId)
+        return
+      }
+
+      const session = createDragSession({
+        zoom: ctx.actions.getViewport().zoom,
+        element: bounds,
+        el,
+        onStart: () => {},
+        onDrag: (id, x, y) =>
+          ctx.actions.updateElement(id, { x: Math.round(x), y: Math.round(y) }),
+        onEnd: () => ctx.actions.pushHistory(MOVE_LABELS[hit.kind]),
+        snapFn: (id, x, y, w, h) => {
+          const scene = safeScene(useStore.getState())
+          const result = computeSnapForScene(scene, { id, x, y, width: w, height: h }, true)
+          rt.setSnapGuides({
+            verticalGuides: result.verticalGuides,
+            horizontalGuides: result.horizontalGuides
+          })
+          return { x: result.x, y: result.y }
+        },
+        onGuidesChange: (guides) => rt.setSnapGuides(guides),
+        getMultiDrag: () => getMultiDragEntries(hit.id)
+      })
+      session.begin({ clientX: e.clientX, clientY: e.clientY })
+      pendingDrag = { pointerId: e.pointerId, session }
+      rt.beginInteraction({ toolId: 'select', pointerId: e.pointerId, kind: 'move', startedAt: Date.now() })
+      return
+    }
+
+    // Empty canvas → clear the selection. Marquee selection is owned by the
+    // Marquee tool (M key / V cycles within the select group).
+    ctx.actions.clearSelection()
+  },
+
+  onPointerMove(ctx, e) {
+    if (pendingDrag && pendingDrag.pointerId === e.pointerId) {
+      pendingDrag.session.move({ clientX: e.clientX, clientY: e.clientY })
+      return
+    }
+
+    if (pendingResize && pendingResize.pointerId === e.pointerId) {
+      pendingResize.session.move({ clientX: e.clientX, clientY: e.clientY }, ctx.modifiers.shift)
+    }
+  },
+
+  onHover(ctx) {
+    const rt = ctx.getRuntime()
+    const next = ctx.hitResult ? { id: ctx.hitResult.id, kind: ctx.hitResult.kind } : null
+    const cur = rt.hoveredElement
+    if (next?.id === cur?.id && next?.kind === cur?.kind) return
+    rt.setHoveredElement(next)
+  },
+
+  onPointerUp(ctx, e) {
+    const rt = ctx.getRuntime()
+
+    if (pendingDrag && pendingDrag.pointerId === e.pointerId) {
+      pendingDrag.session.end({ clientX: e.clientX, clientY: e.clientY })
+      pendingDrag = null
+      rt.endInteraction()
+      return
+    }
+
+    if (pendingResize && pendingResize.pointerId === e.pointerId) {
+      pendingResize.session.end({ clientX: e.clientX, clientY: e.clientY }, ctx.modifiers.shift)
+      pendingResize = null
+      rt.endInteraction()
+    }
+  },
+
+  onPointerCancel(ctx, e) {
+    const rt = ctx.getRuntime()
+    if (pendingDrag && pendingDrag.pointerId === e.pointerId) {
+      pendingDrag.session.cancel()
+      pendingDrag = null
+      rt.endInteraction()
+      return
+    }
+    if (pendingResize && pendingResize.pointerId === e.pointerId) {
+      pendingResize.session.cancel()
+      pendingResize = null
+      rt.endInteraction()
+    }
+  },
+
+  onDoubleClick(ctx) {
+    if (!ctx.hitResult) return
+    const hit = ctx.hitResult
+    const rt = ctx.getRuntime()
+
+    const caps = getCapabilities(hit.kind)
+    const now = Date.now()
+    const isTriple = !!lastDblClick && lastDblClick.id === hit.id && now - lastDblClick.time < 500
+    lastDblClick = { id: hit.id, time: now }
+
+    // While an element is mid-edit, ignore stray double-clicks unless this is
+    // the rename trigger (third click in quick succession).
+    if (rt.editing?.id === hit.id && !isTriple) return
+
+    // Double-clicking a grouped shape breaks it out of the group selection
+    // (legacy behavior). Not an edit, so it is allowed even when locked.
+    if (hit.kind === 'shape' && !isTriple) {
+      const scene = safeScene(useStore.getState())
+      if (findElementGroupId(scene, hit.id)) ctx.actions.selectDirect(hit.id)
+      return
+    }
+
+    // Locked elements can never be edited, renamed, or upload-targeted.
+    if (hit.locked) return
+    if (!caps.editable) return
+
+    if (hit.kind === 'textBox') {
+      rt.setEditing({ id: hit.id, mode: isTriple ? 'rename' : 'text' })
+      return
+    }
+    if (hit.kind === 'device') {
+      if (isTriple) rt.setEditing({ id: hit.id, mode: 'rename' })
+      else ctx.actions.uploadScreenImage(hit.id)
+      return
+    }
+    if (hit.kind === 'shape' && isTriple) {
+      rt.setEditing({ id: hit.id, mode: 'rename' })
+    }
+  },
+
+  onContextMenu(ctx, e) {
+    e.preventDefault()
+    const state = useStore.getState()
+    const rt = ctx.getRuntime()
+
+    let items: RuntimeContextMenuItem[] = []
+
+    if (ctx.hitResult) {
+      const id = ctx.hitResult.id
+      const scene = safeScene(state)
+      const groupId = findElementGroupId(scene, id)
+      items = [
+        { label: 'Bring to Front', action: () => { state.pushHistory('Bring to Front'); state.bringToFront(id) } },
+        { label: 'Send to Back', action: () => { state.pushHistory('Send to Back'); state.sendToBack(id) } },
+        { label: 'Bring Forward', action: () => { state.pushHistory('Bring Forward'); state.bringForward(id) } },
+        { label: 'Send Backward', action: () => { state.pushHistory('Send Backward'); state.sendBackward(id) } },
+        { divider: true, label: '', action: () => {} },
+        { label: 'Duplicate', action: () => { state.pushHistory('Duplicate'); state.duplicateSelected([id]) } },
+        { label: 'Delete', danger: true, action: () => { state.pushHistory('Delete'); state.deleteSelected([id]) } }
+      ]
+      if (groupId) {
+        items.splice(5, 0, { label: '', divider: true, action: () => {} })
+        items.splice(5, 0, { label: 'Ungroup', action: () => { state.pushHistory('Ungroup'); state.ungroup(groupId); state.clearSelection() } })
+      }
+      if (state.selectedIds.length >= 2) {
+        items.push({ divider: true, label: '', action: () => {} })
+        items.push({ label: 'Group', action: () => { state.pushHistory('Group'); state.groupSelected() } })
+      }
+    } else if (state.selectedIds.length >= 2) {
+      items.push({ label: 'Group', action: () => { state.pushHistory('Group'); state.groupSelected() } })
+    }
+
+    if (items.length === 0) return
+    rt.openContextMenu({ x: e.clientX, y: e.clientY, items })
+  },
+
+  onInterrupt() {
+    // Abandon a mid-gesture drag/resize (Escape, blur, full reset). Because
+    // neither session commits to the store until pointer-up, cancelling here
+    // leaves the document untouched.
+    let wasActive = false
+    if (pendingDrag) {
+      pendingDrag.session.cancel()
+      pendingDrag = null
+      wasActive = true
+    }
+    if (pendingResize) {
+      pendingResize.session.cancel()
+      pendingResize = null
+      wasActive = true
+    }
+    if (wasActive) useRuntimeStore.getState().endInteraction()
+  }
+}

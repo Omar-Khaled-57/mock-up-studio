@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import { loadProjectFromZipResult } from '../../lib/project-serialization'
+import { withDirtySuppressed } from '../../store/dirtyTracking'
 
 interface RecentEntry {
   path: string
@@ -23,21 +24,23 @@ export default function SplashScreen() {
   const applyProject = async (result: { manifest: string; assetsJson: string; filePath: string }) => {
     const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
-    useStore.setState({
-      project: {
-        ...project,
-        scenes: scenes as never[]
-      },
-      scenes: scenes as never[],
-      activeSceneIndex,
-      filePath: result.filePath,
-      dirty: false,
-      lastSaved: Date.now(),
-      undoStack: [],
-      redoStack: [],
-      selectedIds: [],
-      showSplash: false
-    })
+    withDirtySuppressed(() =>
+      useStore.setState({
+        project: {
+          ...project,
+          scenes: scenes as never[]
+        },
+        scenes: scenes as never[],
+        activeSceneIndex,
+        filePath: result.filePath,
+        dirty: false,
+        lastSaved: Date.now(),
+        undoStack: [],
+        redoStack: [],
+        selectedIds: [],
+        showSplash: false
+      })
+    )
   }
 
   const handleNew = () => {

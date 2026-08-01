@@ -1,20 +1,23 @@
 import { StateCreator } from 'zustand'
 import { StoreState } from './index'
 import { safeScene } from './sceneSlice'
+import { FocusFilter } from '../services/focus'
 
 export type AlignmentDirection = 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom'
+
+export const NOOP_FOCUS_FILTER: FocusFilter = () => true
 
 export interface SelectionSlice {
   selectedIds: string[]
   selectionMode: 'single' | 'multi'
-  select: (id: string, multi?: boolean) => void
+  select: (id: string, multi?: boolean, filter?: FocusFilter) => void
   selectDirect: (id: string) => void
   deselect: (id: string) => void
   clearSelection: () => void
-  selectAll: () => void
+  selectAll: (filter?: FocusFilter) => void
   isSelected: (id: string) => boolean
   alignSelected: (direction: AlignmentDirection) => void
-  selectInRect: (x: number, y: number, w: number, h: number) => void
+  selectInRect: (x: number, y: number, w: number, h: number, filter?: FocusFilter) => void
 }
 
 interface AlignableElement {
@@ -54,7 +57,7 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
   selectedIds: [],
   selectionMode: 'single',
 
-  select: (id, multi = false) =>
+  select: (id, multi = false, filter = NOOP_FOCUS_FILTER) =>
     set((state) => {
       const scene = safeScene(state)
       const findGroupIds = (elId: string): string[] => {
@@ -76,7 +79,7 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
         }
         return [elId]
       }
-      const targetIds = findGroupIds(id)
+      const targetIds = findGroupIds(id).filter(filter)
       if (multi) {
         const existing = new Set(state.selectedIds)
         if (existing.has(id)) {
@@ -102,7 +105,7 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
 
   clearSelection: () => set({ selectedIds: [], selectionMode: 'single' }),
 
-  selectAll: () =>
+  selectAll: (filter = NOOP_FOCUS_FILTER) =>
     set((state: StoreState) => {
       const scene = safeScene(state)
       const allIds = [
@@ -110,13 +113,13 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
         ...scene.textBoxes.map((t) => t.id),
         ...scene.images.map((i) => i.id),
         ...scene.shapes.map((s) => s.id)
-      ]
+      ].filter(filter)
       return { selectedIds: allIds, selectionMode: 'multi' }
     }),
 
   isSelected: (id) => get().selectedIds.includes(id),
 
-  selectInRect: (x, y, w, h) =>
+  selectInRect: (x, y, w, h, filter = NOOP_FOCUS_FILTER) =>
     set((state) => {
       const scene = safeScene(state)
       const left = Math.min(x, x + w)
@@ -126,19 +129,19 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
       const ids: string[] = []
       for (const d of scene.devices) {
         const dl = d.x, dr = d.x + d.width, dt = d.y, db = d.y + d.height
-        if (dl < right && dr > left && dt < bottom && db > top) ids.push(d.id)
+        if (dl < right && dr > left && dt < bottom && db > top && filter(d.id)) ids.push(d.id)
       }
       for (const t of scene.textBoxes) {
         const tl = t.x, tr = t.x + t.width, tt = t.y, tb = t.y + t.height
-        if (tl < right && tr > left && tt < bottom && tb > top) ids.push(t.id)
+        if (tl < right && tr > left && tt < bottom && tb > top && filter(t.id)) ids.push(t.id)
       }
       for (const i of scene.images) {
         const il = i.x, ir = i.x + i.width, it = i.y, ib = i.y + i.height
-        if (il < right && ir > left && it < bottom && ib > top) ids.push(i.id)
+        if (il < right && ir > left && it < bottom && ib > top && filter(i.id)) ids.push(i.id)
       }
       for (const s of scene.shapes) {
         const sl = s.x, sr = s.x + s.width, st = s.y, sb = s.y + s.height
-        if (sl < right && sr > left && st < bottom && sb > top) ids.push(s.id)
+        if (sl < right && sr > left && st < bottom && sb > top && filter(s.id)) ids.push(s.id)
       }
       return { selectedIds: ids, selectionMode: ids.length > 1 ? 'multi' : 'single' }
     }),

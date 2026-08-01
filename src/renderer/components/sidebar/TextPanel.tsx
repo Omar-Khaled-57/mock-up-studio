@@ -119,8 +119,8 @@ export default function TextPanel() {
 
   const handleAddText = useCallback(() => {
     const tb = defaultTextBox(canvas.width, canvas.height, maxZ + 1, textBoxes.length)
-    addTextBox(tb)
     pushHistory('Add text box')
+    addTextBox(tb)
     select(tb.id)
     setActiveTarget(null)
   }, [canvas, maxZ, textBoxes.length, addTextBox, pushHistory, select])
@@ -143,16 +143,16 @@ export default function TextPanel() {
 
   const handleDelete = useCallback(
     (id: string) => {
-      removeTextBox(id)
       pushHistory('Delete text box')
+      removeTextBox(id)
     },
     [removeTextBox, pushHistory]
   )
 
   const handleDuplicate = useCallback(
     (id: string) => {
-      const newIds = duplicateSelected([id])
-      if (newIds.length > 0) pushHistory('Duplicate text')
+      pushHistory('Duplicate text')
+      duplicateSelected([id])
     },
     [duplicateSelected, pushHistory]
   )
@@ -166,8 +166,8 @@ export default function TextPanel() {
     if (!renamingId) return
     const trimmed = renameValue.trim()
     if (trimmed) {
-      updateTextBox(renamingId, { name: trimmed })
       pushHistory('Rename text')
+      updateTextBox(renamingId, { name: trimmed })
     }
     setRenamingId(null)
   }, [renamingId, renameValue, updateTextBox, pushHistory])

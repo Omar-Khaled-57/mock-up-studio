@@ -23,6 +23,7 @@ import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, Title
 import { StoreState } from './index'
 import { DEFAULT_CANVAS } from '../lib/constants'
 import { generateId } from '../lib/id'
+import { resetRuntime, useRuntimeStore } from '../runtime/store'
 
 /**
  * Returns the current active scene, or a fresh default if the scenes array
@@ -105,7 +106,8 @@ export function createDefaultScene(): Scene {
     sloganText: defaultSloganText(),
     guides: [],
     grid: { enabled: false, size: 20, color: '#ffffff20', snapEnabled: false, style: 'dotted' },
-    groups: []
+    groups: [],
+    masks: []
   }
 }
 
@@ -197,6 +199,7 @@ export interface SceneSlice {
   combineGroups: (groupIds: string[]) => void
   makeParentGroup: (groupId: string, targetGroupId: string) => void
   reverseNesting: (groupA: string, groupB: string) => void
+  addToGroup: (groupId: string, elementId: string) => void
   addScene: () => void
   duplicateScene: (index: number) => void
   deleteScene: (index: number) => void
@@ -223,7 +226,12 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
 
   setScenes: (scenes) => set((state) => ({ scenes, activeSceneIndex: clampIndex(scenes, state.activeSceneIndex) })),
 
-  setActiveSceneIndex: (index) => set((state) => ({ activeSceneIndex: clampIndex(state.scenes, index) })),
+  setActiveSceneIndex: (index) => {
+    set((state) => ({ activeSceneIndex: clampIndex(state.scenes, index) }))
+    // Transient state references the previous scene's elements — clear it.
+    // Active tool and focus group are preserved.
+    resetRuntime()
+  },
 
   updateCanvas: (settings) =>
     set((state) => {
@@ -634,6 +642,11 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       groups: scene.groups.filter((g) => g.id !== groupId)
     }
     set({ scenes })
+    // Ungrouping the currently focused group leaves focus pointing at a dead
+    // group — exit focus so the scrim does not stay over nothing.
+    if (useRuntimeStore.getState().focusGroupId === groupId) {
+      useRuntimeStore.getState().exitFocus()
+    }
   },
 
   renameGroup: (groupId, name) =>
@@ -773,19 +786,37 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes }
     }),
 
-  addScene: () =>
+  /** Adds an element id to a group's member list (no-op if missing or already a member). */
+  addToGroup: (groupId, elementId) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      const group = scene.groups.find((g) => g.id === groupId)
+      if (!group || group.childIds.includes(elementId)) return state
+      const scenes = [...state.scenes]
+      scenes[state.activeSceneIndex] = {
+        ...scene,
+        groups: scene.groups.map((g) =>
+          g.id === groupId ? { ...g, childIds: [...g.childIds, elementId] } : g
+        )
+      }
+      return { scenes }
+    }),
+
+  addScene: () => {
     set((state) => {
       const newScene = createDefaultScene()
       newScene.name = `Scene ${state.scenes.length + 1}`
       const scenes = [...state.scenes, newScene]
       return { scenes, activeSceneIndex: scenes.length - 1, selectedIds: [] }
-    }),
+    })
+    resetRuntime()
+  },
 
   /**
    * Deep-clones a scene via JSON round-trip (fast, no structural sharing).
    * The copy is inserted immediately after the source and becomes active.
    */
-  duplicateScene: (index) =>
+  duplicateScene: (index) => {
     set((state) => {
       const source = state.scenes[index]
       if (!source) return state
@@ -795,16 +826,20 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const scenes = [...state.scenes]
       scenes.splice(index + 1, 0, dup)
       return { scenes, activeSceneIndex: index + 1, selectedIds: [] }
-    }),
+    })
+    resetRuntime()
+  },
 
   /** Removes a scene. Prevents deletion if only one scene remains. */
-  deleteScene: (index) =>
+  deleteScene: (index) => {
     set((state) => {
       if (state.scenes.length <= 1) return state
       const scenes = state.scenes.filter((_, i) => i !== index)
       const newActive = Math.min(state.activeSceneIndex, scenes.length - 1)
       return { scenes, activeSceneIndex: newActive, selectedIds: [] }
-    }),
+    })
+    resetRuntime()
+  },
 
   renameScene: (index, name) =>
     set((state) => {
@@ -839,7 +874,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     }),
 
   /** Removes multiple scenes by index. Protects against deleting the last scene. */
-  deleteScenes: (indices) =>
+  deleteScenes: (indices) => {
     set((state) => {
       const indicesSet = new Set(indices)
       const remaining = state.scenes.filter((_, i) => !indicesSet.has(i))
@@ -847,4 +882,6 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const newActive = Math.min(state.activeSceneIndex, remaining.length - 1)
       return { scenes: remaining, activeSceneIndex: newActive, selectedIds: [] }
     })
+    resetRuntime()
+  }
 })

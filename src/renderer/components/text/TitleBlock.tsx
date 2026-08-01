@@ -16,22 +16,23 @@ export default function TitleBlock() {
 
   const handleTitleCommit = useCallback(
     (text: string) => {
-      updateTitleText({ content: text })
       pushHistory('Edit title')
+      updateTitleText({ content: text })
     },
     [updateTitleText, pushHistory]
   )
 
   const handleSloganCommit = useCallback(
     (text: string) => {
-      updateSloganText({ content: text })
       pushHistory('Edit slogan')
+      updateSloganText({ content: text })
     },
     [updateSloganText, pushHistory]
   )
 
   return (
     <div
+      data-canvas-chrome="true"
       style={{
         position: 'absolute',
         left: 60,

@@ -146,8 +146,8 @@ export default function DevicesPanel() {
         objectFit: 'contain',
         groupId: null
       }
-      addDevice(device)
       pushHistory(`Add ${type}`)
+      addDevice(device)
       select(device.id)
     },
     [scene.devices, maxZ, addDevice, pushHistory, select]
@@ -165,8 +165,8 @@ export default function DevicesPanel() {
     if (!renamingId) return
     const trimmed = renameValue.trim()
     if (trimmed) {
-      updateDevice(renamingId, { name: trimmed })
       pushHistory('Rename device')
+      updateDevice(renamingId, { name: trimmed })
     }
     setRenamingId(null)
   }, [renamingId, renameValue, updateDevice, pushHistory])

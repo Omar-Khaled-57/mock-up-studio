@@ -12,23 +12,6 @@ export default function ScreenContainer({ device }: Props) {
   const dropRef = useRef<HTMLDivElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
-  const handleFileSelect = useCallback(() => {
-    const input = document.createElement('input')
-    input.type = 'file'
-    input.accept = 'image/*'
-    input.onchange = () => {
-      const file = input.files?.[0]
-      if (!file) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        updateDevice(device.id, { screenImage: reader.result as string })
-        pushHistory('Upload screenshot')
-      }
-      reader.readAsDataURL(file)
-    }
-    input.click()
-  }, [device.id, updateDevice, pushHistory])
-
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
@@ -38,8 +21,8 @@ export default function ScreenContainer({ device }: Props) {
       if (!file || !file.type.startsWith('image/')) return
       const reader = new FileReader()
       reader.onload = () => {
-        updateDevice(device.id, { screenImage: reader.result as string })
         pushHistory('Upload screenshot')
+        updateDevice(device.id, { screenImage: reader.result as string })
       }
       reader.readAsDataURL(file)
     },
@@ -65,8 +48,8 @@ export default function ScreenContainer({ device }: Props) {
           if (!blob) continue
           const reader = new FileReader()
           reader.onload = () => {
-            updateDevice(device.id, { screenImage: reader.result as string })
             pushHistory('Paste screenshot')
+            updateDevice(device.id, { screenImage: reader.result as string })
           }
           reader.readAsDataURL(blob)
           return
@@ -76,19 +59,10 @@ export default function ScreenContainer({ device }: Props) {
     [device.id, updateDevice, pushHistory]
   )
 
-  const handleReplace = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      handleFileSelect()
-    },
-    [handleFileSelect]
-  )
-
   if (!device.screenImage) {
     return (
       <div
         ref={dropRef}
-        onDoubleClick={handleFileSelect}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -148,9 +122,8 @@ export default function ScreenContainer({ device }: Props) {
         draggable={false}
       />
 
-      {/* Replace overlay on hover */}
+      {/* Replace overlay on hover (upload is driven by the Select tool's double-click) */}
       <div
-        onDoubleClick={handleReplace}
         style={{
           position: 'absolute',
           inset: 0,

@@ -13,9 +13,6 @@ const api = {
   openProjectByPath: (filePath: string): Promise<{ manifest: string; assetsJson: string; filePath: string } | null> =>
     ipcRenderer.invoke('open-project-by-path', filePath),
 
-  saveImage: (blob: ArrayBuffer, path: string): Promise<void> =>
-    ipcRenderer.invoke('save-image', blob, path),
-
   saveImageDialog: (defaultName: string, blob: ArrayBuffer): Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }> =>
     ipcRenderer.invoke('save-image-dialog', defaultName, blob),
 

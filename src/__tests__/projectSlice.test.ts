@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useStore } from '../renderer/store'
-import { resetStore } from './helpers'
+import { resetStore, makeTextBox } from './helpers'
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -50,6 +50,28 @@ describe('projectSlice', () => {
     useStore.getState().clearProject()
     expect(useStore.getState().project).toBeNull()
     expect(useStore.getState().filePath).toBeNull()
+    expect(useStore.getState().dirty).toBe(false)
+  })
+
+  it('marks the project dirty when the scene is mutated', () => {
+    useStore.getState().newProject()
+    expect(useStore.getState().dirty).toBe(false)
+    useStore.getState().addTextBox(makeTextBox({ id: 'tb-1', zIndex: 5 }))
+    expect(useStore.getState().dirty).toBe(true)
+  })
+
+  it('marks the project dirty after undo restores a snapshot', () => {
+    useStore.getState().newProject()
+    useStore.getState().pushHistory('Add text box')
+    useStore.getState().addTextBox(makeTextBox({ id: 'tb-1', zIndex: 5 }))
+    // Simulate a save, then an undo: the document now differs from disk.
+    useStore.getState().setDirty(false)
+    expect(useStore.getState().undo()).toBe(true)
+    expect(useStore.getState().dirty).toBe(true)
+  })
+
+  it('keeps the project clean after resetStore (suppressed scenes swap)', () => {
+    resetStore()
     expect(useStore.getState().dirty).toBe(false)
   })
 })

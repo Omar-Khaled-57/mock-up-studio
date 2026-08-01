@@ -1,6 +1,55 @@
 {
   "versions": [
     {
+      "version": "0.2.8",
+      "date": "2026-07-31",
+      "title": "Final Hardening",
+      "origin": "Stability and correctness pass. Scene edits now properly mark projects as unsaved (fixing a silent data-loss gap), exports no longer leak guides and honor background overrides, resize is cancel-safe, and in-flight gestures are cancelled cleanly on Escape or window blur.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Canvas edits now mark the project unsaved — no more silent data loss on close",
+            "User guides no longer appear in exported images",
+            "Export background overrides (solid/transparent) now actually apply",
+            "Resize commits once on release (like drag), so cancelling restores the original",
+            "Escape / window blur cancel in-flight drags, resizes, pans, and brush strokes",
+            "Window blur no longer leaves the app stuck in a temporary Hand tool",
+            "Removed an unvalidated IPC channel that could write arbitrary files (security)"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "618 tests passing across 39 files",
+            "Lint, typecheck, and production build clean",
+            "NSIS + portable packaging verified"
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.2.7",
+      "date": "2026-07-30",
+      "title": "Download Progress & Error Feedback",
+      "origin": "Bug fix and UX improvement. Auto-update downloads now show a visible progress bar in the app footer. Download failures show an error dialog instead of failing silently.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Download progress bar in app footer during auto-update",
+            "Error dialog when auto-update download fails"
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Download button now provides visible feedback instead of appearing to do nothing"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.2.6",
       "date": "2026-07-30",
       "title": "Auto-Updater Fix & Release v0.2.6",

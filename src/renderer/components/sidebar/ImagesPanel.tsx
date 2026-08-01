@@ -63,8 +63,8 @@ export default function ImagesPanel() {
             visible: true,
             groupId: null
           }
-          addImage(image)
           pushHistory('Add image')
+          addImage(image)
           select(image.id)
         }
         img.src = reader.result as string
@@ -105,16 +105,16 @@ export default function ImagesPanel() {
 
   const handleDelete = useCallback(
     (id: string) => {
-      removeImage(id)
       pushHistory('Delete image')
+      removeImage(id)
     },
     [removeImage, pushHistory]
   )
 
   const handleDuplicate = useCallback(
     (id: string) => {
-      const newIds = duplicateSelected([id])
-      if (newIds.length > 0) pushHistory('Duplicate image')
+      pushHistory('Duplicate image')
+      duplicateSelected([id])
     },
     [duplicateSelected, pushHistory]
   )
@@ -128,8 +128,8 @@ export default function ImagesPanel() {
     if (!renamingId) return
     const trimmed = renameValue.trim()
     if (trimmed) {
-      updateImage(renamingId, { name: trimmed })
       pushHistory('Rename image')
+      updateImage(renamingId, { name: trimmed })
     }
     setRenamingId(null)
   }, [renamingId, renameValue, updateImage, pushHistory])

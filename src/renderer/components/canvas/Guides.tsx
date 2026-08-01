@@ -13,6 +13,7 @@ export default function Guides({ verticalGuides, horizontalGuides, canvasWidth, 
       {verticalGuides.map((x, i) => (
         <div
           key={`v-${i}`}
+          data-snap-guide="vertical"
           className="absolute"
           style={{
             left: x,
@@ -26,6 +27,7 @@ export default function Guides({ verticalGuides, horizontalGuides, canvasWidth, 
       {horizontalGuides.map((y, i) => (
         <div
           key={`h-${i}`}
+          data-snap-guide="horizontal"
           className="absolute"
           style={{
             left: 0,

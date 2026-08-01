@@ -8,6 +8,7 @@ import { DEVICE_ASPECT_RATIOS } from '../../lib/constants'
 import { AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal, Image as ImageIcon } from 'lucide-react'
 import ShadowEditor from '../shared/ShadowEditor'
 import GlowEditor from '../shared/GlowEditor'
+import EffectsEditor from '../effects/EffectsEditor'
 
 function toShadowLayers(ts: TextShadow | null): ShadowLayer[] {
   if (!ts) return []
@@ -60,6 +61,8 @@ export default function PropertiesPanel() {
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
+  const updateEffects = useStore((s) => s.updateEffects)
+  const resetEffects = useStore((s) => s.resetEffects)
   const propertiesPanelWidth = useStore((s) => s.propertiesPanelWidth)
   const { clsx, bg, text, border, shadow } = useTheme()
 
@@ -78,6 +81,11 @@ export default function PropertiesPanel() {
     if (shape) return { kind: 'shape' as const, data: shape }
     return null
   }, [selectedIds, scene.devices, scene.textBoxes, scene.images, scene.shapes])
+
+  const masks = useMemo(
+    () => scene.masks.filter((m) => m.targetId === (selected?.data.id ?? '')),
+    [scene.masks, selected]
+  )
 
   const patchX = useCallback(
     (v: number) => {
@@ -179,6 +187,27 @@ export default function PropertiesPanel() {
   const width = data.width
   const height = data.height
   const rotation = 'rotation' in data ? data.rotation : 0
+
+  const addMask = () => {
+    if (!selected) return
+    const state = useStore.getState()
+    state.pushHistory('Mask element')
+    state.maskElement(selected.data.id, { width: selected.data.width, height: selected.data.height })
+  }
+
+  const reverseMask = () => {
+    if (masks.length === 0) return
+    const state = useStore.getState()
+    state.pushHistory('Reverse mask')
+    state.reverseMask(masks[0].id)
+  }
+
+  const removeMask = () => {
+    if (!selected) return
+    const state = useStore.getState()
+    state.pushHistory('Remove mask')
+    state.removeMaskFromElement(selected.data.id)
+  }
 
   return (
     <aside className={clsx(
@@ -769,6 +798,52 @@ export default function PropertiesPanel() {
           </div>
         </>
       )}
+
+      {/* Effects (image + shape) */}
+      {(kind === 'image' || kind === 'shape') && (
+        <div>
+          <label className={clsx("text-[10px] mb-1 block", text.tertiary)}>Effects</label>
+          <EffectsEditor
+            value={(data as ImageOverlay | Shape).effects}
+            onChange={(patch) => updateEffects(data.id, patch)}
+            onReset={() => resetEffects(data.id)}
+          />
+        </div>
+      )}
+
+      {/* Mask */}
+      <div>
+        <label className={clsx("text-[10px] mb-1 block", text.tertiary)}>Mask</label>
+        {masks.length === 0 ? (
+          <button
+            onClick={addMask}
+            className={clsx("w-full py-1.5 text-[10px] rounded transition-colors", bg.button, text.secondary)}
+          >
+            Add Mask
+          </button>
+        ) : (
+          <>
+            <p className={clsx("text-[11px] mb-1 capitalize", text.secondary)}>
+              {masks[0].shape}
+              {masks[0].inverted ? ' · inverted' : ''}
+            </p>
+            <div className="flex gap-1">
+              <button
+                onClick={reverseMask}
+                className={clsx("flex-1 py-1 text-[10px] rounded transition-colors", bg.button, text.secondary)}
+              >
+                Reverse
+              </button>
+              <button
+                onClick={removeMask}
+                className={clsx("flex-1 py-1 text-[10px] rounded transition-colors", bg.danger)}
+              >
+                Remove
+              </button>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Multi-select info + alignment tools */}
       {selectedIds.length > 1 && (

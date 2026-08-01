@@ -12,18 +12,44 @@
  *   1. Walk all scenes, find data URLs in screenImage, images, backgrounds.
  *   2. Decode each data URL to a binary buffer, assign an asset filename.
  *   3. Replace the data URL in the manifest with `asset://<filename>`.
- *   4. Return the manifest JSON string + a Map of asset name → Buffer.
+ *   4. Return the manifest JSON string + a Map of asset name → Uint8Array.
  *
  * Deserialization flow (load):
  *   1. Parse `manifest.json`.
  *   2. For each `asset://` reference, look up the binary buffer, convert
  *      back to a data URL using base64 encoding.
- *   3. Return the fully hydrated scenes array ready for Zustand.
+ * 3. Return the fully hydrated scenes array ready for Zustand.
  *
  * Thread safety:
  *   - `assetCounter` is reset at the start of `serializeProject()` to ensure
  *     deterministic asset naming within a single save operation.
  */
+
+import { ImageEffects } from '@shared/types'
+
+/**
+ * Base64 ↔ binary helpers. The renderer runs sandboxed (no Node.js runtime),
+ * so `Buffer` is unavailable — these use the Web `atob`/`btoa` APIs instead.
+ * `Buffer` is a `Uint8Array` subclass, so any Buffer passed in tests (Node)
+ * still satisfies these helpers.
+ */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+  }
+  return btoa(binary)
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
 
 interface SerializedProject {
   version: number
@@ -52,6 +78,19 @@ interface SerializedScene {
   guides: SerializedGuide[]
   grid: SerializedGrid
   groups?: { id: string; name: string; childIds: string[] }[]
+  masks?: SerializedMask[]
+}
+
+interface SerializedMask {
+  id: string
+  targetId: string
+  shape: string
+  x: number
+  y: number
+  width: number
+  height: number
+  points: { x: number; y: number }[]
+  inverted: boolean
 }
 
 interface SerializedBackground {
@@ -138,6 +177,7 @@ interface SerializedImage {
   blur?: number
   glow?: SerializedImageGlow[]
   shadow?: SerializedImageShadow[]
+  effects?: ImageEffects
 }
 
 interface SerializedShape {
@@ -165,6 +205,7 @@ interface SerializedShape {
   plusThickness: number
   arrowThickness: number
   groupId: string | null
+  effects?: ImageEffects
 }
 
 interface SerializedImageGlow {
@@ -238,13 +279,13 @@ function extractAssetName(originalName: string): string {
 }
 
 /**
- * Decodes a base64 data URL into a Buffer. Returns null if the string
+ * Decodes a base64 data URL into a Uint8Array. Returns null if the string
  * is not a valid data URL (e.g., already an `asset://` reference).
  */
-function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | null {
+function parseDataUrl(dataUrl: string): { mime: string; buffer: Uint8Array } | null {
   const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
   if (!match) return null
-  return { mime: match[1], buffer: Buffer.from(match[2], 'base64') }
+  return { mime: match[1], buffer: base64ToBytes(match[2]) }
 }
 
 /**
@@ -254,7 +295,7 @@ function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | null 
  */
 function replaceDataUrlWithRef(
   dataUrl: string | null,
-  assets: Map<string, Buffer>
+  assets: Map<string, Uint8Array>
 ): string | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
   const parsed = parseDataUrl(dataUrl)
@@ -268,9 +309,9 @@ export function serializeProject(
   projectData: { id: string; name: string; createdAt: number; updatedAt: number },
   scenes: Array<Record<string, unknown>>,
   activeSceneIndex: number
-): { manifest: string; assets: Map<string, Buffer> } {
+): { manifest: string; assets: Map<string, Uint8Array> } {
   assetCounter = 0
-  const assets = new Map<string, Buffer>()
+  const assets = new Map<string, Uint8Array>()
 
   const serializedScenes: SerializedScene[] = scenes.map((scene) => {
     const s = scene as {
@@ -286,6 +327,7 @@ export function serializeProject(
       sloganText: SerializedTitleText
       guides: SerializedGuide[]
       grid: SerializedGrid
+      masks?: SerializedMask[]
     }
 
     const devices = s.devices.map((d) => ({
@@ -320,7 +362,8 @@ export function serializeProject(
       sloganText: s.sloganText,
       guides: s.guides,
       grid: s.grid,
-      groups: (s as unknown as Record<string, unknown>).groups as { id: string; name: string; childIds: string[] }[] ?? []
+      groups: (s as unknown as Record<string, unknown>).groups as { id: string; name: string; childIds: string[] }[] ?? [],
+      masks: s.masks ?? []
     }
   })
 
@@ -343,17 +386,17 @@ export function serializeProject(
  * Converts an `asset://` reference back to a base64 data URL by looking up
  * the binary buffer in the assets map. Non-asset references are returned as-is.
  */
-function resolveAssetRef(ref: string | null, assets: Map<string, Buffer>): string | null {
+function resolveAssetRef(ref: string | null, assets: Map<string, Uint8Array>): string | null {
   if (!ref || !ref.startsWith('asset://')) return ref
   const name = ref.replace('asset://', '')
   const buffer = assets.get(name)
   if (!buffer) return ref
   const ext = name.split('.').pop() || 'png'
   const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
-  return `data:${mime};base64,${buffer.toString('base64')}`
+  return `data:${mime};base64,${bytesToBase64(buffer)}`
 }
 
-export function deserializeProject(manifestJson: string, assets: Map<string, Buffer>): {
+export function deserializeProject(manifestJson: string, assets: Map<string, Uint8Array>): {
   projectData: { id: string; name: string; createdAt: number; updatedAt: number }
   scenes: Array<Record<string, unknown>>
   activeSceneIndex: number
@@ -428,7 +471,9 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Buf
       devices,
       images,
       shapes,
-      background
+      background,
+      groups: scene.groups ?? [],
+      masks: scene.masks ?? []
     }
   })
 
@@ -441,14 +486,14 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Buf
 
 /**
  * Parses the assets JSON string (a flat {name: base64} object) from the
- * ZIP file back into a Map<string, Buffer>. Returns empty map on parse error.
+ * ZIP file back into a Map<string, Uint8Array>. Returns empty map on parse error.
  */
-export function parseAssetsJson(assetsJson: string): Map<string, Buffer> {
+export function parseAssetsJson(assetsJson: string): Map<string, Uint8Array> {
   try {
     const assetsObj = JSON.parse(assetsJson) as Record<string, string>
-    const assetsMap = new Map<string, Buffer>()
+    const assetsMap = new Map<string, Uint8Array>()
     for (const [name, b64] of Object.entries(assetsObj)) {
-      assetsMap.set(name, Buffer.from(b64, 'base64'))
+      assetsMap.set(name, base64ToBytes(b64))
     }
     return assetsMap
   } catch {

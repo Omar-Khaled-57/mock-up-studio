@@ -65,8 +65,8 @@ export default function ShapesPanel() {
     (kind: ShapeKind) => {
       const shape = createDefaultShape(kind, scene.canvas.width, scene.canvas.height)
       shape.zIndex = maxZ + 1
-      addShape(shape)
       pushHistory(`Add ${kind}`)
+      addShape(shape)
       select(shape.id)
     },
     [scene.canvas, maxZ, addShape, pushHistory, select]
@@ -80,8 +80,8 @@ export default function ShapesPanel() {
       if (!file || !shapeId) return
       const reader = new FileReader()
       reader.onload = () => {
-        updateShape(shapeId, { backgroundImage: reader.result as string })
         pushHistory('Set shape background image')
+        updateShape(shapeId, { backgroundImage: reader.result as string })
       }
       reader.readAsDataURL(file)
       e.target.value = ''
@@ -96,8 +96,8 @@ export default function ShapesPanel() {
 
   const handleRemoveImage = useCallback(
     (shapeId: string) => {
-      updateShape(shapeId, { backgroundImage: null })
       pushHistory('Remove shape background')
+      updateShape(shapeId, { backgroundImage: null })
     },
     [updateShape, pushHistory]
   )
@@ -120,16 +120,16 @@ export default function ShapesPanel() {
 
   const handleDelete = useCallback(
     (id: string) => {
-      removeShape(id)
       pushHistory('Delete shape')
+      removeShape(id)
     },
     [removeShape, pushHistory]
   )
 
   const handleDuplicate = useCallback(
     (id: string) => {
-      const newIds = duplicateSelected([id])
-      if (newIds.length > 0) pushHistory('Duplicate shape')
+      pushHistory('Duplicate shape')
+      duplicateSelected([id])
     },
     [duplicateSelected, pushHistory]
   )
@@ -143,8 +143,8 @@ export default function ShapesPanel() {
     if (!renamingId) return
     const trimmed = renameValue.trim()
     if (trimmed) {
-      updateShape(renamingId, { name: trimmed })
       pushHistory('Rename shape')
+      updateShape(renamingId, { name: trimmed })
     }
     setRenamingId(null)
   }, [renamingId, renameValue, updateShape, pushHistory])

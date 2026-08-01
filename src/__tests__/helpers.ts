@@ -4,62 +4,67 @@
  */
 import { useStore } from '../renderer/store'
 import { createDefaultScene } from '../renderer/store/sceneSlice'
+import { resetRuntime } from '../renderer/runtime/store'
+import { withDirtySuppressed } from '../renderer/store/dirtyTracking'
 
 /** Resets the entire store to a fresh default state. */
 export function resetStore(): void {
+  resetRuntime('all')
   const defaultScene = createDefaultScene()
-  useStore.setState({
-    // Project
-    project: null,
-    filePath: null,
-    dirty: false,
-    lastSaved: null,
-    // Scene
-    scenes: [defaultScene],
-    activeSceneIndex: 0,
-    // Selection
-    selectedIds: [],
-    selectionMode: 'single',
-    // History
-    undoStack: [],
-    redoStack: [],
-    // Viewport
-    zoom: 1,
-    panX: 0,
-    panY: 0,
-    isPanning: false,
-    // UI
-    sidebarTab: 'devices',
-    sidebarCollapsed: false,
-    propertiesPanelOpen: false,
-    showSplash: true,
-    theme: 'dark',
-    showRulers: false,
-    sidebarPanelWidth: 224,
-    propertiesPanelWidth: 208,
-    // Export
-    exportFormat: 'png',
-    exportScale: 2,
-    exportQuality: 90,
-    exportBackground: 'scene',
-    exportBackgroundColor: '#ffffff',
-    // Clipboard
-    clipboard: [],
-    clipboardMode: null,
-    // Version history
-    snapshots: [],
-    autoSnapshotEnabled: false, // disabled for tests
-    lastSnapshotTime: Date.now(),
-    // Watermark
-    watermark: {
-      enabled: false,
-      text: 'Mockup Studio',
-      fontSize: 14,
-      color: '#ffffff',
-      opacity: 30,
-      position: 'bottom-right' as const
-    }
-  })
+  withDirtySuppressed(() =>
+    useStore.setState({
+      // Project
+      project: null,
+      filePath: null,
+      dirty: false,
+      lastSaved: null,
+      // Scene
+      scenes: [defaultScene],
+      activeSceneIndex: 0,
+      // Selection
+      selectedIds: [],
+      selectionMode: 'single',
+      // History
+      undoStack: [],
+      redoStack: [],
+      // Viewport
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      // UI
+      sidebarTab: 'devices',
+      sidebarCollapsed: false,
+      propertiesPanelOpen: false,
+      showSplash: true,
+      theme: 'dark',
+      showRulers: false,
+      sidebarPanelWidth: 224,
+      propertiesPanelWidth: 208,
+      // Export
+      exportFormat: 'png',
+      exportScale: 2,
+      exportQuality: 90,
+      exportBackground: 'scene',
+      exportBackgroundColor: '#ffffff',
+      // Clipboard
+      clipboard: [],
+      clipboardMode: null,
+      // Version history
+      snapshots: [],
+      autoSnapshotEnabled: false, // disabled for tests
+      lastSnapshotTime: Date.now(),
+      // Watermark
+      watermark: {
+        enabled: false,
+        text: 'Mockup Studio',
+        fontSize: 14,
+        color: '#ffffff',
+        opacity: 30,
+        position: 'bottom-right' as const
+      }
+    })
+  )
 }
 
 /** Returns a minimal device object for testing. */

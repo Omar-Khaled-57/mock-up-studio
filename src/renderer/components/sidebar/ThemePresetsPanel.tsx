@@ -12,8 +12,8 @@ export default function ThemePresetsPanel() {
     (presetId: string) => {
       const preset = THEME_PRESETS.find((p) => p.id === presetId)
       if (!preset) return
-      applyThemePreset(preset)
       pushHistory(`Theme: ${preset.name}`)
+      applyThemePreset(preset)
     },
     [applyThemePreset, pushHistory]
   )

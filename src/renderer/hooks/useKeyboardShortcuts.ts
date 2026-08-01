@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 import { useStore } from '../store'
 import { safeScene } from '../store/sceneSlice'
+import { useRuntimeStore } from '../runtime/store'
+import { focusFilterFor } from '../services/focus'
+import { toolManager } from '../tools'
 
 export function useKeyboardShortcuts() {
   const undo = useStore((s) => s.undo)
@@ -68,6 +71,13 @@ export function useKeyboardShortcuts() {
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+
+      // Track modifier state for the Tool Manager (shift aspect-lock during
+      // resize, alt-pan detection, and future modifier-aware tool behavior).
+      toolManager.setModifier('shift', e.shiftKey)
+      toolManager.setModifier('ctrl', e.ctrlKey)
+      toolManager.setModifier('meta', e.metaKey)
+      toolManager.setModifier('alt', e.altKey)
 
       const mod = e.ctrlKey || e.metaKey
       const selectedIds = useStore.getState().selectedIds
@@ -160,7 +170,9 @@ export function useKeyboardShortcuts() {
       // Select all: Ctrl+A
       if (mod && e.key === 'a') {
         e.preventDefault()
-        useStore.getState().selectAll()
+        const scene = safeScene(useStore.getState())
+        const focusGroupId = useRuntimeStore.getState().focusGroupId
+        useStore.getState().selectAll(focusFilterFor(focusGroupId, scene))
         return
       }
 
@@ -202,13 +214,81 @@ export function useKeyboardShortcuts() {
           nudge(selectedIds, step, 0)
           break
         case 'Escape':
-          clearSelection()
+          toolManager.handleEscape()
+          if (useRuntimeStore.getState().focusGroupId) {
+            useRuntimeStore.getState().exitFocus()
+          } else {
+            clearSelection()
+          }
           break
+        case 'Enter': {
+          const scene = safeScene(useStore.getState())
+          const sel = useStore.getState().selectedIds
+          if (sel.length > 0) {
+            const match = scene.groups.find((g) => {
+              if (g.childIds.length !== sel.length) return false
+              return g.childIds.every((id) => sel.includes(id))
+            })
+            if (match) {
+              e.preventDefault()
+              useRuntimeStore.getState().enterFocus(match.id)
+            }
+          }
+          break
+        }
+      }
+
+      // Space — temporary Hand that restores the previous tool on keyup.
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault()
+        if (!e.repeat && toolManager.getEffectiveToolId() !== 'hand') {
+          toolManager.pushTemporaryTool('hand', 'keyup')
+        }
+        return
+      }
+
+      // Tool shortcuts — unmodified single-key presses are owned by the Tool
+      // Manager. Only fully-implemented tools (those with pointer handling)
+      // are reachable; registry stubs stay inert until their milestones land.
+      if (!mod && !e.altKey && !e.shiftKey) {
+        if (toolManager.handleReachableShortcut(e.key)) {
+          e.preventDefault()
+          return
+        }
       }
     }
 
+    function handleKeyUp(e: KeyboardEvent) {
+      if (e.key === 'Shift') toolManager.setModifier('shift', false)
+      else if (e.key === 'Control') toolManager.setModifier('ctrl', false)
+      else if (e.key === 'Meta') toolManager.setModifier('meta', false)
+      else if (e.key === 'Alt') toolManager.setModifier('alt', false)
+      else if (e.key === ' ' || e.code === 'Space') toolManager.releaseTemporaryUntil('keyup')
+    }
+
+    function handleBlur() {
+      toolManager.setModifier('shift', false)
+      toolManager.setModifier('ctrl', false)
+      toolManager.setModifier('meta', false)
+      toolManager.setModifier('alt', false)
+      // A Space-temporary Hand (or any other temp tool) pushed before the
+      // window lost focus would never get its keyup — release it so the app
+      // doesn't come back stuck in Hand mode.
+      toolManager.releaseTemporaryTools()
+      // A mid-gesture blur (e.g. alt-tab) may never deliver the pointer-up;
+      // abandon any in-flight drag/resize/brush/pan so stale pending sessions
+      // can't commit against a later scene.
+      toolManager.interruptTools()
+    }
+
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+    }
   }, [
     undo,
     redo,

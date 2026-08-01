@@ -54,8 +54,8 @@ export default function ThemesPanel() {
 
   const setType = useCallback(
     (type: Background['type']) => {
-      updateBackground({ type })
       pushHistory(`Background: ${type}`)
+      updateBackground({ type })
     },
     [updateBackground, pushHistory]
   )
@@ -84,11 +84,11 @@ export default function ThemesPanel() {
       const reader = new FileReader()
       reader.onload = () => {
         const src = reader.result as string
+        pushHistory('Upload background image')
         updateBackground({
           type: 'image',
           image: { src, blur: 0, dim: 0, overlayColor: '#000000' }
         })
-        pushHistory('Upload background image')
       }
       reader.readAsDataURL(file)
       e.target.value = ''
@@ -125,8 +125,8 @@ export default function ThemesPanel() {
 
   const selectPreset = useCallback(
     (presetName: BackgroundPresetName) => {
-      updateBackground({ type: 'preset', presetName })
       pushHistory(`Background preset: ${presetName}`)
+      updateBackground({ type: 'preset', presetName })
     },
     [updateBackground, pushHistory]
   )

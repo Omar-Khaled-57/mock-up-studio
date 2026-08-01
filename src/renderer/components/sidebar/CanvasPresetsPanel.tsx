@@ -42,8 +42,8 @@ export default function CanvasPresetsPanel() {
       else if (Math.abs(ratio - 1) < 0.01) ar = '1:1'
       else if (Math.abs(ratio - 9 / 16) < 0.01) ar = '9:16'
       else if (Math.abs(ratio - 21 / 9) < 0.01) ar = '21:9'
-      updateCanvas({ width, height, aspectRatio: ar })
       pushHistory(`Canvas ${width}x${height}`)
+      updateCanvas({ width, height, aspectRatio: ar })
     },
     [updateCanvas, pushHistory]
   )

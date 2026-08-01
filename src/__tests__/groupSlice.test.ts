@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useStore } from '../renderer/store'
 import { safeScene } from '../renderer/store/sceneSlice'
+import { useRuntimeStore } from '../renderer/runtime/store'
 import { resetStore, makeDevice, makeTextBox, makeShape } from './helpers'
 
 beforeEach(() => {
@@ -112,6 +113,23 @@ describe('ungroup', () => {
     expect(scene.devices.find((d) => d.id === d2.id)!.groupId).toBeNull()
     expect(scene.devices.find((d) => d.id === d3.id)!.groupId).toBe(gid2)
     expect(scene.devices.find((d) => d.id === d4.id)!.groupId).toBe(gid2)
+  })
+
+  it('ungrouping the focused group exits focus mode', () => {
+    const d1 = makeDevice()
+    const d2 = makeDevice()
+    const store = useStore.getState()
+    store.addDevice(d1)
+    store.addDevice(d2)
+    store.select(d1.id)
+    store.select(d2.id, true)
+    const gid = useStore.getState().groupSelected()!
+    useRuntimeStore.getState().enterFocus(gid)
+    expect(useRuntimeStore.getState().focusGroupId).toBe(gid)
+
+    useStore.getState().ungroup(gid)
+
+    expect(useRuntimeStore.getState().focusGroupId).toBeNull()
   })
 })
 

@@ -85,7 +85,7 @@ export function createMenu(mainWindow: BrowserWindow): void {
               type: 'info',
               title: 'About Mockup Studio',
               message: 'Mockup Studio',
-              detail: 'Desktop device mockup scene builder.\n\nVersion 0.2.6\n\nCreated by Omar Khaled\nGitHub: @Omar-Khaled-57\nPortfolio: omar-el-khouly.vercel.app',
+              detail: 'Desktop device mockup scene builder.\n\nVersion 0.2.7\n\nCreated by Omar Khaled\nGitHub: @Omar-Khaled-57\nPortfolio: omar-el-khouly.vercel.app',
               buttons: ['Close', 'View Repository', 'View Portfolio'],
               defaultId: 0,
               cancelId: 0

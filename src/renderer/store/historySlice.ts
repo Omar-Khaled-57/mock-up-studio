@@ -24,6 +24,7 @@
 
 import { StateCreator } from 'zustand'
 import { StoreState } from './index'
+import { resetRuntime } from '../runtime/store'
 
 interface HistoryEntry {
   /** Pre-serialized JSON string of the scenes array (avoids repeated parse/stringify). */
@@ -78,6 +79,8 @@ export const createHistorySlice: StateCreator<StoreState, [], [], HistorySlice> 
       undoStack: undoStack.slice(0, -1),
       redoStack: [...state.redoStack, { scenesSnapshot: currentSnapshot, timestamp: Date.now() }]
     })
+    // Transient editor state derived from the pre-undo document is now stale.
+    resetRuntime()
     return true
   },
 
@@ -97,6 +100,7 @@ export const createHistorySlice: StateCreator<StoreState, [], [], HistorySlice> 
       redoStack: redoStack.slice(0, -1),
       undoStack: [...state.undoStack, { scenesSnapshot: currentSnapshot, timestamp: Date.now() }]
     })
+    resetRuntime()
     return true
   },
 

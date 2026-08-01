@@ -94,12 +94,12 @@ export default function LayoutTemplates() {
     (template: LayoutTemplate) => {
       const visible = scene.devices.filter((d) => d.visible && !d.locked)
       if (visible.length === 0) return
+      pushHistory(`Layout: ${template.name}`)
       const patches = template.apply(visible, scene.canvas.width, scene.canvas.height)
       for (const patch of patches) {
         const { id, ...rest } = patch
         updateDevice(id, rest)
       }
-      pushHistory(`Layout: ${template.name}`)
     },
     [scene.devices, scene.canvas, updateDevice, pushHistory]
   )

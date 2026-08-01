@@ -10,6 +10,9 @@ import { createClipboardSlice, ClipboardSlice } from './clipboardSlice'
 import { createVersionHistorySlice, VersionHistorySlice } from './versionHistorySlice'
 import { createWatermarkSlice, WatermarkSlice } from './watermarkSlice'
 import { createShapeSlice, ShapeSlice } from './shapeSlice'
+import { createMaskSlice, MaskSlice } from './maskSlice'
+import { createEffectsSlice, EffectsSlice } from './effectsSlice'
+import { attachDirtyTracking } from './dirtyTracking'
 
 export type StoreState = ProjectSlice &
   SceneSlice &
@@ -21,7 +24,9 @@ export type StoreState = ProjectSlice &
   ClipboardSlice &
   VersionHistorySlice &
   WatermarkSlice &
-  ShapeSlice
+  ShapeSlice &
+  MaskSlice &
+  EffectsSlice
 
 export const useStore = create<StoreState>()((...a) => ({
   ...createProjectSlice(...a),
@@ -34,5 +39,12 @@ export const useStore = create<StoreState>()((...a) => ({
   ...createClipboardSlice(...a),
   ...createVersionHistorySlice(...a),
   ...createWatermarkSlice(...a),
-  ...createShapeSlice(...a)
+  ...createShapeSlice(...a),
+  ...createMaskSlice(...a),
+  ...createEffectsSlice(...a)
 }))
+
+attachDirtyTracking(
+  (listener) => useStore.subscribe(listener),
+  () => useStore.getState()
+)

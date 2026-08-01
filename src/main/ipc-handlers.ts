@@ -161,15 +161,6 @@ export function registerIpcHandlers(): void {
     }
   })
 
-  /** Writes raw image data (ArrayBuffer) to a file path. Used by direct save-to-disk. */
-  ipcMain.handle('save-image', async (_event, blob: ArrayBuffer, path: string) => {
-    try {
-      await writeFile(path, Buffer.from(blob))
-    } catch (err) {
-      console.error('save-image error:', err)
-    }
-  })
-
   /**
    * Opens the native Save dialog for image export, then writes the blob.
    * Returns the chosen filePath on success, or { canceled: true } if the
