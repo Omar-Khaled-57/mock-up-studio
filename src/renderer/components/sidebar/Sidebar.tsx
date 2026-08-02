@@ -29,7 +29,7 @@ const SECTIONS: SectionDef[] = [
     caption: 'Design',
     tabs: [
       { id: 'canvas', label: 'Canvas', icon: Proportions },
-      { id: 'background', label: 'Back\nGround', icon: Palette }
+      { id: 'background', label: 'Theme', icon: Palette }
     ]
   },
   {

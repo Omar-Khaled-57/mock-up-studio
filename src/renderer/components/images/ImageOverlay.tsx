@@ -55,7 +55,7 @@ export default function ImageOverlay({ image }: Props) {
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'contain',
+          objectFit: 'fill',
           display: 'block',
           pointerEvents: 'none',
           mixBlendMode: image.blendMode

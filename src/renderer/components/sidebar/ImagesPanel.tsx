@@ -2,86 +2,38 @@ import { useCallback, useRef, useState } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
-import { generateId } from '../../lib/id'
-import { ImageOverlay as ImageOverlayType } from '@shared/types'
+import { isPaintLayer } from '../../services/paint-layers'
+import { ICON } from '../../lib/icons'
 import { Plus, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
-
-const DEFAULT_SIZE = 300
 
 export default function ImagesPanel() {
   const { clsx, text, isLight, bg } = useTheme()
   const scene = useStore(safeScene)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
-  const addImage = useStore((s) => s.addImage)
+  const importImageFromFile = useStore((s) => s.importImageFromFile)
   const updateImage = useStore((s) => s.updateImage)
   const removeImage = useStore((s) => s.removeImage)
   const duplicateSelected = useStore((s) => s.duplicateSelected)
   const pushHistory = useStore((s) => s.pushHistory)
-  const canvas = scene.canvas
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
-  const images = scene.images
-  const maxZ = images.reduce((max, img) => Math.max(max, img.zIndex), -1)
+  const images = scene.images.filter((img) => !isPaintLayer(img))
 
   const selectedImage = selectedIds.length === 1
     ? images.find((img) => img.id === selectedIds[0]) ?? null
     : null
 
-  const handleAddFromFile = useCallback(
-    (file: File) => {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const img = new Image()
-        img.onload = () => {
-          const aspect = img.width / img.height
-          const w = Math.min(DEFAULT_SIZE, canvas.width * 0.5)
-          const h = Math.round(w / aspect)
-          const currentImages = useStore.getState().scenes[useStore.getState().activeSceneIndex].images
-          const image: ImageOverlayType = {
-            id: generateId(),
-            name: `Image ${currentImages.length + 1}`,
-            src: reader.result as string,
-            x: Math.round((canvas.width - w) / 2),
-            y: Math.round((canvas.height - h) / 2),
-            width: w,
-            height: h,
-            rotation: 0,
-            opacity: 100,
-            borderRadius: 0,
-            blendMode: 'normal',
-            flipX: false,
-            flipY: false,
-            blur: 0,
-            glow: [],
-            shadow: [],
-            zIndex: maxZ + 1,
-            locked: false,
-            visible: true,
-            groupId: null,
-            containerId: null
-          }
-          pushHistory('Add image')
-          addImage(image)
-          select(image.id)
-        }
-        img.src = reader.result as string
-      }
-      reader.readAsDataURL(file)
-    },
-    [canvas, maxZ, addImage, pushHistory, select]
-  )
-
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
-      if (file) handleAddFromFile(file)
+      if (file) void importImageFromFile(file)
       e.target.value = ''
     },
-    [handleAddFromFile]
+    [importImageFromFile]
   )
 
   const handleAddClick = useCallback(() => {
@@ -215,28 +167,28 @@ export default function ImagesPanel() {
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={img.visible ? 'Hide' : 'Show'}
                 >
-                  {img.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+                  {img.visible ? <Eye size={ICON.micro} /> : <EyeOff size={ICON.micro} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleLock(img.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={img.locked ? 'Unlock' : 'Lock'}
                 >
-                  {img.locked ? <Lock size={11} /> : <Unlock size={11} />}
+                  {img.locked ? <Lock size={ICON.micro} /> : <Unlock size={ICON.micro} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(img.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title="Duplicate"
                 >
-                  <Copy size={11} />
+                  <Copy size={ICON.micro} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(img.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors text-red-400")}
                   title="Delete"
                 >
-                  <Trash2 size={11} />
+                  <Trash2 size={ICON.micro} />
                 </button>
               </div>
             ))}

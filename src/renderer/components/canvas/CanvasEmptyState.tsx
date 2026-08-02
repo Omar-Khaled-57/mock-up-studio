@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react'
 import { Monitor, Type, ImagePlus, Palette } from 'lucide-react'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
@@ -15,6 +16,37 @@ export default function CanvasEmptyState() {
   const { clsx, text, bg, accent, radius } = useTheme()
   const setSidebarTab = useStore((s) => s.setSidebarTab)
   const dismiss = useRuntimeStore((s) => s.dismissCanvasEmptyState)
+  const addDeviceOfType = useStore((s) => s.addDeviceOfType)
+  const addDefaultTextBox = useStore((s) => s.addDefaultTextBox)
+  const importImageFromFile = useStore((s) => s.importImageFromFile)
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAddDevice = useCallback(() => {
+    addDeviceOfType('monitor')
+    dismiss()
+  }, [addDeviceOfType, dismiss])
+
+  const handleAddText = useCallback(() => {
+    addDefaultTextBox()
+    dismiss()
+  }, [addDefaultTextBox, dismiss])
+
+  const handleImportImage = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (file) {
+        void importImageFromFile(file)
+        dismiss()
+      }
+      e.target.value = ''
+    },
+    [importImageFromFile, dismiss]
+  )
 
   const go = (tab: SidebarTab) => {
     setSidebarTab(tab)
@@ -41,16 +73,24 @@ export default function CanvasEmptyState() {
           Drag a device onto the canvas, add a headline, or drop in an image to get started.
         </p>
 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+
         <div className="flex flex-wrap items-center justify-center gap-2 pointer-events-auto">
-          <button className={primary} onClick={() => go('devices')}>
+          <button className={primary} onClick={handleAddDevice}>
             <Monitor size={14} strokeWidth={1.75} />
             Add device
           </button>
-          <button className={secondary} onClick={() => go('text')}>
+          <button className={secondary} onClick={handleAddText}>
             <Type size={14} strokeWidth={1.75} />
             Add text
           </button>
-          <button className={secondary} onClick={() => go('images')}>
+          <button className={secondary} onClick={handleImportImage}>
             <ImagePlus size={14} strokeWidth={1.75} />
             Import image
           </button>

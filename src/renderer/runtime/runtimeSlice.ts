@@ -19,6 +19,7 @@
  */
 
 import { StateCreator } from 'zustand'
+import type { PreviewState } from '../services/preview'
 
 export type ResetScope = 'all' | 'transient'
 export type TemporaryToolUntil = 'keyup' | 'pointerup'
@@ -26,16 +27,22 @@ export type EditingMode = 'text' | 'rename' | 'upload'
 export type MaskPreviewShape = 'rectangle' | 'ellipse' | 'brush'
 export type MaskMode = 'mask' | 'unmask'
 
+export type BrushShape = 'round' | 'square'
+
 export interface BrushOptions {
   size: number
   hardness: number
   color: string
+  shape: BrushShape
+  opacity: number
 }
 
 export const DEFAULT_BRUSH_OPTIONS: BrushOptions = {
   size: 24,
   hardness: 0.6,
-  color: '#6366f1'
+  color: '#6366f1',
+  shape: 'round',
+  opacity: 1
 }
 
 export interface TemporaryToolEntry {
@@ -128,6 +135,8 @@ export interface RuntimeState {
   snapGuides: SnapGuides
   /** Potential container the Select tool would nest a dragged element into (live drop ring). */
   containerDropTarget: string | null
+  /** Live tool preview (selection transform ghost, blur region indicator, …). */
+  preview: PreviewState | null
   maskPreview: MaskPreviewState | null
   maskShape: MaskPreviewShape
   maskMode: MaskMode
@@ -170,6 +179,7 @@ export interface RuntimeSlice extends RuntimeState {
   exitFocus: () => void
   setSnapGuides: (guides: SnapGuides) => void
   setContainerDropTarget: (targetId: string | null) => void
+  setPreview: (preview: PreviewState | null) => void
   setMaskPreview: (preview: MaskPreviewState | null) => void
   setMaskShape: (shape: MaskPreviewShape) => void
   setMaskMode: (mode: MaskMode) => void
@@ -199,6 +209,7 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   focusElementId: null,
   snapGuides: { verticalGuides: [], horizontalGuides: [] },
   containerDropTarget: null,
+  preview: null,
   maskPreview: null,
   maskShape: 'rectangle',
   maskMode: 'mask',
@@ -251,6 +262,8 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   setSnapGuides: (guides) => set({ snapGuides: guides }),
 
   setContainerDropTarget: (targetId) => set({ containerDropTarget: targetId }),
+
+  setPreview: (preview) => set({ preview }),
 
   setMaskPreview: (preview) => set({ maskPreview: preview }),
   setMaskShape: (shape) => set({ maskShape: shape }),

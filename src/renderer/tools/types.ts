@@ -4,7 +4,7 @@ import type { FastOverlayHost } from '../services/stroke-host'
 
 export type ResizeHandleName = 'nw' | 'ne' | 'sw' | 'se'
 
-export type ToolGroup = 'select' | 'brush' | 'eraser' | 'focus' | 'mask'
+export type ToolGroup = 'select' | 'brush' | 'blur' | 'eraser' | 'focus' | 'mask'
 
 export type ToolCapability = 'moveable' | 'resizable' | 'editable' | 'paintable' | 'maskable'
 
@@ -71,6 +71,10 @@ export interface ElementBounds {
   y: number
   width: number
   height: number
+  /** Element rotation in degrees (textBoxes have none). */
+  rotation?: number
+  /** Preserve aspect on pointer resize even without Shift. */
+  lockAspectRatio?: boolean
 }
 
 export interface ElementPatch {

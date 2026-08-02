@@ -46,7 +46,9 @@ export function buildContainerClip(input: ContainerClipInput): ContainerClip {
         ? (input.plusThickness ?? 0.3)
         : input.shapeKind === 'arrow-right'
           ? (input.arrowThickness ?? 0.5)
-          : undefined
+          : input.shapeKind === 'cross'
+            ? (input.crossThickness ?? 0.3)
+            : undefined
     const path = getShapePath(input.shapeKind, input.width, input.height, input.cornerRadius ?? 0, input.angles, thickness)
     if (path) shapeClip = `path('${path}')`
   }

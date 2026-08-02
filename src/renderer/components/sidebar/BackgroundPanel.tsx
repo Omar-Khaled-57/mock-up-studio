@@ -19,14 +19,15 @@ function Divider() {
 }
 
 /**
- * Merged Background panel (v0.3.0 IA): the `themes` (background editor) and
- * `theme-presets` tabs stack here in order. Canvas Size moved back to its own
- * `canvas` tab (post-5e polish).
+ * Merged Theme panel (v0.3.0 IA): the theme (scene background) editor and the
+ * theme-preset gallery stack here in order. Canvas Size moved back to its own
+ * `canvas` tab (post-5e polish). The rail tab id stays `'background'` for
+ * stored-state compatibility; only the user-facing label reads "Theme".
  */
 export default function BackgroundPanel() {
   return (
     <div className="space-y-5">
-      <Section title="Background">
+      <Section title="Theme">
         <ThemesPanel />
       </Section>
       <Divider />

@@ -164,6 +164,7 @@ export default function Ruler({ orientation, viewportLength }: RulerProps) {
   return (
     <div
       ref={rulerRef}
+      data-ruler={orientation}
       className={`relative select-none ${isLight ? 'bg-zinc-100/90' : 'bg-zinc-900/90'}`}
       style={{
         [orientation === 'horizontal' ? 'width' : 'height']: viewportLength,

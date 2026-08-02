@@ -5,12 +5,13 @@
  * polluting exported bitmaps.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, act } from '@testing-library/react'
 import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { resetStore, makeDevice, makeTextBox } from './helpers'
 import Scene from '../renderer/components/canvas/Scene'
 import OverlayRenderer from '../renderer/components/canvas/OverlayRenderer'
+import { buildGhostPreview } from '../renderer/services/preview'
 
 describe('OverlayRenderer', () => {
   beforeEach(() => {
@@ -108,6 +109,49 @@ describe('OverlayRenderer', () => {
     expect(wrapper?.getAttribute('data-chrome-element-kind')).toBe('textBox')
   })
 
+  it('rotates the selection chrome with a rotated element', () => {
+    const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400, rotation: 45 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    useStore.setState({ selectedIds: ['dev-1'] })
+
+    render(<OverlayRenderer />)
+    const wrapper = document.querySelector('[data-chrome-element-id="dev-1"]') as HTMLElement
+    expect(wrapper.style.transform).toBe('rotate(45deg)')
+    expect(wrapper.style.transformOrigin).toBe('center')
+    // Positions at the UNROTATED box; the wrapper itself is rotated.
+    expect(wrapper.style.left).toBe('100px')
+    expect(wrapper.style.top).toBe('100px')
+    expect(wrapper.style.width).toBe('600px')
+    expect(wrapper.style.height).toBe('400px')
+    expect(document.querySelectorAll('[data-resize-handle]')).toHaveLength(4)
+  })
+
+  it('tracks live unrotated bounds during a resize of a rotated element', () => {
+    const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400, rotation: 45 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    useStore.setState({ selectedIds: ['dev-1'] })
+
+    render(<OverlayRenderer />)
+
+    act(() => {
+      useRuntimeStore.getState().beginInteraction({ toolId: 'select', pointerId: 1, kind: 'resize', startedAt: 0 })
+      // The ghost emits the rotated AABB + the raw source box; the chrome
+      // wrapper must follow the raw box and keep its rotation.
+      useRuntimeStore.getState().setPreview(buildGhostPreview({ id: 'dev-1', x: 100, y: 100, width: 720, height: 460, rotation: 45 }))
+    })
+
+    const during = document.querySelector('[data-chrome-element-id="dev-1"]') as HTMLElement
+    expect(during.style.left).toBe('100px')
+    expect(during.style.width).toBe('720px')
+    expect(during.style.height).toBe('460px')
+    expect(during.style.transform).toBe('rotate(45deg)')
+
+    act(() => {
+      useRuntimeStore.getState().setPreview(null)
+      useRuntimeStore.getState().endInteraction()
+    })
+  })
+
   it('renders the focus dim scrim and ring in the overlay, not the export node', () => {
     const dev = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 100, height: 100, groupId: 'g-1' })
     const sceneState = useStore.getState().scenes[0]
@@ -178,5 +222,54 @@ describe('OverlayRenderer', () => {
   it('renders no drop-target ring when the drag is over empty canvas', () => {
     render(<OverlayRenderer />)
     expect(document.querySelector('[data-container-drop-target]')).toBeNull()
+  })
+
+  it('tracks the selection chrome to the live bounds during a resize gesture', () => {
+    const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    useStore.setState({ selectedIds: ['dev-1'] })
+
+    render(<OverlayRenderer />)
+    const before = document.querySelector('[data-chrome-element-id="dev-1"]') as HTMLElement
+    expect(before.style.left).toBe('100px')
+    expect(before.style.width).toBe('600px')
+    expect(before.style.height).toBe('400px')
+
+    act(() => {
+      useRuntimeStore.getState().beginInteraction({ toolId: 'select', pointerId: 1, kind: 'resize', startedAt: 0 })
+      useRuntimeStore.getState().setPreview(buildGhostPreview({ id: 'dev-1', x: 100, y: 100, width: 720, height: 460 }))
+    })
+
+    const during = document.querySelector('[data-chrome-element-id="dev-1"]') as HTMLElement
+    expect(during.style.left).toBe('100px')
+    expect(during.style.width).toBe('720px')
+    expect(during.style.height).toBe('460px')
+
+    act(() => {
+      useRuntimeStore.getState().setPreview(null)
+      useRuntimeStore.getState().endInteraction()
+    })
+  })
+
+  it('keeps the chrome at the start bounds during a move gesture (origin outline)', () => {
+    const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    useStore.setState({ selectedIds: ['dev-1'] })
+
+    render(<OverlayRenderer />)
+
+    act(() => {
+      useRuntimeStore.getState().beginInteraction({ toolId: 'select', pointerId: 1, kind: 'move', startedAt: 0 })
+      useRuntimeStore.getState().setPreview(buildGhostPreview({ id: 'dev-1', x: 240, y: 160, width: 600, height: 400 }))
+    })
+
+    const chrome = document.querySelector('[data-chrome-element-id="dev-1"]') as HTMLElement
+    expect(chrome.style.left).toBe('100px')
+    expect(chrome.style.width).toBe('600px')
+
+    act(() => {
+      useRuntimeStore.getState().setPreview(null)
+      useRuntimeStore.getState().endInteraction()
+    })
   })
 })

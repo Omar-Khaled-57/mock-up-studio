@@ -163,6 +163,20 @@ describe('exportScene clone sanitization', () => {
     expect(capture.node?.querySelector('[data-scene-background]')).toBeNull()
     expect(capture.node?.style.background).toBe('transparent')
   })
+
+  it('strips the transparent-canvas checkerboard chrome from the export clone', async () => {
+    document.body.innerHTML = `
+      <div data-scene-export>
+        <div data-transparent-checker style="position:absolute">checker</div>
+        <div class="content">real content</div>
+      </div>
+    `
+    const blob = await exportScene({ format: 'png', scale: 2, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
+
+    expect(blob).not.toBeNull()
+    expect(capture.node?.querySelector('[data-transparent-checker]')).toBeNull()
+    expect(capture.node?.querySelector('.content')).not.toBeNull()
+  })
 })
 
 describe('punchSceneMaskHoles', () => {

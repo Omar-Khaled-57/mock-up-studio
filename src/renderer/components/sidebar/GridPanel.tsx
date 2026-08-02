@@ -2,7 +2,9 @@ import { useState, useCallback } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 import { Trash2, Plus, Minus } from 'lucide-react'
+import { getHexColorWithOpacity, getOpacityPercentFromColor } from '../../lib/color-utils'
 
 export default function GridPanel() {
   const { clsx, bg, text, border: borderT } = useTheme()
@@ -69,7 +71,7 @@ export default function GridPanel() {
               <input
                 type="color"
                 value={grid.color.slice(0, 7)}
-                onChange={(e) => updateGrid({ color: e.target.value + '33' })}
+                onChange={(e) => updateGrid({ color: getHexColorWithOpacity(e.target.value, getOpacityPercentFromColor(grid.color, 100)) })}
                 className={clsx("w-8 h-8 rounded border cursor-pointer shrink-0", borderT.secondary)}
               />
               <input
@@ -82,6 +84,43 @@ export default function GridPanel() {
                 className={clsx("flex-1 px-1.5 py-0.5 text-[10px] font-mono rounded outline-none min-w-0", bg.input)}
                 placeholder="#rrggbbaa"
               />
+            </div>
+          </div>
+
+          <div>
+            <label className={clsx("text-xs mb-1 block", text.tertiary)}>Grid opacity</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(getOpacityPercentFromColor(grid.color, (grid.opacity ?? 1) * 100))}
+                onChange={(e) => {
+                  const nextPercent = Number(e.target.value)
+                  updateGrid({
+                    color: getHexColorWithOpacity(grid.color, nextPercent),
+                    opacity: nextPercent / 100,
+                  })
+                }}
+                className="w-full accent-blue-500"
+              />
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(getOpacityPercentFromColor(grid.color, (grid.opacity ?? 1) * 100))}
+                onChange={(e) => {
+                  const nextPercent = Number(e.target.value)
+                  updateGrid({
+                    color: getHexColorWithOpacity(grid.color, nextPercent),
+                    opacity: nextPercent / 100,
+                  })
+                }}
+                className={clsx("w-16 px-1.5 py-0.5 text-[10px] font-mono rounded outline-none", bg.input)}
+              />
+              <span className={clsx("text-xs shrink-0", text.tertiary)}>%</span>
             </div>
           </div>
 
@@ -167,7 +206,7 @@ export default function GridPanel() {
                       onClick={() => handleDeleteGuide(g.id)}
                       className={clsx("shrink-0 transition-colors text-red-400")}
                     >
-                      <Trash2 size={10} />
+                      <Trash2 size={ICON.micro} />
                     </button>
                   </div>
                 ))}

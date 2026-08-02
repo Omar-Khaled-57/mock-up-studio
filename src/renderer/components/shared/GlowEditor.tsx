@@ -90,7 +90,7 @@ export default function GlowEditor({ value, onChange, className = '' }: Props) {
           <div className="flex items-center justify-between">
             <ToggleSwitch label={`Glow ${idx + 1}`} checked={layer.enabled} onChange={(v) => updateLayer(idx, { enabled: v })} />
             {value.length > 1 && (
-              <button onClick={() => removeLayer(idx)} className={clsx("text-[10px]", isLight ? "text-zinc-400 hover:text-red-600" : "text-zinc-600 hover:text-red-400")}>Remove</button>
+              <button onClick={() => removeLayer(idx)} className={clsx("text-[10px]", isLight ? "text-zinc-500 hover:text-red-600" : "text-zinc-500 hover:text-red-400")}>Remove</button>
             )}
           </div>
           {layer.enabled && (

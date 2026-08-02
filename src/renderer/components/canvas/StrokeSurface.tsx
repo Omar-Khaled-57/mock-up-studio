@@ -10,15 +10,15 @@ function createStrokeHost(canvas: HTMLCanvasElement): FastOverlayHost {
       const ctx = canvas.getContext('2d')
       if (!ctx) return
       ctx.strokeStyle = state.color
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
+      ctx.lineCap = state.shape === 'square' ? 'square' : 'round'
+      ctx.lineJoin = state.shape === 'square' ? 'miter' : 'round'
     },
     strokeLine(a: Point, b: Point, state: StrokeRenderState) {
       const ctx = canvas.getContext('2d')
       if (!ctx) return
       ctx.strokeStyle = state.color
       ctx.lineWidth = Math.max(0.25, state.width * (0.25 + 0.75 * state.pressure))
-      ctx.globalAlpha = 0.15 + 0.85 * Math.min(1, Math.max(0, state.hardness))
+      ctx.globalAlpha = (state.opacity ?? 1) * (0.15 + 0.85 * Math.min(1, Math.max(0, state.hardness)))
       ctx.beginPath()
       ctx.moveTo(a.x, a.y)
       ctx.lineTo(b.x, b.y)

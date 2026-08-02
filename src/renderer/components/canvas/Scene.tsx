@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef, Fragment } from 'react'
+import { useMemo, useCallback, useRef, useState, Fragment } from 'react'
 import type { Device, ImageOverlay as ImageOverlayType, Mask, Scene, Shape, TextBox as TextBoxType } from '@shared/types'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
@@ -14,6 +14,7 @@ import WatermarkOverlay from './WatermarkOverlay'
 import MaskSnapshotLayer from '../masks/MaskSnapshotLayer'
 import { buildContainerClip, ContainerClipInput } from '../../services/container-clip'
 import { BACKGROUND_MASK_TARGET_ID, buildMaskClipPath } from '../../services/mask-visualization'
+import { screenToScene } from '../../services/viewport'
 
 type ElementEntry =
   | { type: 'device'; zIndex: number; data: Device }
@@ -63,6 +64,7 @@ function buildClipInput(container: ElementEntry, masks: Mask[]): ContainerClipIn
         angles: container.data.angles,
         plusThickness: container.data.plusThickness,
         arrowThickness: container.data.arrowThickness,
+        crossThickness: container.data.crossThickness,
         masks
       }
     default:
@@ -78,6 +80,7 @@ function buildClipInput(container: ElementEntry, masks: Mask[]): ContainerClipIn
 export default function Scene() {
   const scene = useStore(safeScene)
   const updateGuide = useStore((s) => s.updateGuide)
+  const removeGuide = useStore((s) => s.removeGuide)
   const pushHistory = useStore((s) => s.pushHistory)
   const contextMenu = useRuntimeStore((s) => s.contextMenu)
   const closeContextMenu = useRuntimeStore((s) => s.closeContextMenu)
@@ -136,6 +139,8 @@ export default function Scene() {
     return build(sorted.filter((e) => !handledInWrapper.has(e.data.id)))
   }, [scene, focusElementId])
 
+  const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
+
   /** Drag-to-move a guide line. */
   const dragGuide = useRef<{
     id: string
@@ -143,16 +148,41 @@ export default function Scene() {
     orientation: 'horizontal' | 'vertical'
     pushed: boolean
     el: HTMLElement | null
+    startScenePos: number
   } | null>(null)
+
+  const getViewportRect = useCallback((target: EventTarget | null) => {
+    const viewport = (target as HTMLElement | null)?.closest<HTMLElement>('[data-canvas-viewport], [data-scene-export]')
+    return viewport?.getBoundingClientRect() ?? null
+  }, [])
 
   const handleGuidePointerDown = useCallback(
     (e: React.PointerEvent, gid: string, orientation: 'horizontal' | 'vertical', position: number) => {
       e.stopPropagation()
-      const el = e.target as HTMLElement
-      el.setPointerCapture(e.pointerId)
-      dragGuide.current = { id: gid, startPos: position, orientation, pushed: false, el }
+      setSelectedGuideId(gid)
+      const el = e.target as HTMLElement | null
+      if (el) {
+        const capture = (el as HTMLElement & { setPointerCapture?: (id: number) => void }).setPointerCapture
+        if (typeof capture === 'function') capture.call(el, e.pointerId)
+      }
+      const scenePoint = screenToScene(
+        e.clientX,
+        e.clientY,
+        getViewportRect(e.currentTarget),
+        { x: useStore.getState().panX, y: useStore.getState().panY },
+        useStore.getState().zoom
+      )
+
+      dragGuide.current = {
+        id: gid,
+        startPos: position,
+        orientation,
+        pushed: false,
+        el,
+        startScenePos: orientation === 'vertical' ? scenePoint.x : scenePoint.y
+      }
     },
-    []
+    [getViewportRect]
   )
 
   const handleGuidePointerMove = useCallback(
@@ -160,20 +190,30 @@ export default function Scene() {
       const dg = dragGuide.current
       if (!dg) return
       e.stopPropagation()
-      const zoom = useStore.getState().zoom
+      const state = useStore.getState()
+      const scenePoint = screenToScene(
+        e.clientX,
+        e.clientY,
+        getViewportRect(e.currentTarget),
+        { x: state.panX, y: state.panY },
+        state.zoom
+      )
+
       if (!dg.pushed) {
         dg.pushed = true
         pushHistory('Move guide')
       }
       if (dg.orientation === 'vertical') {
-        const newPos = Math.max(0, dg.startPos + e.movementX / zoom)
+        const delta = scenePoint.x - dg.startScenePos
+        const newPos = Math.max(0, dg.startPos + delta)
         updateGuide(dg.id, newPos)
       } else {
-        const newPos = Math.max(0, dg.startPos + e.movementY / zoom)
+        const delta = scenePoint.y - dg.startScenePos
+        const newPos = Math.max(0, dg.startPos + delta)
         updateGuide(dg.id, newPos)
       }
     },
-    [updateGuide, pushHistory]
+    [updateGuide, pushHistory, getViewportRect]
   )
 
   const handleGuidePointerUp = useCallback(
@@ -182,10 +222,26 @@ export default function Scene() {
       if (!dg) return
       e.stopPropagation()
       dg.el?.releasePointerCapture?.(e.pointerId)
+
+      const target = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(e.clientX, e.clientY) : null
+      const ruler = target?.closest('[data-ruler]') ?? Array.from(document.querySelectorAll<HTMLElement>('[data-ruler]')).find((el) => {
+        const rect = el.getBoundingClientRect()
+        return e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom
+      })
+      if (ruler) {
+        pushHistory('Delete guide')
+        removeGuide(dg.id)
+      }
+
       dragGuide.current = null
+      setSelectedGuideId((current) => (current === dg.id ? null : current))
     },
-    []
+    [pushHistory, removeGuide]
   )
+
+  const handleScenePointerDown = useCallback(() => {
+    setSelectedGuideId(null)
+  }, [])
 
   const handleGuideContext = useCallback(
     (e: React.MouseEvent, gid: string) => {
@@ -343,11 +399,12 @@ export default function Scene() {
       {maskedContent}
 
       {/* User guides — interactive (drag to move, right-click to delete) */}
-      <div onPointerMove={handleGuidePointerMove} onPointerUp={handleGuidePointerUp}>
+      <div onPointerDown={handleScenePointerDown} onPointerMove={handleGuidePointerMove} onPointerUp={handleGuidePointerUp}>
         {scene.guides.map((g) => (
           <div
             key={g.id}
             data-guide="true"
+            data-guide-selected={selectedGuideId === g.id ? 'true' : 'false'}
             className="absolute cursor-ew-resize hover:z-10"
             style={{
               ...(g.orientation === 'vertical'
@@ -364,7 +421,7 @@ export default function Scene() {
                 background: g.orientation === 'vertical'
                   ? 'linear-gradient(90deg, transparent, #f472b6, transparent)'
                   : 'linear-gradient(0deg, transparent, #f472b6, transparent)',
-                opacity: 0.6
+                opacity: selectedGuideId === g.id ? 1 : 0.6
               }}
             />
           </div>

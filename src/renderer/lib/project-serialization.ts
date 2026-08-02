@@ -107,6 +107,7 @@ interface SerializedBackground {
   gradient?: { colors: string[]; angle: number; type?: string; radialShape?: string }
   image?: { src: string; blur: number; dim: number; overlayColor: string }
   presetName?: string
+  transparent?: boolean
 }
 
 interface SerializedDevice {
@@ -129,6 +130,7 @@ interface SerializedDevice {
   customFrame?: { svgData: string; screenRegion: { x: number; y: number; w: number; h: number } }
   groupId: string | null
   containerId?: string | null
+  lockAspectRatio?: boolean
 }
 
 interface SerializedTextBox {
@@ -190,6 +192,7 @@ interface SerializedImage {
   shadow?: SerializedImageShadow[]
   effects?: ImageEffects
   containerId?: string | null
+  lockAspectRatio?: boolean
 }
 
 interface SerializedShape {
@@ -219,6 +222,7 @@ interface SerializedShape {
   groupId: string | null
   containerId?: string | null
   effects?: ImageEffects
+  lockAspectRatio?: boolean
 }
 
 interface SerializedImageGlow {
@@ -259,6 +263,7 @@ interface SerializedGrid {
   enabled: boolean
   size: number
   color: string
+  opacity?: number
   snapEnabled: boolean
   style: string
 }

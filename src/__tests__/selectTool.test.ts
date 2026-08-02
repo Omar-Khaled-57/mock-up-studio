@@ -137,6 +137,62 @@ describe('select tool', () => {
     expect(useRuntimeStore.getState().snapGuides).toEqual({ verticalGuides: [], horizontalGuides: [] })
   })
 
+  it('emits a dashed ghost preview on the moving bounds and clears it on commit', () => {
+    const device = withDevice()
+    mountElement(device.id, 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(150, 150), hitResult: { id: device.id, kind: 'device', zIndex: 0, locked: false }, toolId: 'select' }),
+      evt({ clientX: 170, clientY: 170 })
+    )
+
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(250, 250), toolId: 'select' }),
+      evt({ clientX: 270, clientY: 270 })
+    )
+
+    const duringDrag = useRuntimeStore.getState().preview
+    expect(duringDrag).not.toBeNull()
+    expect(duringDrag!.visuals).toHaveLength(1)
+    expect(duringDrag!.visuals[0]).toMatchObject({ kind: 'rect', x: 200, y: 200, width: 600, height: 400 })
+    expect(duringDrag!.style).toMatchObject({ lineDash: [6, 4], glow: true })
+
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(250, 250), toolId: 'select' }),
+      evt({ clientX: 270, clientY: 270 })
+    )
+
+    expect(useRuntimeStore.getState().preview).toBeNull()
+  })
+
+  it('a cancelled drag clears the ghost preview', () => {
+    const device = withDevice()
+    mountElement(device.id, 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(150, 150), hitResult: { id: device.id, kind: 'device', zIndex: 0, locked: false }, toolId: 'select' }),
+      evt({ clientX: 170, clientY: 170 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(250, 250), toolId: 'select' }),
+      evt({ clientX: 270, clientY: 270 })
+    )
+    expect(useRuntimeStore.getState().preview).not.toBeNull()
+
+    tool.onPointerCancel?.(
+      manager.buildContext({ scenePoint: point(250, 250), toolId: 'select' }),
+      evt({ clientX: 270, clientY: 270 })
+    )
+
+    expect(useRuntimeStore.getState().preview).toBeNull()
+  })
+
   it('escape mid-drag cancels the drag and a later pointer up does not commit', () => {
     const device = withDevice()
     const el = mountElement(device.id, 'device')
@@ -444,6 +500,67 @@ describe('select tool', () => {
     expect(dev.height).toBe(500)
   })
 
+  it('a locked-aspect element resizes proportionally without shift', () => {
+    const device = makeDevice({ x: 100, y: 100, width: 600, height: 400, lockAspectRatio: true })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    mountElement(device.id, 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({
+        scenePoint: point(700, 500),
+        hitResult: { id: device.id, kind: 'device', zIndex: 0, locked: false },
+        resizeHandle: 'se',
+        toolId: 'select'
+      }),
+      evt({ clientX: 720, clientY: 520 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(800, 600), toolId: 'select' }),
+      evt({ clientX: 820, clientY: 620 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(800, 600), toolId: 'select' }),
+      evt({ clientX: 820, clientY: 620 })
+    )
+
+    const dev = useStore.getState().scenes[0].devices[0]
+    expect(dev.width).toBe(700)
+    expect(dev.height).toBe(467)
+  })
+
+  it('an unlocked element resizes free-form without shift', () => {
+    const device = withDevice()
+    mountElement(device.id, 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({
+        scenePoint: point(700, 500),
+        hitResult: { id: device.id, kind: 'device', zIndex: 0, locked: false },
+        resizeHandle: 'se',
+        toolId: 'select'
+      }),
+      evt({ clientX: 720, clientY: 520 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(800, 600), toolId: 'select' }),
+      evt({ clientX: 820, clientY: 620 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(800, 600), toolId: 'select' }),
+      evt({ clientX: 820, clientY: 620 })
+    )
+
+    const dev = useStore.getState().scenes[0].devices[0]
+    expect(dev.width).toBe(700)
+    expect(dev.height).toBe(500)
+  })
+
   it('pointer cancel on a drag restores the original position', () => {
     const device = withDevice()
     mountElement(device.id, 'device')
@@ -484,7 +601,7 @@ describe('select tool', () => {
   })
 
   it('select tool exposes its variants for group cycling', () => {
-    expect(selectTool.variants).toEqual(['select', 'marquee', 'hand', 'focus'])
+    expect(selectTool.variants).toEqual(['select', 'marquee', 'focus', 'hand'])
     expect(selectTool.shortcut).toBe('v')
   })
 

@@ -135,6 +135,22 @@ describe('drag session', () => {
     expect(onGuidesChange).toHaveBeenCalledWith({ verticalGuides: [], horizontalGuides: [] })
   })
 
+  it('emits the target bounds via onPreview during move (ghost)', () => {
+    const el = makeEl()
+    const onPreview = vi.fn()
+    const session = createDragSession({
+      zoom: 2,
+      element: { id: 'a', x: 10, y: 20, width: 100, height: 50, rotation: 45 },
+      el,
+      onDrag: vi.fn(),
+      onEnd: vi.fn(),
+      onPreview
+    })
+    session.begin({ clientX: 0, clientY: 0 })
+    session.move({ clientX: 40, clientY: 20 })
+    expect(onPreview).toHaveBeenCalledWith('a', 30, 30, 100, 50, 45)
+  })
+
   it('cancel reverts the element and followers and clears guides', () => {
     const el = makeEl()
     const fEl = makeEl()
@@ -253,6 +269,39 @@ describe('resize session', () => {
     expect(el.style.height).toBe('70px')
   })
 
+  it('keeps the element aspect ratio when lockAspectRatio is set (no shift needed)', () => {
+    const el = makeEl()
+    const onResize = vi.fn()
+    const session = createResizeSession({
+      zoom: 1,
+      element: { id: 'a', x: 10, y: 10, width: 100, height: 50 },
+      el,
+      onResize,
+      onEnd: vi.fn(),
+      lockAspectRatio: true
+    })
+    session.begin('se', { clientX: 0, clientY: 0 })
+    session.move({ clientX: 40, clientY: 99 }, false)
+    expect(el.style.width).toBe('140px')
+    expect(el.style.height).toBe('70px')
+  })
+
+  it('keeps the aspect locked even when shift is also pressed', () => {
+    const el = makeEl()
+    const session = createResizeSession({
+      zoom: 1,
+      element: { id: 'a', x: 10, y: 10, width: 100, height: 50 },
+      el,
+      onResize: vi.fn(),
+      onEnd: vi.fn(),
+      lockAspectRatio: true
+    })
+    session.begin('se', { clientX: 0, clientY: 0 })
+    session.move({ clientX: 40, clientY: 99 }, true)
+    expect(el.style.width).toBe('140px')
+    expect(el.style.height).toBe('70px')
+  })
+
   it('sw shrinks the left edge', () => {
     const el = makeEl()
     const session = createResizeSession({
@@ -266,6 +315,22 @@ describe('resize session', () => {
     session.end({ clientX: 50, clientY: 0 }, false)
     expect(el.style.left).toBe('60px')
     expect(el.style.width).toBe('50px')
+  })
+
+  it('emits the resized target bounds via onPreview during move (ghost)', () => {
+    const el = makeEl()
+    const onPreview = vi.fn()
+    const session = createResizeSession({
+      zoom: 1,
+      element: { id: 'a', x: 10, y: 10, width: 100, height: 100, rotation: 30 },
+      el,
+      onResize: vi.fn(),
+      onEnd: vi.fn(),
+      onPreview
+    })
+    session.begin('se', { clientX: 0, clientY: 0 })
+    session.move({ clientX: 50, clientY: 30 }, false)
+    expect(onPreview).toHaveBeenCalledWith('a', 10, 10, 150, 130, 30)
   })
 
   it('cancel reverts styles without committing to the store', () => {

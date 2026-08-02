@@ -16,7 +16,7 @@ export default function Grid({ grid, canvasWidth, canvasHeight }: GridProps) {
       className="absolute inset-0 pointer-events-none"
       width={canvasWidth}
       height={canvasHeight}
-      style={{ zIndex: 1 }}
+      style={{ zIndex: 1, opacity: grid.opacity ?? 1 }}
     >
       <defs>
         <pattern

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 import { Camera, X, Trash2 } from 'lucide-react'
 
 function formatTime(ts: number): string {
@@ -48,7 +49,7 @@ export default function VersionHistoryPanel() {
           onClick={handleCreateManual}
           className={clsx("flex items-center gap-1 text-[10px] transition-colors", "text-indigo-500 hover:text-indigo-400")}
         >
-          <Camera size={11} />
+          <Camera size={ICON.micro} />
           Snapshot
         </button>
       </div>
@@ -99,7 +100,7 @@ export default function VersionHistoryPanel() {
             onClick={clearSnapshots}
             className={clsx("w-full flex items-center justify-center gap-1.5 text-[10px] transition-colors py-1", text.muted)}
           >
-            <Trash2 size={10} />
+            <Trash2 size={ICON.micro} />
             Clear all
           </button>
         </>

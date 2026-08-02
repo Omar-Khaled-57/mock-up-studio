@@ -3,44 +3,10 @@ import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
 import { useTripleClick } from '../../hooks/useTripleClick'
-import { generateId } from '../../lib/id'
-import { DEVICE_ASPECT_RATIOS } from '../../lib/constants'
 import type { Device } from '@shared/types'
+import { DEVICE_TYPES, DEVICE_NAMES } from '../../lib/element-factories'
 import { Plus, Eye, EyeOff, Lock, Unlock } from 'lucide-react'
 import LayoutTemplates from './LayoutTemplates'
-
-const DEVICE_TYPES: { type: Device['type']; label: string }[] = [
-  { type: 'monitor', label: 'Monitor' },
-  { type: 'laptop', label: 'Laptop' },
-  { type: 'ipad', label: 'iPad' },
-  { type: 'phone', label: 'Phone' },
-  { type: 'watch', label: 'Watch' },
-  { type: 'browser', label: 'Browser' },
-  { type: 'terminal', label: 'Terminal' }
-]
-
-const DEVICE_NAMES: Record<string, string> = Object.fromEntries(
-  DEVICE_TYPES.map((d) => [d.type, d.label])
-)
-
-const DEVICE_DEFAULTS: Record<string, { width: number }> = {
-  monitor: { width: 520 },
-  laptop: { width: 420 },
-  ipad: { width: 280 },
-  phone: { width: 160 },
-  watch: { width: 90 },
-  browser: { width: 480 },
-  terminal: { width: 400 }
-}
-
-function getDefaultWidth(type: Device['type']): number {
-  return DEVICE_DEFAULTS[type]?.width ?? 300
-}
-
-function getDefaultHeight(type: Device['type']): number {
-  const ratio = DEVICE_ASPECT_RATIOS[type] ?? 16 / 9
-  return Math.round(getDefaultWidth(type) / ratio)
-}
 
 interface DeviceRowProps {
   device: Device
@@ -113,12 +79,10 @@ export default function DevicesPanel() {
   const { clsx, bg, text, border: borderT } = useTheme()
   const scene = useStore(safeScene)
   const select = useStore((s) => s.select)
-  const addDevice = useStore((s) => s.addDevice)
+  const addDeviceOfType = useStore((s) => s.addDeviceOfType)
   const updateDevice = useStore((s) => s.updateDevice)
   const pushHistory = useStore((s) => s.pushHistory)
   const selectedIds = useStore((s) => s.selectedIds)
-
-  const maxZ = scene.devices.reduce((max, d) => Math.max(max, d.zIndex), -1)
 
   const selectedDevice = selectedIds.length === 1
     ? scene.devices.find((d) => d.id === selectedIds[0]) ?? null
@@ -126,32 +90,9 @@ export default function DevicesPanel() {
 
   const handleAdd = useCallback(
     (type: Device['type']) => {
-      const w = getDefaultWidth(type)
-      const h = getDefaultHeight(type)
-      const existingCount = scene.devices.filter((d) => d.type === type).length
-      const device: Device = {
-        id: generateId(),
-        type,
-        name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${existingCount + 1}`,
-        visible: true,
-        locked: false,
-        x: 100 + Math.random() * 200,
-        y: 100 + Math.random() * 100,
-        width: w,
-        height: h,
-        rotation: 0,
-        zIndex: maxZ + 1,
-        colorTheme: 'dark',
-        screenImage: null,
-        objectFit: 'contain',
-        groupId: null,
-        containerId: null
-      }
-      pushHistory(`Add ${type}`)
-      addDevice(device)
-      select(device.id)
+      addDeviceOfType(type)
     },
-    [scene.devices, maxZ, addDevice, pushHistory, select]
+    [addDeviceOfType]
   )
 
   const [renamingId, setRenamingId] = useState<string | null>(null)

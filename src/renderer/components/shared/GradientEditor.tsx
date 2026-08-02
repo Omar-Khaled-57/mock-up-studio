@@ -80,7 +80,7 @@ function generateRandomGradient(): GradientValue {
 }
 
 export default function GradientEditor({ value, onChange, presets = DEFAULT_PRESETS, className = '' }: Props) {
-  const { clsx, bg, text } = useTheme()
+  const { isLight, clsx, bg, text } = useTheme()
   const [showPresets, setShowPresets] = useState(false)
 
   const previewStyle = useMemo(() => ({ background: buildCSSGradient(value) }), [value])
@@ -178,10 +178,10 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
         <div className="flex items-center justify-between mb-1.5">
           <label className={clsx("text-[10px]", text.secondary)}>Colors ({value.stops.length})</label>
           <div className="flex gap-1.5">
-            <button onClick={handleRandomize} className={clsx("text-[10px]", text.muted, "hover:text-zinc-300")} title="Randomize">
+            <button onClick={handleRandomize} className={clsx("text-[10px]", text.muted, isLight ? "hover:text-zinc-900" : "hover:text-zinc-300")} title="Randomize">
               Random
             </button>
-            <button onClick={addStop} className={clsx("text-[10px]", "text-indigo-500 hover:text-indigo-400")}>+ Add</button>
+            <button onClick={addStop} className={clsx("text-[10px]", isLight ? "text-indigo-600 hover:text-indigo-700" : "text-indigo-400 hover:text-indigo-300")}>+ Add</button>
           </div>
         </div>
 
@@ -212,7 +212,7 @@ export default function GradientEditor({ value, onChange, presets = DEFAULT_PRES
               {value.stops.length > 2 && (
                 <button
                   onClick={() => removeStop(idx)}
-                  className={clsx("p-1 rounded transition-colors", text.muted, "hover:text-red-400 hover:bg-red-900/20")}
+                  className={clsx("p-1 rounded transition-colors", text.muted, isLight ? "hover:text-red-600 hover:bg-red-100" : "hover:text-red-400 hover:bg-red-900/20")}
                   title="Delete color"
                 >
                   <Trash2 size={12} />

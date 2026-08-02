@@ -17,21 +17,11 @@
 
 import { MaskPreviewState } from '../../runtime/runtimeSlice'
 import { buildSceneDimPunch, MaskVisual, MaskVisualItem, previewToMaskVisual } from '../../services/mask-visualization'
+import { CHECKER_BG, CHECKER_DARK, CHECKER_BLUE, CHECKER_SIZE } from '../shared/Checkerboard'
 
-/** Black square of the transparency checkerboard. */
-export const CHECKER_DARK = '#000000'
-/** Blue square of the transparency checkerboard (Windows-Photos style). */
-export const CHECKER_BLUE = '#2563eb'
-/** Edge length of one checkerboard cell in scene units. */
-export const CHECKER_SIZE = 64
-
-const CHECKER_IMAGE = `repeating-conic-gradient(${CHECKER_DARK} 0% 25%, ${CHECKER_BLUE} 0% 50%)`
-const CHECKER_BG: React.CSSProperties = {
-  backgroundImage: CHECKER_IMAGE,
-  // The conic gradient encodes a 2x2 checkerboard per tile, so the tile is
-  // twice the cell edge to keep each square exactly CHECKER_SIZE wide/tall.
-  backgroundSize: `${CHECKER_SIZE * 2}px ${CHECKER_SIZE * 2}px`
-}
+// Legacy re-exports — the checkerboard tokens live in the shared Checkerboard
+// module so the transparent-canvas scene layer reuses the exact same pattern.
+export { CHECKER_DARK, CHECKER_BLUE, CHECKER_SIZE }
 
 const OUTLINE = '#6366f1'
 const INVERTED_OUTLINE = '#f59e0b'

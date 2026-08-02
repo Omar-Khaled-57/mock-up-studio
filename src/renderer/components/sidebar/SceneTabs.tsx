@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useLayoutEffect, useEffect } from 'react'
 import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 import { Plus, Copy, Trash2, Pin, PinOff, Pencil, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 
 export default function SceneTabs({ chrome = false }: { chrome?: boolean }) {
@@ -216,7 +217,7 @@ export default function SceneTabs({ chrome = false }: { chrome?: boolean }) {
         />
       ) : (
         <span className="truncate max-w-[80px] flex items-center gap-1">
-          {scene.pinned && <Pin size={10} className="shrink-0" />}
+          {scene.pinned && <Pin size={ICON.micro} className="shrink-0" />}
           {scene.name}
         </span>
       )}

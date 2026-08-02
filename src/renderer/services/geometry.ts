@@ -7,6 +7,33 @@ export interface Rect {
   height: number
 }
 
+export interface Size2D {
+  width: number
+  height: number
+}
+
+/**
+ * Shared numeric size-edit math (Transform panel, scripting/API, future tools):
+ * when `lock` is true, the dimension the caller actually changed drives the
+ * other dimension via the element's CURRENT aspect ratio, so the box always
+ * keeps its shape regardless of which input was edited. When `lock` is false
+ * the target is used verbatim (free-form).
+ */
+export function applyLockedSize(current: Size2D, target: Size2D, lock: boolean): Size2D {
+  if (!lock) return { width: target.width, height: target.height }
+  const aspect = current.width / current.height
+  const widthChanged = target.width !== current.width
+  const heightChanged = target.height !== current.height
+  if (widthChanged && !heightChanged) {
+    return { width: target.width, height: target.width / aspect }
+  }
+  if (heightChanged && !widthChanged) {
+    return { width: target.height * aspect, height: target.height }
+  }
+  return { width: target.width, height: target.height }
+}
+
+
 export interface ElementLike {
   id: string
   x: number

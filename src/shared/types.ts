@@ -80,6 +80,8 @@ export interface Device {
   }
   groupId: string | null
   containerId: string | null
+  /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
+  lockAspectRatio?: boolean
 }
 
 export interface TextBox {
@@ -162,6 +164,8 @@ export interface ImageOverlay {
   groupId: string | null
   containerId: string | null
   effects?: ImageEffects
+  /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
+  lockAspectRatio?: boolean
 }
 
 export interface Background {
@@ -180,6 +184,10 @@ export interface Background {
     overlayColor: string
   }
   presetName?: string
+  /** When true the scene background is fully transparent (checkerboard in the
+   * editor, real alpha in exports). The `background` type/color fields are
+   * ignored and treated as absent. */
+  transparent?: boolean
 }
 
 export interface Guide {
@@ -192,6 +200,8 @@ export interface GridSettings {
   enabled: boolean
   size: number
   color: string
+  /** Grid opacity multiplier (0–1) applied on top of the color's own alpha. */
+  opacity: number
   snapEnabled: boolean
   style: 'dotted' | 'lines'
 }
@@ -316,4 +326,6 @@ export interface Shape {
   groupId: string | null
   containerId: string | null
   effects?: ImageEffects
+  /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
+  lockAspectRatio?: boolean
 }

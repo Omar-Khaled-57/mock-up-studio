@@ -24,6 +24,8 @@ import { StoreState } from './index'
 import { DEFAULT_CANVAS } from '../lib/constants'
 import { generateId } from '../lib/id'
 import { resetRuntime, useRuntimeStore } from '../runtime/store'
+import { createDeviceElement, createTextBoxElement, buildImageOverlay, readImageFile } from '../lib/element-factories'
+import { isPaintLayer } from '../services/paint-layers'
 
 /**
  * Returns the current active scene, or a fresh default if the scenes array
@@ -141,7 +143,7 @@ export function createDefaultScene(): Scene {
     images: [],
     shapes: [],
     guides: [],
-    grid: { enabled: false, size: 20, color: '#ffffff20', snapEnabled: false, style: 'dotted' },
+    grid: { enabled: false, size: 20, color: '#ffffff20', opacity: 1, snapEnabled: false, style: 'dotted' },
     groups: [],
     masks: []
   }
@@ -205,12 +207,15 @@ export interface SceneSlice {
   addDevice: (device: Device) => void
   updateDevice: (deviceId: string, patch: Partial<Device>) => void
   removeDevice: (deviceId: string) => void
+  addDeviceOfType: (type: Device['type']) => string
   addTextBox: (textBox: TextBox) => void
   updateTextBox: (textBoxId: string, patch: Partial<TextBox>) => void
   removeTextBox: (textBoxId: string) => void
+  addDefaultTextBox: () => string
   addImage: (image: ImageOverlay) => void
   updateImage: (imageId: string, patch: Partial<ImageOverlay>) => void
   removeImage: (imageId: string) => void
+  importImageFromFile: (file: File) => Promise<string | null>
   deleteSelected: (ids: string[]) => void
   duplicateSelected: (ids: string[]) => string[]
   bringToFront: (id: string) => void
@@ -386,6 +391,53 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       }
       return { scenes }
     }),
+
+  /**
+   * Creates a device of the given type, pushes one history entry, and
+   * selects it. Returns the new device id. Quick-action + DevicesPanel path.
+   */
+  addDeviceOfType: (type) => {
+    const state = get()
+    const scene = safeScene(state)
+    const device = createDeviceElement(type, scene)
+    state.pushHistory(`Add ${type}`)
+    state.addDevice(device)
+    state.select(device.id)
+    return device.id
+  },
+
+  /**
+   * Creates a default text box (centered, "Double-click to edit"), pushes one
+   * history entry, and selects it. Returns the new text box id.
+   */
+  addDefaultTextBox: () => {
+    const state = get()
+    const scene = safeScene(state)
+    const zIndex = scene.textBoxes.reduce((max, t) => Math.max(max, t.zIndex), -1) + 1
+    const tb = createTextBoxElement(scene.canvas.width, scene.canvas.height, zIndex, scene.textBoxes.length)
+    state.pushHistory('Add text box')
+    state.addTextBox(tb)
+    state.select(tb.id)
+    return tb.id
+  },
+
+  /**
+   * Reads an image File (data URL + intrinsic size) and adds it as an image
+   * overlay, pushing one history entry and selecting it. Resolves the new
+   * image id, or `null` when the file cannot be decoded (caller no-op).
+   */
+  importImageFromFile: async (file) => {
+    const info = await readImageFile(file)
+    if (!info) return null
+    const state = get()
+    const scene = safeScene(state)
+    const regularImages = scene.images.filter((i) => !isPaintLayer(i))
+    const image = buildImageOverlay(info.dataUrl, info.width, info.height, scene, `Image ${regularImages.length + 1}`)
+    state.pushHistory('Add image')
+    state.addImage(image)
+    state.select(image.id)
+    return image.id
+  },
 
   findElementKind: (id) => {
     const scene = safeScene(get())

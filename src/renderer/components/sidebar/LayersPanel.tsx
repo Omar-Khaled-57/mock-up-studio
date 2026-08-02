@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useRuntimeStore } from '../../runtime/store'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 import { ContextMenu, useContextMenu, type ContextMenuItem } from '../shared/ContextMenu'
 import type { ElementKind } from '../../store/sceneSlice'
 import { Monitor, Type, Image, Hexagon, Eye, EyeOff, Lock, Unlock, Folder, ChevronRight, ChevronDown, ChevronLeft, X } from 'lucide-react'
@@ -76,7 +77,7 @@ export default function LayersPanel() {
     const allEntries: { zIndex: number; entry: LayerEntry }[] = [
       ...scene.devices.map((d) => ({ zIndex: d.zIndex, entry: makeLayerEntry('device', d.id, d.name, d.visible, d.locked, d.zIndex, d.groupId) })),
       ...scene.textBoxes.map((t) => ({ zIndex: t.zIndex, entry: makeLayerEntry('textbox', t.id, t.content.slice(0, 20) || 'Text Box', t.visible, t.locked, t.zIndex, t.groupId) })),
-      ...scene.images.map((i) => ({ zIndex: i.zIndex, entry: makeLayerEntry('image', i.id, 'Image', i.visible, i.locked, i.zIndex, i.groupId) })),
+      ...scene.images.map((i) => ({ zIndex: i.zIndex, entry: makeLayerEntry('image', i.id, i.name || 'Image', i.visible, i.locked, i.zIndex, i.groupId) })),
       ...scene.shapes.map((s) => ({ zIndex: s.zIndex, entry: makeLayerEntry('shape', s.id, s.name || 'Shape', s.visible, s.locked, s.zIndex, s.groupId) }))
     ].sort((a, b) => b.zIndex - a.zIndex)
 
@@ -383,14 +384,14 @@ export default function LayersPanel() {
           className={clsx("w-4 h-4 flex items-center justify-center transition-colors shrink-0", text.muted)}
           title={entry.visible ? 'Hide' : 'Show'}
         >
-          {entry.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+          {entry.visible ? <Eye size={ICON.micro} /> : <EyeOff size={ICON.micro} />}
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); toggleLock(entry.kind, entry.id) }}
           className={clsx("w-4 h-4 flex items-center justify-center transition-colors shrink-0", text.muted)}
           title={entry.locked ? 'Unlock' : 'Lock'}
         >
-          {entry.locked ? <Lock size={11} /> : <Unlock size={11} />}
+          {entry.locked ? <Lock size={ICON.micro} /> : <Unlock size={ICON.micro} />}
         </button>
       </div>
     )

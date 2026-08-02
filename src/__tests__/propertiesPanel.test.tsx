@@ -6,13 +6,27 @@
  * open/closed state driven by the runtime store.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, act, waitFor } from '@testing-library/react'
 import { resetStore, makeDevice, makeImage, makeShape, makeTextBox } from './helpers'
 import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import PropertiesPanel from '../renderer/components/sidebar/PropertiesPanel'
-import DevicesPanel from '../renderer/components/sidebar/DevicesPanel'
 import { DEFAULT_EFFECTS } from '../renderer/lib/effects'
+import { QUICK_ADD_DEVICE_TYPES, readImageFile } from '../renderer/lib/element-factories'
+import { pickImageFileObject } from '../renderer/lib/file-upload'
+
+vi.mock('../renderer/lib/file-upload', () => ({
+  pickImageFile: vi.fn(),
+  pickImageFileObject: vi.fn()
+}))
+
+vi.mock('../renderer/lib/element-factories', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../renderer/lib/element-factories')>()
+  return {
+    ...actual,
+    readImageFile: vi.fn()
+  }
+})
 
 function addAndSelect(el: ReturnType<typeof makeDevice> | ReturnType<typeof makeTextBox> | ReturnType<typeof makeImage> | ReturnType<typeof makeShape>): string {
   act(() => {
@@ -40,52 +54,59 @@ describe('empty state', () => {
     render(<PropertiesPanel />)
     expect(screen.getByText('Nothing selected')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Add device/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Select a device/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Add text/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Add image/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Open Layers/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Select a device/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Open Layers/ })).not.toBeInTheDocument()
   })
 
-  it('Add device routes to the devices tab and focuses the primary button', () => {
-    vi.useFakeTimers()
-    render(
-      <>
-        <PropertiesPanel />
-        <DevicesPanel />
-      </>
-    )
+  it('Add device creates a random quick-add device, selects it, and records one undo entry', () => {
+    render(<PropertiesPanel />)
     fireEvent.click(screen.getByRole('button', { name: /Add device/ }))
-    expect(useStore.getState().sidebarTab).toBe('devices')
-    act(() => vi.advanceTimersByTime(16))
-    const primary = document.querySelector<HTMLElement>('[data-device-primary]')
-    expect(primary).not.toBeNull()
-    expect(document.activeElement).toBe(primary)
+    const state = useStore.getState()
+    const devices = state.scenes[0].devices
+    expect(devices.length).toBe(1)
+    expect(QUICK_ADD_DEVICE_TYPES).toContain(devices[0].type)
+    expect(state.selectedIds).toEqual([devices[0].id])
+    act(() => { state.undo() })
+    expect(useStore.getState().scenes[0].devices.length).toBe(0)
   })
 
-  it('Add text / Add image / Open Layers route to their tabs', () => {
+  it('Add text creates a custom text box, selects it, and records one undo entry', () => {
     render(<PropertiesPanel />)
     fireEvent.click(screen.getByRole('button', { name: /Add text/ }))
-    expect(useStore.getState().sidebarTab).toBe('text')
+    const state = useStore.getState()
+    const heroCount = 2
+    expect(state.scenes[0].textBoxes.length).toBe(heroCount + 1)
+    const added = state.scenes[0].textBoxes[state.scenes[0].textBoxes.length - 1]
+    expect(added.stylePreset).toBe('custom')
+    expect(state.selectedIds).toEqual([added.id])
+    act(() => { state.undo() })
+    expect(useStore.getState().scenes[0].textBoxes.length).toBe(heroCount)
+  })
+
+  it('Add image opens the picker; a chosen file imports and selects the image', async () => {
+    let onFile: ((file: File) => void) | null = null
+    vi.mocked(pickImageFileObject).mockImplementation((cb) => { onFile = cb })
+    vi.mocked(readImageFile).mockResolvedValue({ dataUrl: 'data:image/png;base64,AA==', width: 200, height: 100 })
+    render(<PropertiesPanel />)
     fireEvent.click(screen.getByRole('button', { name: /Add image/ }))
-    expect(useStore.getState().sidebarTab).toBe('images')
-    fireEvent.click(screen.getByRole('button', { name: /Open Layers/ }))
-    expect(useStore.getState().sidebarTab).toBe('layers')
+    expect(pickImageFileObject).toHaveBeenCalled()
+    expect(onFile).not.toBeNull()
+    act(() => { onFile?.(new File([], 'a.png', { type: 'image/png' })) })
+    await waitFor(() => {
+      const state = useStore.getState()
+      expect(state.scenes[0].images.length).toBe(1)
+      expect(state.selectedIds).toEqual([state.scenes[0].images[0].id])
+    })
   })
 
-  it('Select a device selects the first device when one exists', () => {
-    const dev = makeDevice()
-    addAndSelect(dev)
-    useStore.getState().clearSelection()
+  it('Add image leaves state unchanged when the picker is cancelled', () => {
+    vi.mocked(pickImageFileObject).mockImplementation(() => {})
     render(<PropertiesPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /Select a device/ }))
-    expect(useStore.getState().selectedIds).toEqual([dev.id])
-    expect(screen.getByText('Transform')).toBeInTheDocument()
-  })
-
-  it('Select a device routes to the devices tab when the scene is empty', () => {
-    render(<PropertiesPanel />)
-    fireEvent.click(screen.getByRole('button', { name: /Select a device/ }))
-    expect(useStore.getState().sidebarTab).toBe('devices')
+    fireEvent.click(screen.getByRole('button', { name: /Add image/ }))
+    expect(useStore.getState().scenes[0].images.length).toBe(0)
+    expect(useStore.getState().selectedIds).toEqual([])
   })
 })
 
@@ -170,6 +191,82 @@ describe('single selection — transform', () => {
     fireEvent.click(header)
     expect(header).toHaveAttribute('aria-expanded', 'false')
     expect(useRuntimeStore.getState().propertiesSections['device:transform']).toBe(false)
+  })
+})
+
+describe('single selection — aspect ratio lock', () => {
+  it('toggles the lock and pushes one undo entry', () => {
+    const dev = makeDevice()
+    addAndSelect(dev)
+    render(<PropertiesPanel />)
+
+    const lock = screen.getByRole('button', { name: /Lock aspect ratio/ })
+    fireEvent.click(lock)
+    expect(useStore.getState().scenes[0].devices[0].lockAspectRatio).toBe(true)
+    expect(useStore.getState().undoStack.length).toBe(1)
+
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /Unlock aspect ratio/ }))
+    })
+    expect(useStore.getState().scenes[0].devices[0].lockAspectRatio).toBe(false)
+
+    act(() => {
+      useStore.getState().undo()
+    })
+    expect(useStore.getState().scenes[0].devices[0].lockAspectRatio).toBe(true)
+  })
+
+  it('shows the lock toggle for a shape and an image', () => {
+    addAndSelect(makeShape())
+    render(<PropertiesPanel />)
+    expect(screen.getByRole('button', { name: /Lock aspect ratio/ })).toBeInTheDocument()
+    cleanup()
+
+    addAndSelect(makeImage())
+    render(<PropertiesPanel />)
+    expect(screen.getByRole('button', { name: /Lock aspect ratio/ })).toBeInTheDocument()
+  })
+
+  it('hides the lock toggle for a textbox', () => {
+    addAndSelect(makeTextBox())
+    render(<PropertiesPanel />)
+    expect(screen.queryByRole('button', { name: /Lock aspect ratio/ })).not.toBeInTheDocument()
+  })
+
+  it('scales the height when a locked width is edited', () => {
+    const dev = makeDevice({ width: 600, height: 400, lockAspectRatio: true })
+    addAndSelect(dev)
+    render(<PropertiesPanel />)
+
+    fireEvent.change(screen.getByLabelText('Width'), { target: { value: '900' } })
+    fireEvent.keyDown(screen.getByLabelText('Width'), { key: 'Enter' })
+
+    expect(useStore.getState().scenes[0].devices[0].width).toBe(900)
+    expect(useStore.getState().scenes[0].devices[0].height).toBe(600)
+  })
+
+  it('leaves the height alone when an unlocked width is edited', () => {
+    const dev = makeDevice({ width: 600, height: 400 })
+    addAndSelect(dev)
+    render(<PropertiesPanel />)
+
+    fireEvent.change(screen.getByLabelText('Width'), { target: { value: '900' } })
+    fireEvent.keyDown(screen.getByLabelText('Width'), { key: 'Enter' })
+
+    expect(useStore.getState().scenes[0].devices[0].width).toBe(900)
+    expect(useStore.getState().scenes[0].devices[0].height).toBe(400)
+  })
+
+  it('scales the width when a locked height is edited', () => {
+    const dev = makeDevice({ width: 600, height: 400, lockAspectRatio: true })
+    addAndSelect(dev)
+    render(<PropertiesPanel />)
+
+    fireEvent.change(screen.getByLabelText('Height'), { target: { value: '200' } })
+    fireEvent.keyDown(screen.getByLabelText('Height'), { key: 'Enter' })
+
+    expect(useStore.getState().scenes[0].devices[0].width).toBe(300)
+    expect(useStore.getState().scenes[0].devices[0].height).toBe(200)
   })
 })
 

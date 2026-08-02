@@ -9,13 +9,16 @@
  */
 
 import { Scene } from '@shared/types'
-import { ElementLike, getRotatedBounds, Rect, unionBounds } from './geometry'
+import { ElementLike, Rect, unionBounds } from './geometry'
 import { SceneElementKind } from './hit-test'
 
 export interface SelectionChromeItem {
   id: string
   kind: SceneElementKind
+  /** The element's UNROTATED box (the chrome wrapper is rotated to match). */
   bounds: Rect
+  /** Element rotation in degrees; the wrapper applies `transform: rotate`. */
+  rotation: number
   groupId: string | null
   groupName: string | null
 }
@@ -50,7 +53,8 @@ export function collectSelectionChrome(scene: Scene, ids: string[]): SelectionCh
     items.push({
       id: el.id,
       kind: el.kind,
-      bounds: getRotatedBounds(el),
+      bounds: { x: el.x, y: el.y, width: el.width, height: el.height },
+      rotation: el.rotation ?? 0,
       groupId: el.groupId,
       groupName: nameFor(el.groupId)
     })
@@ -59,5 +63,5 @@ export function collectSelectionChrome(scene: Scene, ids: string[]): SelectionCh
 }
 
 export function selectionUnionBounds(items: SelectionChromeItem[]): Rect | null {
-  return unionBounds(items.map((i) => ({ id: i.id, ...i.bounds })))
+  return unionBounds(items.map((i) => ({ id: i.id, ...i.bounds, rotation: i.rotation })))
 }

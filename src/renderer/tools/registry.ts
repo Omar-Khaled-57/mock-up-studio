@@ -1,25 +1,41 @@
 import { Tool, ToolGroup } from './types'
 import { selectTool } from './tools/select'
 import { marqueeTool } from './tools/marquee'
+import { focusTool } from './tools/focus'
 import { handTool } from './tools/hand'
-import { paintTool } from './tools/paint'
-import { blurTool } from './tools/blur'
+import {
+  paintTool,
+  pencilTool,
+  airbrushTool,
+  markerTool,
+  calligraphyTool,
+  pixelTool
+} from './tools/paint'
+import { blurTool, blurElementTool, blurRectTool, blurEllipseTool, blurLineTool } from './tools/blur'
 import { eraserTool } from './tools/eraser'
 import { magicEraserTool } from './tools/magic-eraser'
-import { focusTool } from './tools/focus'
+import { deleteTool } from './tools/delete'
 import { maskTool } from './tools/mask'
-import { deleteElementTool } from './tools/stubs'
 
 export const TOOLS: readonly Tool[] = [
   selectTool,
   marqueeTool,
+  focusTool,
   handTool,
   paintTool,
+  pencilTool,
+  airbrushTool,
+  markerTool,
+  calligraphyTool,
+  pixelTool,
   blurTool,
+  blurElementTool,
+  blurRectTool,
+  blurEllipseTool,
+  blurLineTool,
   eraserTool,
   magicEraserTool,
-  deleteElementTool,
-  focusTool,
+  deleteTool,
   maskTool
 ]
 

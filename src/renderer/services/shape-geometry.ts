@@ -8,6 +8,154 @@
 
 import { ShapeKind } from '@shared/types'
 
+interface GeoPoint {
+  x: number
+  y: number
+}
+
+function pointInQuad(p: GeoPoint, quad: GeoPoint[]): boolean {
+  let inside = false
+  for (let i = 0, j = quad.length - 1; i < quad.length; j = i++) {
+    const a = quad[i]
+    const b = quad[j]
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+/** t in [0,1] where segment (p1→p2) properly crosses (q1→q2), or null when parallel/disjoint. */
+function segmentCrossParam(p1: GeoPoint, p2: GeoPoint, q1: GeoPoint, q2: GeoPoint): number | null {
+  const rx = p2.x - p1.x
+  const ry = p2.y - p1.y
+  const sx = q2.x - q1.x
+  const sy = q2.y - q1.y
+  const den = rx * sy - ry * sx
+  if (Math.abs(den) < 1e-12) return null
+  const qx = q1.x - p1.x
+  const qy = q1.y - p1.y
+  const t = (qx * sy - qy * sx) / den
+  const u = (qx * ry - qy * rx) / den
+  if (t <= 1e-9 || t >= 1 - 1e-9 || u <= 1e-9 || u >= 1 - 1e-9) return null
+  return t
+}
+
+function lerp(a: GeoPoint, b: GeoPoint, t: number): GeoPoint {
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
+}
+
+/** The portions of edge (p1→p2) lying strictly outside the convex quad, in the edge's direction. */
+function edgeExteriorPieces(p1: GeoPoint, p2: GeoPoint, quad: GeoPoint[]): GeoPoint[][] {
+  const params = [0, 1]
+  for (let i = 0; i < quad.length; i++) {
+    const t = segmentCrossParam(p1, p2, quad[i], quad[(i + 1) % quad.length])
+    if (t !== null) params.push(t)
+  }
+  params.sort((a, b) => a - b)
+  const pieces: GeoPoint[][] = []
+  for (let i = 0; i + 1 < params.length; i++) {
+    const mid = (params[i] + params[i + 1]) / 2
+    if (mid <= 1e-9 || mid >= 1 - 1e-9) continue
+    if (!pointInQuad(lerp(p1, p2, mid), quad)) {
+      pieces.push([lerp(p1, p2, params[i]), lerp(p1, p2, params[i + 1])])
+    }
+  }
+  return pieces
+}
+
+function closeEnough(a: GeoPoint, b: GeoPoint, tol: number): boolean {
+  return Math.abs(a.x - b.x) < tol && Math.abs(a.y - b.y) < tol
+}
+
+/**
+ * The exact outline of the ✕ a cross shape renders: the union of the two
+ * parallelogram arms (identical to `CrossPaths` in ShapeRenderer). Each arm's
+ * edges are clipped to the other arm's exterior, then the kept directed
+ * segments are assembled into a single closed loop by most-left-turn marching
+ * (interior kept on the left). The result is a simple 12-gon for every box.
+ * The tips poke slightly outside the box; the container clip wrapper's
+ * `overflow: hidden` clips them back, matching the SVG viewBox clip.
+ */
+function crossOutline(w: number, h: number, thickness: number): GeoPoint[] {
+  const t = thickness * Math.min(w, h)
+  const hw = t / 2
+  const d = Math.sqrt(w * w + h * h)
+  if (d <= 0) return []
+  const px = (h * hw) / d
+  const py = (w * hw) / d
+  const armA: GeoPoint[] = [
+    { x: -px, y: py },
+    { x: w - px, y: h + py },
+    { x: w + px, y: h - py },
+    { x: px, y: -py }
+  ]
+  const armB: GeoPoint[] = [
+    { x: w - px, y: -py },
+    { x: -px, y: h - py },
+    { x: px, y: h + py },
+    { x: w + px, y: py }
+  ]
+  const segs: { a: GeoPoint; b: GeoPoint }[] = []
+  const collect = (P: GeoPoint[], Q: GeoPoint[]) => {
+    for (let i = 0; i < P.length; i++) {
+      for (const [a, b] of edgeExteriorPieces(P[i], P[(i + 1) % P.length], Q)) {
+        segs.push({ a, b })
+      }
+    }
+  }
+  collect(armA, armB)
+  collect(armB, armA)
+  if (segs.length === 0) return []
+
+  const inUnion = (p: GeoPoint) => pointInQuad(p, armA) || pointInQuad(p, armB)
+  const first = segs[0]
+  const mid = lerp(first.a, first.b, 0.5)
+  const left = { x: mid.x - (first.b.y - first.a.y), y: mid.y + (first.b.x - first.a.x) }
+  if (!inUnion(left)) {
+    const tmp = first.a
+    first.a = first.b
+    first.b = tmp
+  }
+
+  const used = new Array<boolean>(segs.length).fill(false)
+  used[0] = true
+  const start = first.a
+  const loop: GeoPoint[] = [start]
+  let cur = first.b
+  let dIn = { x: cur.x - start.x, y: cur.y - start.y }
+  let guard = 0
+  while (!closeEnough(cur, start, 1e-6) && guard++ < segs.length * 4) {
+    loop.push(cur)
+    let best = -1
+    let bestAngle = -Infinity
+    for (let i = 0; i < segs.length; i++) {
+      if (used[i]) continue
+      const seg = segs[i]
+      let out: GeoPoint | null = null
+      if (closeEnough(seg.a, cur, 1e-6)) out = { x: seg.b.x - seg.a.x, y: seg.b.y - seg.a.y }
+      else if (closeEnough(seg.b, cur, 1e-6)) out = { x: seg.a.x - seg.b.x, y: seg.a.y - seg.b.y }
+      if (!out) continue
+      const angle = Math.atan2(dIn.x * out.y - dIn.y * out.x, dIn.x * out.x + dIn.y * out.y)
+      if (angle > bestAngle) {
+        bestAngle = angle
+        best = i
+      }
+    }
+    if (best < 0) break
+    used[best] = true
+    const seg = segs[best]
+    const prev = loop[loop.length - 1]
+    cur = closeEnough(seg.a, cur, 1e-6) ? seg.b : seg.a
+    dIn = { x: cur.x - prev.x, y: cur.y - prev.y }
+  }
+  return loop
+}
+
+function formatRing(ring: GeoPoint[]): string {
+  return ring.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ') + ' Z'
+}
+
 export function getShapePath(
   kind: ShapeKind,
   w: number,
@@ -69,8 +217,10 @@ export function getShapePath(
       return `M ${w * 0.25} 0 L ${w} 0 L ${w * 0.75} ${h} L 0 ${h} Z`
     case 'trapezoid':
       return `M ${w * 0.2} 0 L ${w * 0.8} 0 L ${w} ${h} L 0 ${h} Z`
-    case 'cross':
-      return ''
+    case 'cross': {
+      const ring = crossOutline(w, h, thickness ?? 0.3)
+      return ring.length > 0 ? formatRing(ring) : ''
+    }
     case 'plus': {
       const t = (thickness ?? 0.3) * Math.min(w, h)
       const cw = w / 2, ch = h / 2, ht = t / 2

@@ -1,6 +1,7 @@
 import { useTheme } from '../../hooks/useTheme'
 import { Tool } from '../../tools'
 import { getToolIcon } from './icons'
+import { ICON } from '../../lib/icons'
 
 interface ToolButtonProps {
   tool: Tool
@@ -38,7 +39,7 @@ export default function ToolButton({ tool, label, active, disabled, onClick }: T
       {active && (
         <div className={clsx("absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-5 rounded-full", accent.fill)} />
       )}
-      <Icon size={16} strokeWidth={active ? 2 : 1.5} />
+      <Icon size={ICON.standard} strokeWidth={active ? ICON.strokeActive : ICON.stroke} />
       <span className="text-[9px] font-medium leading-none truncate max-w-full px-0.5">{displayLabel}</span>
       {tool.shortcut && (
         <span

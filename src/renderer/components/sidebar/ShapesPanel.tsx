@@ -2,6 +2,7 @@ import { useCallback, useRef, useState, type ReactNode } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 import { createDefaultShape } from '../../store/shapeSlice'
 import type { ShapeKind } from '@shared/types'
 import { Eye, EyeOff, Lock, Unlock, Trash2, Copy, Image as ImageIcon } from 'lucide-react'
@@ -248,28 +249,28 @@ export default function ShapesPanel() {
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={s.visible ? 'Hide' : 'Show'}
                 >
-                  {s.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+                  {s.visible ? <Eye size={ICON.micro} /> : <EyeOff size={ICON.micro} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleLock(s.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={s.locked ? 'Unlock' : 'Lock'}
                 >
-                  {s.locked ? <Lock size={11} /> : <Unlock size={11} />}
+                  {s.locked ? <Lock size={ICON.micro} /> : <Unlock size={ICON.micro} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(s.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title="Duplicate"
                 >
-                  <Copy size={11} />
+                  <Copy size={ICON.micro} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(s.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", isLight ? "text-zinc-400 hover:text-red-600" : "text-zinc-600 hover:text-red-400")}
                   title="Delete"
                 >
-                  <Trash2 size={11} />
+                  <Trash2 size={ICON.micro} />
                 </button>
               </div>
             ))}

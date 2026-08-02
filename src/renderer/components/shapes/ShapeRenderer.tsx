@@ -6,6 +6,7 @@ import ElementFacade from '../../elements/ElementFacade'
 import RenameOverlay from '../../elements/RenameOverlay'
 import { buildEffectsFilter } from '../../lib/effects'
 import { getShapePath } from '../../services/shape-geometry'
+import { resolveLiveGhost } from '../../services/preview'
 
 interface Props {
   shape: Shape
@@ -31,6 +32,13 @@ function CrossPaths({ w, h, thickness, fill }: { w: number; h: number; thickness
 
 function ShapeRenderer({ shape }: Props) {
   const editing = useRuntimeStore((s) => s.editing)
+  // The select-tool ghost's raw source is the shared live-transform: while the
+  // element is being dragged/resized the store geometry is untouched (it only
+  // commits on pointer-up), so the SVG content must regenerate from the live
+  // bounds or it would render at the start aspect ratio until release (the
+  // SVG viewBox scales uniformly under `preserveAspectRatio: meet`). Renders
+  // at the store geometry whenever no ghost targets this shape.
+  const live = useRuntimeStore((s) => resolveLiveGhost(s.preview, shape.id))
 
   const isRenaming = editing?.id === shape.id && editing.mode === 'rename'
 
@@ -46,9 +54,13 @@ function ShapeRenderer({ shape }: Props) {
   }
 
   const thickness = shape.kind === 'plus' ? (shape.plusThickness ?? 0.3) : shape.kind === 'arrow-right' ? (shape.arrowThickness ?? 0.5) : undefined
+  const w = live ? live.width : shape.width
+  const h = live ? live.height : shape.height
+  const x = live ? live.x : shape.x
+  const y = live ? live.y : shape.y
   const path = useMemo(
-    () => getShapePath(shape.kind, shape.width, shape.height, shape.cornerRadius, shape.angles, thickness),
-    [shape.kind, shape.width, shape.height, shape.cornerRadius, shape.angles, thickness]
+    () => getShapePath(shape.kind, w, h, shape.cornerRadius, shape.angles, thickness),
+    [shape.kind, w, h, shape.cornerRadius, shape.angles, thickness]
   )
 
   const filterStr = useMemo(() => {
@@ -117,10 +129,10 @@ function ShapeRenderer({ shape }: Props) {
       locked={shape.locked}
       style={{
         position: 'absolute',
-        left: shape.x,
-        top: shape.y,
-        width: shape.width,
-        height: shape.height,
+        left: x,
+        top: y,
+        width: w,
+        height: h,
         opacity: shape.opacity / 100,
         transform: shape.rotation ? `rotate(${shape.rotation}deg)` : undefined,
         zIndex: shape.zIndex,
@@ -129,9 +141,9 @@ function ShapeRenderer({ shape }: Props) {
       }}
     >
       <svg
-        width={shape.width}
-        height={shape.height}
-        viewBox={`0 0 ${shape.width} ${shape.height}`}
+        width={w}
+        height={h}
+        viewBox={`0 0 ${w} ${h}`}
         style={{ width: '100%', height: '100%', display: 'block', pointerEvents: 'none' }}
       >
         <defs>
@@ -150,12 +162,12 @@ function ShapeRenderer({ shape }: Props) {
           )}
           {shape.backgroundImage && (
             <pattern id={`img-${shape.id}`} width="1" height="1" patternUnits="objectBoundingBox">
-              <image href={shape.backgroundImage} width={shape.width} height={shape.height} preserveAspectRatio="xMidYMid slice" />
+              <image href={shape.backgroundImage} width={w} height={h} preserveAspectRatio="xMidYMid slice" />
             </pattern>
           )}
         </defs>
         <g filter={svgFilterId ? `url(#${svgFilterId})` : undefined}>
-          {shape.kind === 'cross' ? <CrossPaths w={shape.width} h={shape.height} thickness={shape.crossThickness ?? 0.3} fill={fill} /> : <path d={path} fill={fill} />}
+          {shape.kind === 'cross' ? <CrossPaths w={w} h={h} thickness={shape.crossThickness ?? 0.3} fill={fill} /> : <path d={path} fill={fill} />}
         </g>
       </svg>
 

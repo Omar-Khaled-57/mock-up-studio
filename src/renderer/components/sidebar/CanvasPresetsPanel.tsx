@@ -3,7 +3,7 @@ import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
 import { CANVAS_PRESETS } from '../../lib/constants'
-import { Plus, Trash2, Pencil, X, Check } from 'lucide-react'
+import { Plus, Trash2, Pencil, X, Check, RotateCw } from 'lucide-react'
 
 function loadCustomSizes(): { id: string; label: string; width: number; height: number }[] {
   try {
@@ -90,6 +90,24 @@ export default function CanvasPresetsPanel() {
 
   return (
     <div className="space-y-4">
+      <div>
+        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Canvas Rotation</h3>
+        <button
+          onClick={() => applySize(scene.canvas.height, scene.canvas.width)}
+          className={clsx(
+            "w-full flex items-center justify-center gap-2 px-3 py-2 rounded border text-sm font-medium transition-colors",
+            bg.button,
+            border.secondary
+          )}
+        >
+          <RotateCw size={14} />
+          Rotate 90°
+        </button>
+        <span className={clsx("block text-[10px] mt-1", text.muted)}>
+          {scene.canvas.width} × {scene.canvas.height} → {scene.canvas.height} × {scene.canvas.width}
+        </span>
+      </div>
+
       <div>
         <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Quick Presets</h3>
         <div className="space-y-1">

@@ -186,7 +186,7 @@ export async function exportScene(options: ExportOptions): Promise<Blob | null> 
   document.body.appendChild(cloned)
 
   // Transient editor chrome must never appear in exports.
-  cloned.querySelectorAll('[data-watermark], [data-guide]').forEach((el) => el.remove())
+  cloned.querySelectorAll('[data-watermark], [data-guide], [data-transparent-checker]').forEach((el) => el.remove())
 
   // For solid/transparent exports the scene's own background layer would
   // cover the override — remove it so the override shows through.

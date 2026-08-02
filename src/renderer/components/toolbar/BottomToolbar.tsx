@@ -6,12 +6,14 @@ import { useRuntimeStore } from '../../runtime/store'
 import { getFocusBreadcrumb } from '../../services/focus'
 import { toolManager, toolRegistry, toolsInGroup, isToolReachable, Tool, ToolGroup } from '../../tools'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 import ToolButton from './ToolButton'
 import ToolOptionsPanel from './ToolOptionsPanel'
 
 const GROUP_ORDER: { group: ToolGroup; label: string }[] = [
   { group: 'select', label: 'Select' },
   { group: 'brush', label: 'Brush' },
+  { group: 'blur', label: 'Blur' },
   { group: 'eraser', label: 'Eraser' },
   { group: 'mask', label: 'Mask' }
 ]
@@ -86,7 +88,7 @@ export default function BottomToolbar() {
               {activeTool.shortcut.toUpperCase()}
             </kbd>
           )}
-          {toolbarToolsVisible ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+          {toolbarToolsVisible ? <ChevronDown size={ICON.compact} /> : <ChevronUp size={ICON.compact} />}
         </button>
 
         <div className="flex-1" />
@@ -99,7 +101,7 @@ export default function BottomToolbar() {
             {focusPath.length > 0 ? (
               focusPath.map((crumb, index) => (
                 <span key={crumb.id} className="flex items-center gap-1 min-w-0">
-                  {index > 0 && <ChevronRight size={10} className="flex-shrink-0" />}
+                  {index > 0 && <ChevronRight size={ICON.micro} className="flex-shrink-0" />}
                   <button
                     type="button"
                     title={`Focus ${crumb.name}`}
@@ -125,7 +127,7 @@ export default function BottomToolbar() {
               onClick={exitFocus}
               className={clsx("ml-1 w-4 h-4 flex items-center justify-center rounded transition-colors", bg.hover, text.muted)}
             >
-              <X size={11} />
+              <X size={ICON.micro} />
             </button>
           </div>
         )}
@@ -138,7 +140,7 @@ export default function BottomToolbar() {
           onClick={undo}
           className={iconBtn}
         >
-          <Undo2 size={14} strokeWidth={1.75} />
+          <Undo2 size={ICON.compact} strokeWidth={ICON.stroke} />
         </button>
         <button
           type="button"
@@ -148,7 +150,7 @@ export default function BottomToolbar() {
           onClick={redo}
           className={iconBtn}
         >
-          <Redo2 size={14} strokeWidth={1.75} />
+          <Redo2 size={ICON.compact} strokeWidth={ICON.stroke} />
         </button>
 
         <button
@@ -161,7 +163,7 @@ export default function BottomToolbar() {
             accent.hover
           )}
         >
-          <Download size={14} strokeWidth={1.75} />
+          <Download size={ICON.compact} strokeWidth={ICON.stroke} />
           Export
         </button>
       </div>

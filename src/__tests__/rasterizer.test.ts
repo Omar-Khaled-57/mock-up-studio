@@ -4,6 +4,7 @@ import {
   blurRegion,
   clamp01,
   compositeStrokeToDataUrl,
+  compositeStrokeToRegion,
   createRasterSurface,
   drawStrokeSegments,
   eraseToAlpha,
@@ -54,6 +55,16 @@ describe('rasterizer without canvas 2d support', () => {
     ]
     await expect(
       compositeStrokeToDataUrl(null, points, { size: 6, hardness: 0.5, color: '#ff0000' }, 10, 10)
+    ).resolves.toBeNull()
+  })
+
+  it('compositeStrokeToRegion returns null when canvas 2d is unavailable', async () => {
+    const points = [
+      { x: 1, y: 1, pressure: 1 },
+      { x: 5, y: 5, pressure: 1 }
+    ]
+    await expect(
+      compositeStrokeToRegion(null, null, points, { size: 6, hardness: 0.5, color: '#ff0000' }, 10, 10)
     ).resolves.toBeNull()
   })
 
@@ -231,6 +242,10 @@ class FakeCtx {
   arcs: { x: number; y: number; r: number }[] = []
   fillCalls = 0
   putImageCalls: unknown[][] = []
+  saveCalls = 0
+  rectCalls = 0
+  clipCalls = 0
+  restoreCalls = 0
 
   drawImage(...args: unknown[]): void {
     this.drawCalls.push(args)
@@ -271,6 +286,22 @@ class FakeCtx {
 
   putImageData(imageData: ImageData, x = 0, y = 0): void {
     this.putImageCalls.push([imageData, x, y])
+  }
+
+  save(): void {
+    this.saveCalls += 1
+  }
+
+  rect(): void {
+    this.rectCalls += 1
+  }
+
+  clip(): void {
+    this.clipCalls += 1
+  }
+
+  restore(): void {
+    this.restoreCalls += 1
   }
 }
 
@@ -462,7 +493,7 @@ describe('rasterizer with an OffscreenCanvas-backed 2d context', () => {
     expect(ctx.arcs).toHaveLength(1)
   })
 
-  it('compositeStrokeToDataUrl skips the existing bitmap when the image fails to load', async () => {
+  it('compositeStrokeToRegion skips the existing bitmap when the image fails to load', async () => {
     FakeImage.fail = true
     const points = [{ x: 1, y: 1, pressure: 1 }]
     const dataUrl = await compositeStrokeToDataUrl(
@@ -477,6 +508,69 @@ describe('rasterizer with an OffscreenCanvas-backed 2d context', () => {
     const ctx = FakeOffscreenCanvas.instances[0]
     expect(ctx.drawCalls).toHaveLength(0)
     expect(ctx.arcs).toHaveLength(1)
+  })
+
+  it('compositeStrokeToRegion crops a fresh stroke to its bounds padded by the brush radius', async () => {
+    const points = [
+      { x: 1, y: 1, pressure: 1 },
+      { x: 5, y: 5, pressure: 1 }
+    ]
+    const result = await compositeStrokeToRegion(null, null, points, { size: 6, hardness: 0.5, color: '#ff0000' }, 10, 10)
+
+    expect(result).toEqual({
+      src: 'data:image/png;base64,fake',
+      region: { x: 0, y: 0, width: 8, height: 8 }
+    })
+    const canvas = FakeOffscreenCanvas.canvasInstances[0]
+    expect(canvas.width).toBe(8)
+    expect(canvas.height).toBe(8)
+    const ctx = FakeOffscreenCanvas.instances[0]
+    expect(ctx.drawCalls).toHaveLength(0)
+    expect(ctx.moveTos).toEqual([[1, 1]])
+    expect(ctx.lineTos).toEqual([[5, 5]])
+  })
+
+  it('compositeStrokeToRegion unions the existing region and offsets the existing bitmap + stroke', async () => {
+    const points = [
+      { x: 10, y: 10, pressure: 1 },
+      { x: 12, y: 12, pressure: 1 }
+    ]
+    const result = await compositeStrokeToRegion(
+      'data:image/png;base64,existing',
+      { x: 4, y: 4, width: 4, height: 4 },
+      points,
+      { size: 6, hardness: 0.5, color: '#ff0000' },
+      20,
+      20
+    )
+
+    expect(result).toEqual({
+      src: 'data:image/png;base64,fake',
+      region: { x: 4, y: 4, width: 11, height: 11 }
+    })
+    const canvas = FakeOffscreenCanvas.canvasInstances[0]
+    expect(canvas.width).toBe(11)
+    expect(canvas.height).toBe(11)
+    const ctx = FakeOffscreenCanvas.instances[0]
+    expect(ctx.drawCalls).toHaveLength(1)
+    expect(ctx.drawCalls[0]).toEqual([FakeImage.instances[0], 0, 0, 4, 4])
+    expect(ctx.moveTos).toEqual([[6, 6]])
+    expect(ctx.lineTos).toEqual([[8, 8]])
+  })
+
+  it('compositeStrokeToRegion clamps the union to the canvas and returns null for an off-canvas stroke', async () => {
+    const result = await compositeStrokeToRegion(null, null, [{ x: 100, y: 100, pressure: 1 }], { size: 6, hardness: 0.5, color: '#ff0000' }, 50, 50)
+    expect(result).toBeNull()
+
+    const clamped = await compositeStrokeToRegion(
+      'data:image/png;base64,existing',
+      { x: 0, y: 0, width: 10, height: 10 },
+      [{ x: 100, y: 100, pressure: 1 }],
+      { size: 6, hardness: 0.5, color: '#ff0000' },
+      50,
+      50
+    )
+    expect(clamped?.region).toEqual({ x: 0, y: 0, width: 50, height: 50 })
   })
 
   it('applyDestructiveStroke blurs the stroke region through a filtered region copy', async () => {

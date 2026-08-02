@@ -12,20 +12,20 @@ import Sidebar from '../renderer/components/sidebar/Sidebar'
 describe('Sidebar rail', () => {
   beforeEach(() => resetStore())
 
-  it('renders Canvas and Background as separate Design tabs', () => {
+  it('renders Canvas and Theme (the background tab) as separate Design tabs', () => {
     render(<Sidebar />)
     expect(screen.getByRole('button', { name: 'Canvas' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Back\s*Ground/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Theme' })).toBeInTheDocument()
   })
 
-  it('Canvas tab uses the Proportions icon and a two-line Background label', () => {
+  it('Canvas tab uses the Proportions icon and the Theme tab carries its label', () => {
     render(<Sidebar />)
     const canvasTab = screen.getByRole('button', { name: 'Canvas' })
     expect(canvasTab.querySelector('svg.lucide-proportions')).not.toBeNull()
-    const bgTab = screen.getByRole('button', { name: /Back\s*Ground/ })
-    const label = bgTab.querySelector('span')
+    const themeTab = screen.getByRole('button', { name: 'Theme' })
+    const label = themeTab.querySelector('span')
     expect(label).not.toBeNull()
-    expect(label!.textContent).toBe('Back\nGround')
+    expect(label!.textContent).toBe('Theme')
     expect(label!.className).toContain('whitespace-pre-line')
   })
 
@@ -37,9 +37,9 @@ describe('Sidebar rail', () => {
     expect(screen.getByText('Add Canvas Size')).toBeInTheDocument()
   })
 
-  it('Background panel no longer contains the canvas size editor', () => {
+  it('Theme panel no longer contains the canvas size editor', () => {
     render(<Sidebar />)
-    fireEvent.click(screen.getByRole('button', { name: /Back\s*Ground/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Theme' }))
     expect(useStore.getState().sidebarTab).toBe('background')
     expect(screen.getByText('Theme Presets')).toBeInTheDocument()
     expect(screen.queryByText('Add Canvas Size')).not.toBeInTheDocument()

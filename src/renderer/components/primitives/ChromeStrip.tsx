@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
+import { ICON } from '../../lib/icons'
 
 interface Props {
   header: React.ReactNode
@@ -37,7 +38,7 @@ export default function ChromeStrip({
               bg.hover
             )}
           >
-            {open ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+            {open ? <ChevronDown size={ICON.micro} /> : <ChevronUp size={ICON.micro} />}
           </button>
         )}
       </div>

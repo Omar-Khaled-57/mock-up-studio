@@ -8,6 +8,7 @@ import { resetStore, makeDevice } from './helpers'
 import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { resetRuntime } from '../renderer/runtime/store'
+import { safeScene } from '../renderer/store/sceneSlice'
 import Canvas from '../renderer/components/canvas/Canvas'
 import CanvasEmptyState from '../renderer/components/canvas/CanvasEmptyState'
 
@@ -20,25 +21,39 @@ class ResizeObserverStub {
 describe('CanvasEmptyState (unit)', () => {
   beforeEach(() => resetStore())
 
-  it('routes quick actions to the matching sidebar tab and dismisses', () => {
+  it('add device directly creates a monitor element and dismisses', () => {
     render(<CanvasEmptyState />)
     fireEvent.click(screen.getByRole('button', { name: 'Add device' }))
-    expect(useStore.getState().sidebarTab).toBe('devices')
+    const scene = safeScene(useStore.getState())
+    expect(scene.devices.length).toBe(1)
+    expect(scene.devices[0].type).toBe('monitor')
     expect(useRuntimeStore.getState().canvasEmptyStateDismissed).toBe(true)
   })
 
-  it('text / image / presets routes land on their tabs', () => {
+  it('add text directly creates a text box and dismisses', () => {
     render(<CanvasEmptyState />)
     fireEvent.click(screen.getByRole('button', { name: 'Add text' }))
-    expect(useStore.getState().sidebarTab).toBe('text')
+    const scene = safeScene(useStore.getState())
+    // hero boxes (2) + 1 new = 3
+    expect(scene.textBoxes.length).toBe(3)
+    expect(useRuntimeStore.getState().canvasEmptyStateDismissed).toBe(true)
+  })
 
-    useRuntimeStore.setState({ canvasEmptyStateDismissed: false })
+  it('import image opens the file dialog without tab navigation', () => {
+    const { container } = render(<CanvasEmptyState />)
     fireEvent.click(screen.getByRole('button', { name: 'Import image' }))
-    expect(useStore.getState().sidebarTab).toBe('images')
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement
+    expect(fileInput).toBeInTheDocument()
+    expect(fileInput).toHaveAttribute('accept', 'image/*')
+    // does not switch to the images tab (old behavior)
+    expect(useStore.getState().sidebarTab).toBe('devices')
+  })
 
-    useRuntimeStore.setState({ canvasEmptyStateDismissed: false })
+  it('browse template presets still routes to the canvas tab', () => {
+    render(<CanvasEmptyState />)
     fireEvent.click(screen.getByRole('button', { name: 'Browse template presets' }))
     expect(useStore.getState().sidebarTab).toBe('canvas')
+    expect(useRuntimeStore.getState().canvasEmptyStateDismissed).toBe(true)
   })
 })
 
@@ -83,10 +98,11 @@ describe('Canvas empty-state integration', () => {
     expect(useRuntimeStore.getState().canvasEmptyStateDismissed).toBe(true)
   })
 
-  it('action clicks route to tabs without an extra dismiss cycle', () => {
+  it('add device button directly creates an element', () => {
     render(<Canvas />)
     fireEvent.click(screen.getByRole('button', { name: 'Add device' }))
-    expect(useStore.getState().sidebarTab).toBe('devices')
+    const scene = safeScene(useStore.getState())
+    expect(scene.devices.length).toBe(1)
     expect(useRuntimeStore.getState().canvasEmptyStateDismissed).toBe(true)
   })
 })

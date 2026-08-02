@@ -87,6 +87,7 @@ export function makeDevice(overrides?: Partial<import('@shared/types').Device>):
     objectFit: 'contain',
     groupId: null,
     containerId: null,
+    lockAspectRatio: false,
     ...overrides
   }
 }
@@ -160,6 +161,7 @@ export function makeShape(overrides?: Partial<import('@shared/types').Shape>): i
     arrowThickness: 0.5,
     groupId: null,
     containerId: null,
+    lockAspectRatio: false,
     ...overrides
   }
 }
@@ -188,6 +190,7 @@ export function makeImage(overrides?: Partial<import('@shared/types').ImageOverl
     visible: true,
     groupId: null,
     containerId: null,
+    lockAspectRatio: false,
     ...overrides
   }
 }

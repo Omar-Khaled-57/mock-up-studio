@@ -8,10 +8,17 @@ import { safeScene } from '../../store/sceneSlice'
 import { isContainer } from '../../services/focus'
 import { getMultiDragEntries } from '../../lib/multi-drag'
 import { resolveContainerDrop, resolveContainerDropTarget } from '../../services/container-drop'
+import { buildGhostPreview } from '../../services/preview'
 import { RuntimeContextMenuItem } from '../../runtime/runtimeSlice'
 import type { Scene } from '@shared/types'
 
-export const SELECT_VARIANTS = ['select', 'marquee', 'hand', 'focus']
+export const SELECT_VARIANTS = ['select', 'marquee', 'focus', 'hand']
+
+function emitGhost(
+  bounds: { id: string; x: number; y: number; width: number; height: number; rotation?: number } | null
+): void {
+  useRuntimeStore.getState().setPreview(bounds ? buildGhostPreview(bounds) : null)
+}
 
 interface PendingDrag {
   pointerId: number
@@ -47,7 +54,7 @@ function findElementGroupId(scene: Scene, id: string): string | null {
 export const selectTool: Tool = {
   id: 'select',
   group: 'select',
-  label: 'Select / Move',
+  label: 'Select',
   icon: 'cursor',
   cursor: 'default',
   shortcut: 'v',
@@ -96,7 +103,9 @@ export const selectTool: Tool = {
                 width: Math.round(w),
                 height: Math.round(h)
               }),
-            onEnd: () => {}
+            onEnd: () => {},
+            onPreview: (id, x, y, w, h, rotation) => emitGhost({ id, x, y, width: w, height: h, rotation }),
+            lockAspectRatio: bounds.lockAspectRatio ?? false
           })
           session.begin(ctx.resizeHandle as ResizeHandleName, { clientX: e.clientX, clientY: e.clientY })
           pendingResize = { pointerId: e.pointerId, session }
@@ -153,7 +162,8 @@ export const selectTool: Tool = {
           return { x: result.x, y: result.y }
         },
         onGuidesChange: (guides) => rt.setSnapGuides(guides),
-        getMultiDrag: () => getMultiDragEntries(hit.id)
+        getMultiDrag: () => getMultiDragEntries(hit.id),
+        onPreview: (id, x, y, w, h, rotation) => emitGhost({ id, x, y, width: w, height: h, rotation })
       })
       session.begin({ clientX: e.clientX, clientY: e.clientY })
       pendingDrag = {
@@ -224,6 +234,7 @@ export const selectTool: Tool = {
       }
       pendingDrag.session.end({ clientX: e.clientX, clientY: e.clientY })
       pendingDrag = null
+      emitGhost(null)
       rt.endInteraction()
       return
     }
@@ -231,6 +242,7 @@ export const selectTool: Tool = {
     if (pendingResize && pendingResize.pointerId === e.pointerId) {
       pendingResize.session.end({ clientX: e.clientX, clientY: e.clientY }, ctx.modifiers.shift)
       pendingResize = null
+      emitGhost(null)
       rt.endInteraction()
     }
   },
@@ -241,12 +253,14 @@ export const selectTool: Tool = {
       rt.setContainerDropTarget(null)
       pendingDrag.session.cancel()
       pendingDrag = null
+      emitGhost(null)
       rt.endInteraction()
       return
     }
     if (pendingResize && pendingResize.pointerId === e.pointerId) {
       pendingResize.session.cancel()
       pendingResize = null
+      emitGhost(null)
       rt.endInteraction()
     }
   },
@@ -339,6 +353,7 @@ export const selectTool: Tool = {
     // leaves the document untouched.
     let wasActive = false
     useRuntimeStore.getState().setContainerDropTarget(null)
+    emitGhost(null)
     pendingDrop = null
     if (pendingDrag) {
       pendingDrag.session.cancel()

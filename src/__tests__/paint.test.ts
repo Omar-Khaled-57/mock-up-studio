@@ -1,27 +1,52 @@
 /**
  * paint tool — M11 paint brush. Strokes committed through the tool manager
  * against the real document + runtime stores; rasterization is mocked so the
- * commit pipeline (layer creation, history granularity, undo, focus gating)
- * is fully observable without a canvas 2d context.
+ * commit pipeline (per-stroke layer creation, naming, history granularity,
+ * undo, focus registration) is fully observable without a canvas 2d context.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { createToolManager, toolRegistry } from '../renderer/tools'
-import { PAINT_LAYER_NAME } from '../renderer/services/paint-layers'
-import { compositeStrokeToDataUrl } from '../renderer/services/rasterizer'
-import { resetStore, makeDevice, makeImage } from './helpers'
+import { PAINT_LAYER_PREFIX, isPaintLayer } from '../renderer/services/paint-layers'
+import { compositeStrokeToRegion } from '../renderer/services/rasterizer'
+import { resetStore, makeDevice } from './helpers'
 
 vi.mock('../renderer/services/rasterizer', async (importOriginal) => {
   const mod = await importOriginal<typeof import('../renderer/services/rasterizer')>()
   let counter = 0
   return {
     ...mod,
-    compositeStrokeToDataUrl: vi.fn(async () => `data:image/png;base64,stroke-${++counter}`)
+    compositeStrokeToRegion: vi.fn(async (...args: unknown[]) => {
+      const points = args[2] as { x: number; y: number }[]
+      const brush = args[3] as { size: number }
+      const radius = Math.max(0.25, brush.size / 2)
+      let minX = Infinity
+      let minY = Infinity
+      let maxX = -Infinity
+      let maxY = -Infinity
+      for (const p of points) {
+        if (p.x < minX) minX = p.x
+        if (p.y < minY) minY = p.y
+        if (p.x > maxX) maxX = p.x
+        if (p.y > maxY) maxY = p.y
+      }
+      const x = Math.floor(minX - radius)
+      const y = Math.floor(minY - radius)
+      return {
+        src: `data:image/png;base64,stroke-${++counter}`,
+        region: {
+          x,
+          y,
+          width: Math.ceil(maxX + radius) - x,
+          height: Math.ceil(maxY + radius) - y
+        }
+      }
+    })
   }
 })
 
-const compositeMock = compositeStrokeToDataUrl as unknown as ReturnType<typeof vi.fn>
+const compositeMock = compositeStrokeToRegion as unknown as ReturnType<typeof vi.fn>
 
 type Ptr = {
   pointerId: number
@@ -82,10 +107,10 @@ describe('paint tool', () => {
     const tool = manager.getActiveTool()
     expect(tool.id).toBe('paint')
     expect(tool.options).toBe(true)
-    expect(tool.variants).toEqual(['paint', 'blur'])
+    expect(tool.variants).toEqual(['paint', 'pencil', 'airbrush', 'marker', 'calligraphy', 'pixel'])
   })
 
-  it('a paint stroke creates a full-canvas paint layer and a single history entry', async () => {
+  it('a paint stroke creates a paint layer clipped to the stroke bounds and a single history entry', async () => {
     const manager = createToolManager(toolRegistry)
     manager.setActiveTool('paint')
 
@@ -97,19 +122,20 @@ describe('paint tool', () => {
     const scene = useStore.getState().scenes[0]
     expect(scene.images).toHaveLength(1)
     const layer = scene.images[0]
-    expect(layer.name).toBe(PAINT_LAYER_NAME)
+    expect(layer.name).toBe(`${PAINT_LAYER_PREFIX}1`)
+    expect(isPaintLayer(layer)).toBe(true)
     expect(layer.src).toMatch(/^data:image\/png;base64,stroke-/)
-    expect(layer.x).toBe(0)
-    expect(layer.y).toBe(0)
-    expect(layer.width).toBe(scene.canvas.width)
-    expect(layer.height).toBe(scene.canvas.height)
+    expect(layer.x).toBe(88)
+    expect(layer.y).toBe(88)
+    expect(layer.width).toBe(124)
+    expect(layer.height).toBe(74)
     expect(layer.groupId).toBeNull()
 
     expect(useStore.getState().undoStack.length).toBe(1)
     expect(useRuntimeStore.getState().activeInteraction).toBeNull()
   })
 
-  it('a subsequent stroke composites over the same active layer', async () => {
+  it('each stroke creates its own sequentially-named layer', async () => {
     const manager = createToolManager(toolRegistry)
     manager.setActiveTool('paint')
 
@@ -117,7 +143,6 @@ describe('paint tool', () => {
       { x: 100, y: 100 },
       { x: 200, y: 150 }
     ])
-    const srcAfterFirst = useStore.getState().scenes[0].images[0].src
 
     await strokeTo(manager, 'paint', [
       { x: 300, y: 300 },
@@ -125,8 +150,9 @@ describe('paint tool', () => {
     ])
 
     const scene = useStore.getState().scenes[0]
-    expect(scene.images).toHaveLength(1)
-    expect(scene.images[0].src).not.toBe(srcAfterFirst)
+    expect(scene.images).toHaveLength(2)
+    expect(scene.images.map((img) => img.name)).toEqual([`${PAINT_LAYER_PREFIX}1`, `${PAINT_LAYER_PREFIX}2`])
+    expect(scene.images[0].src).not.toBe(scene.images[1].src)
     expect(useStore.getState().undoStack.length).toBe(2)
   })
 
@@ -140,7 +166,7 @@ describe('paint tool', () => {
     expect(compositeMock).toHaveBeenCalledTimes(1)
   })
 
-  it('undo steps the layer src back once per stroke', async () => {
+  it('undo removes one layer per stroke', async () => {
     const manager = createToolManager(toolRegistry)
     manager.setActiveTool('paint')
 
@@ -148,20 +174,17 @@ describe('paint tool', () => {
       { x: 100, y: 100 },
       { x: 200, y: 150 }
     ])
-    const layerId = useStore.getState().scenes[0].images[0].id
-    const srcAfterFirst = useStore.getState().scenes[0].images[0].src
+    const firstId = useStore.getState().scenes[0].images[0].id
 
     await strokeTo(manager, 'paint', [
       { x: 300, y: 300 },
       { x: 400, y: 350 }
     ])
-    const srcAfterSecond = useStore.getState().scenes[0].images[0].src
-    expect(srcAfterSecond).not.toBe(srcAfterFirst)
+    expect(useStore.getState().scenes[0].images).toHaveLength(2)
 
     useStore.getState().undo()
     expect(useStore.getState().scenes[0].images).toHaveLength(1)
-    expect(useStore.getState().scenes[0].images[0].id).toBe(layerId)
-    expect(useStore.getState().scenes[0].images[0].src).toBe(srcAfterFirst)
+    expect(useStore.getState().scenes[0].images[0].id).toBe(firstId)
 
     useStore.getState().undo()
     expect(useStore.getState().scenes[0].images).toHaveLength(0)
@@ -206,38 +229,7 @@ describe('paint tool', () => {
     expect(useRuntimeStore.getState().activeInteraction).toBeNull()
   })
 
-  it('focus mode rejects painting an out-of-scope existing paint layer', async () => {
-    const dev = makeDevice({ id: 'dev-1', groupId: 'g-1', x: 100, y: 100, width: 600, height: 400 })
-    const paintLayer = makeImage({ id: 'paint-1', name: PAINT_LAYER_NAME, zIndex: 100 })
-    const scene = useStore.getState().scenes[0]
-    useStore.setState({
-      scenes: [{
-        ...scene,
-        devices: [dev],
-        images: [paintLayer],
-        groups: [{ id: 'g-1', name: 'G', childIds: ['dev-1'] }]
-      }],
-      selectedIds: ['dev-1'],
-      selectionMode: 'single'
-    })
-    useRuntimeStore.getState().enterFocus('g-1')
-
-    const manager = createToolManager(toolRegistry)
-    manager.setActiveTool('paint')
-    const tool = manager.getActiveTool()
-
-    tool.onPointerDown?.(
-      manager.buildContext({ scenePoint: point(300, 300), toolId: 'paint' }),
-      evt({ clientX: 300, clientY: 300 })
-    )
-
-    expect(manager.getOwner(1)).toBeNull()
-    expect(useRuntimeStore.getState().activeInteraction).toBeNull()
-    expect(useStore.getState().selectedIds).toEqual([])
-    expect(compositeMock).not.toHaveBeenCalled()
-  })
-
-  it('focus mode paints into a new layer registered in the focused group', async () => {
+  it('focus mode registers every stroke as its own layer in the focused group', async () => {
     const dev = makeDevice({ id: 'dev-1', groupId: 'g-1', x: 100, y: 100, width: 600, height: 400 })
     const scene = useStore.getState().scenes[0]
     useStore.setState({
@@ -256,19 +248,23 @@ describe('paint tool', () => {
       { x: 100, y: 100 },
       { x: 200, y: 150 }
     ])
+    await strokeTo(manager, 'paint', [
+      { x: 300, y: 300 },
+      { x: 400, y: 350 }
+    ])
 
     const state = useStore.getState()
-    const layer = state.scenes[0].images[0]
-    expect(layer.groupId).toBe('g-1')
+    const layers = state.scenes[0].images
+    expect(layers).toHaveLength(2)
+    expect(layers.map((layer) => layer.groupId)).toEqual(['g-1', 'g-1'])
     const group = state.scenes[0].groups[0]
-    expect(group.childIds).toContain(layer.id)
+    expect(group.childIds).toEqual(['dev-1', layers[0].id, layers[1].id])
   })
 
   it('uses the runtime brush settings for the composite', async () => {
-    useRuntimeStore.getState().setBrush({ size: 40, hardness: 0.8, color: '#ff0000' })
-
     const manager = createToolManager(toolRegistry)
     manager.setActiveTool('paint')
+    useRuntimeStore.getState().setBrush({ size: 40, hardness: 0.8, color: '#ff0000' })
 
     await strokeTo(manager, 'paint', [
       { x: 100, y: 100 },
@@ -276,9 +272,9 @@ describe('paint tool', () => {
     ])
 
     const lastCall = compositeMock.mock.calls[compositeMock.mock.calls.length - 1]
-    expect(lastCall[2]).toEqual({ size: 40, hardness: 0.8, color: '#ff0000' })
-    expect(lastCall[3]).toBe(useStore.getState().scenes[0].canvas.width)
-    expect(lastCall[4]).toBe(useStore.getState().scenes[0].canvas.height)
+    expect(lastCall[3]).toEqual({ size: 40, hardness: 0.8, color: '#ff0000', shape: 'round', opacity: 1 })
+    expect(lastCall[4]).toBe(useStore.getState().scenes[0].canvas.width)
+    expect(lastCall[5]).toBe(useStore.getState().scenes[0].canvas.height)
   })
 
   it('writes the stroke buffer and dirty flag during a live stroke', () => {

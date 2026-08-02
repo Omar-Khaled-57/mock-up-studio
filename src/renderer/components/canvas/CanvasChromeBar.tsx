@@ -5,7 +5,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { ZoomIn, ZoomOut, Maximize2, SlidersHorizontal, Ruler, Grid3X3, Magnet, Sparkles, Check } from 'lucide-react'
 import SceneTabs from '../sidebar/SceneTabs'
 import Menu from '../primitives/Menu'
-import IconButton from '../primitives/IconButton'
+import { ICON } from '../../lib/icons'
 
 function ViewMenuItem({
   icon: Icon,
@@ -73,7 +73,14 @@ export default function CanvasChromeBar() {
 
       {/* Zoom controls (center) */}
       <div className="flex items-center gap-0.5 shrink-0">
-        <IconButton icon={ZoomOut} label="Zoom out" size="sm" onClick={zoomOut} />
+        <button
+          onClick={zoomOut}
+          aria-label="Zoom out"
+          title="Zoom out"
+          className={clsx("h-7 w-7 flex items-center justify-center rounded-lg transition-all duration-150 active:scale-[0.98]", text.secondary, bg.hover)}
+        >
+          <ZoomOut size={ICON.hero} strokeWidth={ICON.stroke} />
+        </button>
         <button
           onClick={resetZoom}
           title="Reset zoom"
@@ -81,13 +88,20 @@ export default function CanvasChromeBar() {
         >
           {Math.round(zoom * 100)}%
         </button>
-        <IconButton icon={ZoomIn} label="Zoom in" size="sm" onClick={zoomIn} />
+        <button
+          onClick={zoomIn}
+          aria-label="Zoom in"
+          title="Zoom in"
+          className={clsx("h-7 w-7 flex items-center justify-center rounded-lg transition-all duration-150 active:scale-[0.98]", text.secondary, bg.hover)}
+        >
+          <ZoomIn size={ICON.hero} strokeWidth={ICON.stroke} />
+        </button>
         <button
           onClick={handleFit}
           title="Fit to window"
           className={clsx("h-7 flex items-center gap-1 px-2 rounded-md text-xs font-medium transition-colors", bg.button, text.primary)}
         >
-          <Maximize2 size={12} strokeWidth={1.75} className={accent.text} />
+          <Maximize2 size={ICON.compact} strokeWidth={ICON.stroke} className={accent.text} />
           Fit
         </button>
       </div>

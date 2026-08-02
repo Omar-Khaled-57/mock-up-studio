@@ -35,6 +35,11 @@ function PresetBg({ presetName }: { presetName?: string }) {
 }
 
 export default function BackgroundRenderer({ background }: Props) {
+  // Transparent canvas: the background layer renders nothing (real alpha in
+  // exports); the editor shows the checkerboard via Scene's
+  // `[data-transparent-checker]` layer (stripped from the export clone).
+  if (background.transparent) return null
+
   switch (background.type) {
     case 'solid':
       return <SolidBg color={background.color ?? '#18181b'} />

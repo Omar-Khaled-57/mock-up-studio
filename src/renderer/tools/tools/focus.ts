@@ -14,7 +14,7 @@ import { findSceneElement, getFocusPath, isContainer, isInFocusScope } from '../
 export const focusTool: Tool = {
   id: 'focus',
   group: 'select',
-  label: 'Focus Tool',
+  label: 'Focus',
   icon: 'focus',
   cursor: 'crosshair',
   shortcut: 'x',

@@ -79,9 +79,9 @@ describe('destructive tools', () => {
   it('blur, eraser and magic-eraser are reachable brush/eraser tools', () => {
     const manager = createToolManager(toolRegistry)
     const variantsByTool: Record<string, string[]> = {
-      blur: ['paint', 'blur'],
-      eraser: ['eraser', 'delete-element', 'magic-eraser'],
-      'magic-eraser': ['eraser', 'delete-element', 'magic-eraser']
+      blur: ['blur', 'blur-element', 'blur-rect', 'blur-ellipse', 'blur-line'],
+      eraser: ['eraser', 'magic-eraser', 'delete'],
+      'magic-eraser': ['eraser', 'magic-eraser', 'delete']
     }
     for (const id of ['blur', 'eraser', 'magic-eraser']) {
       manager.setActiveTool(id)
@@ -308,7 +308,7 @@ describe('destructive tools', () => {
     await strokeTo(manager, 'blur', [{ x: 200, y: 200 }])
 
     const lastCall = applyMock.mock.calls[applyMock.mock.calls.length - 1]
-    expect(lastCall[3]).toEqual({ size: 40, hardness: 0.8, color: '#ff0000' })
+    expect(lastCall[3]).toEqual({ size: 40, hardness: 0.8, color: '#ff0000', shape: 'round', opacity: 1 })
   })
 
   it('writes the stroke buffer and dirty flag during a live stroke', () => {

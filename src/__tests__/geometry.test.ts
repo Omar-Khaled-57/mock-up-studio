@@ -2,7 +2,7 @@
  * geometry tests — pure math extracted from the transform hooks.
  */
 import { describe, it, expect } from 'vitest'
-import { computeResize, getRotatedBounds, snapAxis, unionBounds } from '../renderer/services/geometry'
+import { applyLockedSize, computeResize, getRotatedBounds, snapAxis, unionBounds } from '../renderer/services/geometry'
 
 describe('computeResize', () => {
   const base = {
@@ -121,6 +121,50 @@ describe('unionBounds', () => {
     const expanded = 100 * (Math.SQRT2 / 2) * 2
     expect(u!.width).toBeCloseTo(expanded)
     expect(u!.height).toBeCloseTo(expanded)
+  })
+})
+
+describe('applyLockedSize', () => {
+  it('returns the target verbatim when unlocked', () => {
+    expect(applyLockedSize({ width: 200, height: 100 }, { width: 300, height: 80 }, false)).toEqual({
+      width: 300,
+      height: 80
+    })
+  })
+
+  it('scales the height from a width edit while locked (2:1 → 3:1.5)', () => {
+    expect(applyLockedSize({ width: 200, height: 100 }, { width: 300, height: 100 }, true)).toEqual({
+      width: 300,
+      height: 150
+    })
+  })
+
+  it('scales the width from a height edit while locked', () => {
+    expect(applyLockedSize({ width: 200, height: 100 }, { width: 200, height: 50 }, true)).toEqual({
+      width: 100,
+      height: 50
+    })
+  })
+
+  it('keeps a non-2:1 aspect (3:2)', () => {
+    expect(applyLockedSize({ width: 300, height: 200 }, { width: 150, height: 200 }, true)).toEqual({
+      width: 150,
+      height: 100
+    })
+  })
+
+  it('passes both dimensions through when both changed', () => {
+    expect(applyLockedSize({ width: 200, height: 100 }, { width: 320, height: 90 }, true)).toEqual({
+      width: 320,
+      height: 90
+    })
+  })
+
+  it('passes both dimensions through when neither changed', () => {
+    expect(applyLockedSize({ width: 200, height: 100 }, { width: 200, height: 100 }, true)).toEqual({
+      width: 200,
+      height: 100
+    })
   })
 })
 

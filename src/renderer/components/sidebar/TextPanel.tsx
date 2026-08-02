@@ -3,10 +3,9 @@ import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
 import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
-import { generateId } from '../../lib/id'
+import { ICON } from '../../lib/icons'
 import { Plus, AlignLeft, AlignCenter, AlignRight, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
 import ToggleSwitch from '../shared/ToggleSwitch'
-import type { TextBox as TextBoxType } from '@shared/types'
 
 const FONT_FAMILIES = [
   'Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Poppins', 'Lato',
@@ -23,8 +22,6 @@ const FONT_WEIGHTS = [
   { label: 'Extra Bold', value: 800 },
   { label: 'Black', value: 900 }
 ]
-
-const DEFAULT_TEXT_SIZE = 200
 
 /** Neutral fallback style shown when no text box is selected. */
 const NEUTRAL_STYLE = {
@@ -45,53 +42,13 @@ const NEUTRAL_STYLE = {
   wrap: true
 }
 
-function defaultTextBox(canvasW: number, canvasH: number, zIndex: number, index: number): TextBoxType {
-  return {
-    id: generateId(),
-    name: `Text ${index + 1}`,
-    content: 'Double-click to edit',
-    x: Math.round((canvasW - DEFAULT_TEXT_SIZE) / 2),
-    y: Math.round((canvasH - DEFAULT_TEXT_SIZE) / 2),
-    width: DEFAULT_TEXT_SIZE,
-    height: 60,
-    heightAuto: true,
-    wrap: true,
-    fontSize: 24,
-    fontFamily: 'Inter',
-    fontWeight: 600,
-    textAlign: 'center',
-    lineHeight: 1.3,
-    letterSpacing: 0,
-    wordSpacing: 0,
-    textTransform: 'none',
-    strokeColor: '#ffffff',
-    strokeWidth: 0,
-    color: '#ffffff',
-    gradient: null,
-    glow: null,
-    shadow: null,
-    visible: true,
-    backgroundVisible: false,
-    backgroundColor: '#00000040',
-    borderVisible: false,
-    borderColor: '#ffffff40',
-    borderRadius: 4,
-    stylePreset: 'custom',
-    zIndex,
-    locked: false,
-    groupId: null,
-    containerId: null
-  }
-}
-
 export default function TextPanel() {
   const { clsx, bg, text, border } = useTheme()
   const scene = useStore(safeScene)
-  const canvas = scene.canvas
   const textBoxes = scene.textBoxes
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
-  const addTextBox = useStore((s) => s.addTextBox)
+  const addDefaultTextBox = useStore((s) => s.addDefaultTextBox)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const removeTextBox = useStore((s) => s.removeTextBox)
   const duplicateSelected = useStore((s) => s.duplicateSelected)
@@ -102,8 +59,6 @@ export default function TextPanel() {
     if (selectedIds.length !== 1) return null
     return textBoxes.find((t) => t.id === selectedIds[0]) ?? null
   }, [selectedIds, textBoxes])
-
-  const maxZ = textBoxes.reduce((max, t) => Math.max(max, t.zIndex), -1)
 
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -130,11 +85,8 @@ export default function TextPanel() {
   }, [selectedTextBox])
 
   const handleAddText = useCallback(() => {
-    const tb = defaultTextBox(canvas.width, canvas.height, maxZ + 1, textBoxes.length)
-    pushHistory('Add text box')
-    addTextBox(tb)
-    select(tb.id)
-  }, [canvas, maxZ, textBoxes.length, addTextBox, pushHistory, select])
+    addDefaultTextBox()
+  }, [addDefaultTextBox])
 
   const handleToggleVisibility = useCallback(
     (id: string) => {
@@ -247,7 +199,7 @@ export default function TextPanel() {
             onClick={handleAddText}
             className={clsx("flex items-center gap-1 px-2 py-1 text-[10px] rounded transition-all", bg.button)}
           >
-            <Plus size={10} strokeWidth={2} />
+            <Plus size={ICON.micro} strokeWidth={2} />
             Add
           </button>
         </div>
@@ -287,28 +239,28 @@ export default function TextPanel() {
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={tb.visible ? 'Hide' : 'Show'}
                 >
-                  {tb.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+                  {tb.visible ? <Eye size={ICON.micro} /> : <EyeOff size={ICON.micro} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleLock(tb.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title={tb.locked ? 'Unlock' : 'Lock'}
                 >
-                  {tb.locked ? <Lock size={11} /> : <Unlock size={11} />}
+                  {tb.locked ? <Lock size={ICON.micro} /> : <Unlock size={ICON.micro} />}
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDuplicate(tb.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors", text.muted)}
                   title="Duplicate"
                 >
-                  <Copy size={11} />
+                  <Copy size={ICON.micro} />
                 </button>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDelete(tb.id) }}
                   className={clsx("w-4 h-4 flex items-center justify-center transition-colors text-red-400 hover:text-red-500")}
                   title="Delete"
                 >
-                  <Trash2 size={11} />
+                  <Trash2 size={ICON.micro} />
                 </button>
               </div>
             ))}

@@ -5,10 +5,12 @@ import { useTheme } from '../../hooks/useTheme'
 import { safeScene } from '../../store/sceneSlice'
 import type { Device, TextBox, ImageOverlay, Shape, BlendMode, ShadowLayer, GlowLayer, TextShadow, TextGlow, ShapeKind } from '@shared/types'
 import type { AlignmentDirection, DistributeDirection } from '../../store/selectionSlice'
-import { DEVICE_ASPECT_RATIOS } from '../../lib/constants'
+import { applyLockedSize } from '../../services/geometry'
 import { isEffectsNeutral } from '../../lib/effects'
-import { pickImageFile } from '../../lib/file-upload'
-import { AccordionSection, Button, NumberInput } from '../primitives'
+import { pickImageFile, pickImageFileObject } from '../../lib/file-upload'
+import { QUICK_ADD_DEVICE_TYPES } from '../../lib/element-factories'
+import { ICON } from '../../lib/icons'
+import { AccordionSection, Button, NumberInput, ResponsiveButtonGroup } from '../primitives'
 import SliderInput from '../shared/SliderInput'
 import ColorInput from '../shared/ColorInput'
 import ShadowEditor from '../shared/ShadowEditor'
@@ -149,7 +151,6 @@ export default function PropertiesPanel() {
   const updateImage = useStore((s) => s.updateImage)
   const updateEffects = useStore((s) => s.updateEffects)
   const resetEffects = useStore((s) => s.resetEffects)
-  const setSidebarTab = useStore((s) => s.setSidebarTab)
   const copiedStyle = useStore((s) => s.copiedStyle)
   const propertiesPanelWidth = useStore((s) => s.propertiesPanelWidth)
   const propertiesSections = useRuntimeStore((s) => s.propertiesSections)
@@ -225,16 +226,16 @@ export default function PropertiesPanel() {
       if (!selected || v < 20) return
       const { kind, data } = selected
       if (kind === 'device') {
-        const ratio = DEVICE_ASPECT_RATIOS[(data as Device).type] ?? 16 / 9
-        updateDevice(data.id, { width: v, height: Math.round(v / ratio) })
+        const s = applyLockedSize(data, { width: v, height: data.height }, data.lockAspectRatio ?? false)
+        updateDevice(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
       } else if (kind === 'textbox') {
         updateTextBox(data.id, { width: v })
       } else if (kind === 'shape') {
-        useStore.getState().updateShape(data.id, { width: v })
+        const s = applyLockedSize(data, { width: v, height: data.height }, data.lockAspectRatio ?? false)
+        useStore.getState().updateShape(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
       } else {
-        const img = data as ImageOverlay
-        const ratio = img.height / img.width
-        updateImage(data.id, { width: v, height: Math.round(v * ratio) })
+        const s = applyLockedSize(data, { width: v, height: data.height }, data.lockAspectRatio ?? false)
+        updateImage(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
       }
     },
     [selected, updateDevice, updateTextBox, updateImage]
@@ -245,16 +246,16 @@ export default function PropertiesPanel() {
       if (!selected || v < 20) return
       const { kind, data } = selected
       if (kind === 'device') {
-        const ratio = DEVICE_ASPECT_RATIOS[(data as Device).type] ?? 16 / 9
-        updateDevice(data.id, { width: Math.round(v * ratio), height: v })
+        const s = applyLockedSize(data, { width: data.width, height: v }, data.lockAspectRatio ?? false)
+        updateDevice(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
       } else if (kind === 'textbox') {
         updateTextBox(data.id, { height: v })
       } else if (kind === 'shape') {
-        useStore.getState().updateShape(data.id, { height: v })
+        const s = applyLockedSize(data, { width: data.width, height: v }, data.lockAspectRatio ?? false)
+        useStore.getState().updateShape(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
       } else {
-        const img = data as ImageOverlay
-        const ratio = img.width / img.height
-        updateImage(data.id, { width: Math.round(v * ratio), height: v })
+        const s = applyLockedSize(data, { width: data.width, height: v }, data.lockAspectRatio ?? false)
+        updateImage(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
       }
     },
     [selected, updateDevice, updateTextBox, updateImage]
@@ -286,19 +287,19 @@ export default function PropertiesPanel() {
   )
 
   const handleAddDevice = () => {
-    setSidebarTab('devices')
-    requestAnimationFrame(() => {
-      document.querySelector<HTMLButtonElement>('[data-device-primary]')?.focus()
-    })
+    const state = useStore.getState()
+    const type = QUICK_ADD_DEVICE_TYPES[Math.floor(Math.random() * QUICK_ADD_DEVICE_TYPES.length)]
+    state.addDeviceOfType(type)
   }
 
-  const handleSelectDevice = () => {
-    const state = useStore.getState()
-    if (scene.devices.length > 0) {
-      state.select(scene.devices[0].id)
-    } else {
-      setSidebarTab('devices')
-    }
+  const handleAddText = () => {
+    useStore.getState().addDefaultTextBox()
+  }
+
+  const handleAddImage = () => {
+    pickImageFileObject((file) => {
+      void useStore.getState().importImageFromFile(file)
+    })
   }
 
   // ---- Single-selection actions ----
@@ -416,10 +417,10 @@ export default function PropertiesPanel() {
     return (
       <aside
         data-properties-panel
-        className={clsx("border-l p-4 flex flex-col gap-4 overflow-y-auto", bg.panel, border.primary, shadow.sm)}
+        className={clsx("border-l p-4 flex flex-col pt-[30px] gap-4 overflow-y-auto", bg.panel, border.primary, shadow.sm)}
         style={{ width: propertiesPanelWidth }}
       >
-        <div className="flex flex-col items-center text-center gap-2 pt-8">
+        <div className="flex flex-col items-center text-center gap-2">
           <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center", bg.tertiary)}>
             <Scan size={20} strokeWidth={1.5} className={text.muted} />
           </div>
@@ -432,17 +433,11 @@ export default function PropertiesPanel() {
           <Button variant="accent" onClick={handleAddDevice} className="w-full">
             <Plus size={14} /> Add device
           </Button>
-          <Button variant="ghost" onClick={handleSelectDevice} className="w-full">
-            Select a device
+          <Button variant="default" onClick={handleAddText} className="w-full">
+            <Plus size={14} /> Add text
           </Button>
-          <Button variant="ghost" onClick={() => setSidebarTab('text')} className="w-full">
-            Add text
-          </Button>
-          <Button variant="ghost" onClick={() => setSidebarTab('images')} className="w-full">
-            Add image
-          </Button>
-          <Button variant="ghost" onClick={() => setSidebarTab('layers')} className="w-full">
-            Open Layers
+          <Button variant="default" onClick={handleAddImage} className="w-full">
+            <Plus size={14} /> Add image
           </Button>
         </div>
       </aside>
@@ -521,14 +516,14 @@ export default function PropertiesPanel() {
           open={sectionOpen('multi:arrange', true)}
           onToggle={onToggleSection('multi:arrange')}
         >
-          <div className="flex flex-wrap gap-1.5">
+          <ResponsiveButtonGroup gap="md" minChildWidth="72px">
             <Button size="sm" onClick={handleGroup} disabled={multi.count < 2}>Group</Button>
             <Button size="sm" onClick={() => multi.groupIds[0] && handleUngroup(multi.groupIds[0])} disabled={multi.groupIds.length !== 1}>Ungroup</Button>
             <Button size="sm" onClick={handleDuplicate}>Duplicate</Button>
             <Button size="sm" onClick={handleDelete} variant="danger">Delete</Button>
             <Button size="sm" onClick={() => useStore.getState().copyStyleSelected()}>Copy Style</Button>
             <Button size="sm" onClick={() => useStore.getState().pasteStyleToSelected()} disabled={!copiedStyle}>Paste Style</Button>
-          </div>
+          </ResponsiveButtonGroup>
         </AccordionSection>
       </aside>
     )
@@ -543,6 +538,17 @@ export default function PropertiesPanel() {
   const rotation = wrapDeg('rotation' in data ? data.rotation : 0)
   const effectsValue = (data as ImageOverlay | Shape).effects
   const effectsNeutral = isEffectsNeutral(effectsValue)
+
+  const aspectLocked = kind !== 'textbox' && 'lockAspectRatio' in data && !!data.lockAspectRatio
+
+  const toggleAspectLock = () => {
+    if (!selected || kind === 'textbox') return
+    const next = !aspectLocked
+    useStore.getState().pushHistory(next ? 'Lock aspect ratio' : 'Unlock aspect ratio')
+    if (kind === 'device') updateDevice(data.id, { lockAspectRatio: next })
+    else if (kind === 'image') updateImage(data.id, { lockAspectRatio: next })
+    else useStore.getState().updateShape(data.id, { lockAspectRatio: next })
+  }
 
   let contentDot = false
   if (kind === 'device') {
@@ -586,7 +592,7 @@ export default function PropertiesPanel() {
           title={data.visible ? 'Hide' : 'Show'}
           className={clsx("w-6 h-6 flex items-center justify-center rounded transition-colors shrink-0", text.muted)}
         >
-          {data.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+          {data.visible ? <Eye size={ICON.micro} /> : <EyeOff size={ICON.micro} />}
         </button>
         <button
           onClick={toggleLock}
@@ -594,7 +600,7 @@ export default function PropertiesPanel() {
           title={data.locked ? 'Unlock' : 'Lock'}
           className={clsx("w-6 h-6 flex items-center justify-center rounded transition-colors shrink-0", text.muted)}
         >
-          {data.locked ? <Lock size={13} /> : <Unlock size={13} />}
+          {data.locked ? <Lock size={ICON.micro} /> : <Unlock size={ICON.micro} />}
         </button>
       </div>
 
@@ -610,9 +616,27 @@ export default function PropertiesPanel() {
           <NumberInput ariaLabel="X position" value={Math.round(x)} onChange={patchX} />
           <NumberInput ariaLabel="Y position" value={Math.round(y)} onChange={patchY} />
         </div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <NumberInput ariaLabel="Width" value={Math.round(width)} onChange={patchW} />
-          <NumberInput ariaLabel="Height" value={Math.round(height)} onChange={patchH} />
+        <div className="flex items-center gap-1.5">
+          <div className="flex-1 min-w-0">
+            <NumberInput ariaLabel="Width" value={Math.round(width)} onChange={patchW} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <NumberInput ariaLabel="Height" value={Math.round(height)} onChange={patchH} />
+          </div>
+          {kind !== 'textbox' && (
+            <button
+              onClick={toggleAspectLock}
+              aria-label={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+              aria-pressed={aspectLocked}
+              title={aspectLocked ? 'Aspect ratio locked' : 'Lock aspect ratio'}
+              className={clsx(
+                "w-7 h-7 flex items-center justify-center rounded transition-colors shrink-0",
+                aspectLocked ? bg.selected : text.muted
+              )}
+            >
+              {aspectLocked ? <Lock size={ICON.compact} /> : <Unlock size={ICON.compact} />}
+            </button>
+          )}
         </div>
         {kind !== 'textbox' && (
           <SliderInput label="Rotation" value={rotation} min={-180} max={180} unit="°" onChange={patchRotation} />
@@ -644,14 +668,14 @@ export default function PropertiesPanel() {
                   <div className={clsx("w-full h-14 rounded-lg overflow-hidden", border.secondary)}>
                     <img src={(data as Device).screenImage!} alt="" className="w-full h-full object-cover" />
                   </div>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" onClick={() => uploadScreenshot(data.id)} className="flex-1">Replace</Button>
+                  <ResponsiveButtonGroup gap="sm" minChildWidth="72px">
+                    <Button size="sm" onClick={() => uploadScreenshot(data.id)}>Replace</Button>
                     <Button size="sm" variant="danger" onClick={() => {
                       const state = useStore.getState()
                       state.pushHistory('Remove screenshot')
                       state.updateDevice(data.id, { screenImage: null })
-                    }} className="flex-1">Remove</Button>
-                  </div>
+                    }}>Remove</Button>
+                  </ResponsiveButtonGroup>
                 </div>
               ) : (
                 <Button size="sm" onClick={() => uploadScreenshot(data.id)} className="w-full">Upload Screenshot</Button>
@@ -763,10 +787,10 @@ export default function PropertiesPanel() {
                   <div className={clsx("w-full h-14 rounded-lg overflow-hidden", border.secondary)}>
                     <img src={(data as Shape).backgroundImage!} alt="" className="w-full h-full object-cover" />
                   </div>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" onClick={() => pickImageFile((src) => setShapeBackground(data.id, src))} className="flex-1">Replace</Button>
-                    <Button size="sm" variant="danger" onClick={() => setShapeBackground(data.id, null)} className="flex-1">Remove</Button>
-                  </div>
+                    <ResponsiveButtonGroup gap="sm" minChildWidth="72px">
+                      <Button size="sm" onClick={() => pickImageFile((src) => setShapeBackground(data.id, src))}>Replace</Button>
+                      <Button size="sm" variant="danger" onClick={() => setShapeBackground(data.id, null)}>Remove</Button>
+                    </ResponsiveButtonGroup>
                 </div>
               ) : (
                 <Button size="sm" onClick={() => pickImageFile((src) => setShapeBackground(data.id, src))} className="w-full">Upload Image</Button>
@@ -799,10 +823,10 @@ export default function PropertiesPanel() {
                   {BLEND_MODES.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
-              <div className="flex gap-1.5">
-                <Button size="sm" variant={(data as ImageOverlay).flipX ? 'accent' : 'default'} onClick={() => updateImage(data.id, { flipX: !(data as ImageOverlay).flipX })} className="flex-1">Flip X</Button>
-                <Button size="sm" variant={(data as ImageOverlay).flipY ? 'accent' : 'default'} onClick={() => updateImage(data.id, { flipY: !(data as ImageOverlay).flipY })} className="flex-1">Flip Y</Button>
-              </div>
+              <ResponsiveButtonGroup gap="sm" minChildWidth="64px">
+                <Button size="sm" variant={(data as ImageOverlay).flipX ? 'accent' : 'default'} onClick={() => updateImage(data.id, { flipX: !(data as ImageOverlay).flipX })}>Flip X</Button>
+                <Button size="sm" variant={(data as ImageOverlay).flipY ? 'accent' : 'default'} onClick={() => updateImage(data.id, { flipY: !(data as ImageOverlay).flipY })}>Flip Y</Button>
+              </ResponsiveButtonGroup>
               <SliderInput label="Blur" value={(data as ImageOverlay).blur} min={0} max={20} unit="px" onChange={(v) => updateImage(data.id, { blur: v })} />
               <ShadowEditor value={(data as ImageOverlay).shadow} onChange={(shadows) => updateImage(data.id, { shadow: shadows })} />
               <GlowEditor value={(data as ImageOverlay).glow} onChange={(glows) => updateImage(data.id, { glow: glows })} />
@@ -923,13 +947,13 @@ export default function PropertiesPanel() {
                   </span>
                   <span className={clsx("text-[10px]", text.muted)}>G tool to add</span>
                 </div>
-                <div className="flex gap-1.5">
-                  <Button size="sm" onClick={() => reverseMask(m.id)} className="flex-1">Reverse</Button>
-                  <Button size="sm" onClick={() => refreshMask(m.id)} className="flex-1">
-                    {m.snapshot ? 'Refresh' : 'Freeze'}
-                  </Button>
-                  <Button size="sm" variant="danger" onClick={() => removeMask(m.id)} className="flex-1">Remove</Button>
-                </div>
+                  <ResponsiveButtonGroup gap="sm" minChildWidth="72px">
+                    <Button size="sm" onClick={() => reverseMask(m.id)}>Reverse</Button>
+                    <Button size="sm" onClick={() => refreshMask(m.id)}>
+                      {m.snapshot ? 'Refresh' : 'Freeze'}
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => removeMask(m.id)}>Remove</Button>
+                  </ResponsiveButtonGroup>
               </div>
             ))}
             <Button size="sm" variant="danger" onClick={clearMasks} className="w-full">
@@ -950,14 +974,13 @@ export default function PropertiesPanel() {
           <span className={clsx("block text-[11px] mb-1", text.secondary)}>Element ID</span>
           <div className={clsx("px-2 py-1 text-[10px] font-mono rounded-lg truncate", bg.input, text.muted)}>{data.id}</div>
         </div>
-        <div className="flex gap-1.5">
-          <Button size="sm" onClick={() => handleBringForward(data.id)} className="flex-1">
+        <ResponsiveButtonGroup gap="sm" minChildWidth="100px">
+          <Button size="sm" onClick={() => handleBringForward(data.id)}>
             <ArrowUp size={12} /> Bring Forward
           </Button>
-          <Button size="sm" onClick={() => handleSendBackward(data.id)} className="flex-1">
-            <ArrowDown size={12} /> Send Backward
-          </Button>
-        </div>
+          <Button size="sm" onClick={() => handleSendBackward(data.id)}>
+            <ArrowDown size={12} /> Send Backward</Button>
+        </ResponsiveButtonGroup>
       </AccordionSection>
     </aside>
   )

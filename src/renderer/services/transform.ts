@@ -28,7 +28,7 @@ export interface Follower {
 
 export interface DragSessionOptions {
   zoom: number
-  element: { id: string; x: number; y: number; width: number; height: number }
+  element: { id: string; x: number; y: number; width: number; height: number; rotation?: number }
   el: HTMLElement
   onStart?: (id: string) => void
   onDrag: (id: string, x: number, y: number) => void
@@ -36,6 +36,8 @@ export interface DragSessionOptions {
   snapFn?: (id: string, x: number, y: number, w: number, h: number) => { x: number; y: number }
   onGuidesChange?: (guides: SnapGuides) => void
   getMultiDrag?: () => MultiDragEntry[]
+  /** Live-preview emitter for the moving element's target bounds (ghost). */
+  onPreview?: (id: string, x: number, y: number, width: number, height: number, rotation?: number) => void
 }
 
 export interface DragSession {
@@ -109,6 +111,8 @@ export function createDragSession(options: DragSessionOptions): DragSession {
       f.el.style.left = `${f.startX + dx}px`
       f.el.style.top = `${f.startY + dy}px`
     }
+
+    options.onPreview?.(s.id, newX, newY, s.elemWidth, s.elemHeight, options.element.rotation)
   }
 
   function end(pointer: Point): void {
@@ -171,10 +175,14 @@ export function createDragSession(options: DragSessionOptions): DragSession {
 
 export interface ResizeSessionOptions {
   zoom: number
-  element: { id: string; x: number; y: number; width: number; height: number }
+  element: { id: string; x: number; y: number; width: number; height: number; rotation?: number }
   el: HTMLElement
   onResize: (id: string, x: number, y: number, w: number, h: number) => void
   onEnd: (id: string) => void
+  /** Live-preview emitter for the resized element's target bounds (ghost). */
+  onPreview?: (id: string, x: number, y: number, width: number, height: number, rotation?: number) => void
+  /** When true the element's aspect ratio is preserved even without Shift. */
+  lockAspectRatio?: boolean
 }
 
 export interface ResizeSession {
@@ -212,7 +220,7 @@ export function createResizeSession(options: ResizeSessionOptions): ResizeSessio
       startElemY: s.startElemY,
       startWidth: s.startWidth,
       startHeight: s.startHeight,
-      proportional: shiftKey
+      proportional: shiftKey || (options.lockAspectRatio ?? false)
     })
     s.el.style.width = `${result.width}px`
     s.el.style.height = `${result.height}px`
@@ -240,7 +248,8 @@ export function createResizeSession(options: ResizeSessionOptions): ResizeSessio
   function move(pointer: Point, shiftKey: boolean): void {
     const s = active
     if (!s) return
-    computeToDom(pointer, shiftKey)
+    const result = computeToDom(pointer, shiftKey)
+    options.onPreview?.(s.id, result.x, result.y, result.width, result.height, options.element.rotation)
   }
 
   function end(pointer: Point, shiftKey: boolean): void {

@@ -72,12 +72,19 @@ describe('collectSelectionChrome', () => {
     expect(items[0].groupName).toBe('Hero')
   })
 
-  it('uses rotation-aware bounds', () => {
+  it('carries the element rotation alongside the unrotated box', () => {
     const shape = makeShape({ id: 's-1', x: 0, y: 0, width: 100, height: 100, rotation: 90 })
     const scene = sceneWith({ shapes: [shape] })
     const items = collectSelectionChrome(scene, ['s-1'])
-    expect(items[0].bounds.width).toBeCloseTo(100)
-    expect(items[0].bounds.height).toBeCloseTo(100)
+    expect(items[0].rotation).toBe(90)
+    expect(items[0].bounds).toEqual({ x: 0, y: 0, width: 100, height: 100 })
+  })
+
+  it('defaults rotation to 0 for unrotated elements', () => {
+    const device = makeDevice({ id: 'd-1', x: 10, y: 20, width: 100, height: 50 })
+    const items = collectSelectionChrome(sceneWith({ devices: [device] }), ['d-1'])
+    expect(items[0].rotation).toBe(0)
+    expect(items[0].bounds).toEqual({ x: 10, y: 20, width: 100, height: 50 })
   })
 })
 
@@ -92,5 +99,15 @@ describe('selectionUnionBounds', () => {
     const scene = sceneWith({ devices: [device], textBoxes: [textBox] })
     const items = collectSelectionChrome(scene, ['d-1', 't-1'])
     expect(selectionUnionBounds(items)).toEqual({ x: 0, y: 0, width: 250, height: 350 })
+  })
+
+  it('is still rotation-aware (rotated box AABB drives the union)', () => {
+    const shape = makeShape({ id: 's-1', x: 0, y: 0, width: 100, height: 100, rotation: 45 })
+    const items = collectSelectionChrome(sceneWith({ shapes: [shape] }), ['s-1'])
+    const union = selectionUnionBounds(items)!
+    expect(union.x).toBeCloseTo(-20.71, 1)
+    expect(union.y).toBeCloseTo(-20.71, 1)
+    expect(union.width).toBeCloseTo(141.42, 1)
+    expect(union.height).toBeCloseTo(141.42, 1)
   })
 })

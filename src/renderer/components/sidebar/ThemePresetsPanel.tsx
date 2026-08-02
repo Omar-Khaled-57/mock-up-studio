@@ -45,7 +45,7 @@ export default function ThemePresetsPanel() {
             </div>
             <div className="px-1.5 py-1">
               <span className={clsx("block text-[10px]", isLight ? "text-zinc-600 group-hover:text-zinc-900" : "text-zinc-400 group-hover:text-zinc-200")}>{preset.name}</span>
-              <span className={clsx("text-[8px]", isLight ? "text-zinc-400" : "text-zinc-600")}>{preset.description}</span>
+              <span className={clsx("text-[8px]", isLight ? "text-zinc-500" : "text-zinc-500")}>{preset.description}</span>
             </div>
             <div className="flex gap-0.5 px-1.5 pb-1.5">
               {[preset.titleColor, preset.sloganColor, preset.accentColor].map((c, i) => (

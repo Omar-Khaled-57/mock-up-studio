@@ -28,6 +28,7 @@ const TRANSIENT_RESET: Partial<RuntimeState> = {
   temporaryTransform: null,
   snapGuides: { verticalGuides: [], horizontalGuides: [] },
   containerDropTarget: null,
+  preview: null,
   maskPreview: null,
   editing: null,
   contextMenu: null

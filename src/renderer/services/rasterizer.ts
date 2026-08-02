@@ -1,4 +1,6 @@
 import type { StrokePoint } from './stroke'
+import type { BrushShape } from '../runtime/runtimeSlice'
+import { buildMaskStrokePolygon } from './mask-brush'
 
 export type RGBA = readonly [number, number, number, number]
 
@@ -11,6 +13,8 @@ export interface StrokeBrush {
   size: number
   hardness: number
   color: string
+  shape?: BrushShape
+  opacity?: number
 }
 
 export function clamp01(value: number): number {
@@ -95,10 +99,10 @@ export function drawStrokeSegments(
     drawDot(ctx, points[0], brush)
     return
   }
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
+  ctx.lineCap = brush.shape === 'square' ? 'square' : 'round'
+  ctx.lineJoin = brush.shape === 'square' ? 'miter' : 'round'
   ctx.strokeStyle = brush.color
-  ctx.globalAlpha = 0.15 + 0.85 * clamp01(brush.hardness)
+  ctx.globalAlpha = strokeAlpha(brush)
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1]
     const b = points[i]
@@ -111,16 +115,25 @@ export function drawStrokeSegments(
   ctx.globalAlpha = 1
 }
 
+function strokeAlpha(brush: StrokeBrush): number {
+  return (brush.opacity ?? 1) * (0.15 + 0.85 * clamp01(brush.hardness))
+}
+
 function drawDot(
   ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   point: StrokePoint,
   brush: StrokeBrush
 ): void {
   ctx.fillStyle = brush.color
-  ctx.globalAlpha = 0.15 + 0.85 * clamp01(brush.hardness)
-  ctx.beginPath()
-  ctx.arc(point.x, point.y, Math.max(0.25, brush.size / 2), 0, Math.PI * 2)
-  ctx.fill()
+  ctx.globalAlpha = strokeAlpha(brush)
+  const radius = Math.max(0.25, brush.size / 2)
+  if (brush.shape === 'square') {
+    ctx.fillRect(point.x - radius, point.y - radius, radius * 2, radius * 2)
+  } else {
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
+    ctx.fill()
+  }
   ctx.globalAlpha = 1
 }
 
@@ -163,6 +176,90 @@ export async function compositeStrokeToDataUrl(
   return canvasToDataUrl(surface.canvas)
 }
 
+/**
+ * Axis-aligned scene-space region that a paint-layer bitmap occupies. A paint
+ * layer is cropped to the union of everything drawn on it, so `region` records
+ * where the bitmap's top-left corner sits inside the scene and its pixel size.
+ */
+export interface CropRegion {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface StrokeComposite {
+  src: string
+  region: CropRegion
+}
+
+/**
+ * Composites a stroke onto a paint layer that is cropped to its content.
+ *
+ * The new bitmap is sized to the union of the existing layer region and the
+ * stroke's own bounds (points padded by the brush radius), clamped to the
+ * canvas — so a paint layer never spans the whole canvas, only the drawing.
+ *
+ * Returns the resulting data URL plus the scene-space region it represents,
+ * or null when the stroke is entirely off-canvas or no 2d context exists.
+ */
+export async function compositeStrokeToRegion(
+  existingSrc: string | null,
+  existingRegion: CropRegion | null,
+  points: readonly StrokePoint[],
+  brush: StrokeBrush,
+  canvasWidth: number,
+  canvasHeight: number
+): Promise<StrokeComposite | null> {
+  const radius = Math.max(0.25, brush.size / 2)
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const p of points) {
+    if (p.x < minX) minX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.x > maxX) maxX = p.x
+    if (p.y > maxY) maxY = p.y
+  }
+
+  let x = Math.floor(minX - radius)
+  let y = Math.floor(minY - radius)
+  let maxX2 = Math.ceil(maxX + radius)
+  let maxY2 = Math.ceil(maxY + radius)
+  if (existingRegion) {
+    x = Math.min(existingRegion.x, x)
+    y = Math.min(existingRegion.y, y)
+    maxX2 = Math.max(existingRegion.x + existingRegion.width, maxX2)
+    maxY2 = Math.max(existingRegion.y + existingRegion.height, maxY2)
+  }
+
+  x = Math.max(0, x)
+  y = Math.max(0, y)
+  const width = Math.min(canvasWidth, maxX2) - x
+  const height = Math.min(canvasHeight, maxY2) - y
+  if (width <= 0 || height <= 0) return null
+
+  const surface = createRasterSurface(width, height)
+  if (!surface) return null
+  if (existingSrc && existingRegion) {
+    const existing = await loadImage(existingSrc)
+    if (existing) {
+      surface.ctx.drawImage(
+        existing,
+        existingRegion.x - x,
+        existingRegion.y - y,
+        existingRegion.width,
+        existingRegion.height
+      )
+    }
+  }
+  const translated = points.map((p) => ({ x: p.x - x, y: p.y - y, pressure: p.pressure }))
+  drawStrokeSegments(surface.ctx, translated, brush)
+  const src = await canvasToDataUrl(surface.canvas)
+  return { src, region: { x, y, width, height } }
+}
+
 export type DestructiveBrushType = 'blur' | 'eraser' | 'magic-eraser'
 
 export interface DestructiveStrokeTarget {
@@ -199,18 +296,143 @@ export async function applyDestructiveStroke(
 }
 
 function applyBlurStroke(surface: RasterSurface, points: readonly StrokePoint[], brush: StrokeBrush): void {
-  const radius = Math.max(1, Math.round((brush.size / 2) * (0.25 + 0.75 * clamp01(brush.hardness))))
+  const radius = blurRadiusFromBrush(brush)
   const box = strokeBounds(points, radius + 1)
   if (box.width <= 0 || box.height <= 0) return
-  const width = Math.min(box.width, surface.canvas.width - box.x)
-  const height = Math.min(box.height, surface.canvas.height - box.y)
+  blurRegionOnSurface(surface, box, null, radius)
+}
+
+/** Blur strength derived from a brush's size/hardness (shared by every blur tool). */
+export function blurRadiusFromBrush(brush: StrokeBrush): number {
+  return Math.max(1, Math.round((brush.size / 2) * (0.25 + 0.75 * clamp01(brush.hardness))))
+}
+
+interface RegionBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * Composites a blurred copy of the surface's region onto it, clipped to the
+ * optional shape path (null = the region's full bounds). The blur runs on a
+ * region-sized temp canvas; the clip restricts where the blurred pixels land.
+ */
+function blurRegionOnSurface(
+  surface: RasterSurface,
+  bounds: RegionBounds,
+  path: Path2D | null,
+  radius: number
+): void {
+  const width = Math.min(bounds.width, surface.canvas.width - bounds.x)
+  const height = Math.min(bounds.height, surface.canvas.height - bounds.y)
   if (width <= 0 || height <= 0) return
   const temp = createRasterSurface(width, height)
   if (!temp) return
   temp.ctx.filter = `blur(${radius}px)`
-  temp.ctx.drawImage(surface.canvas, box.x, box.y, width, height, 0, 0, width, height)
+  temp.ctx.drawImage(surface.canvas, bounds.x, bounds.y, width, height, 0, 0, width, height)
   temp.ctx.filter = 'none'
-  surface.ctx.drawImage(temp.canvas, 0, 0, width, height, box.x, box.y, width, height)
+  surface.ctx.save()
+  surface.ctx.beginPath()
+  if (path && typeof Path2D !== 'undefined') {
+    surface.ctx.clip(path)
+  } else {
+    surface.ctx.rect(bounds.x, bounds.y, width, height)
+    surface.ctx.clip()
+  }
+  surface.ctx.drawImage(temp.canvas, 0, 0, width, height, bounds.x, bounds.y, width, height)
+  surface.ctx.restore()
+}
+
+/**
+ * Shape-agnostic blur geometry. Every blur tool (rect / ellipse / line)
+ * describes its region with one of these descriptors — the engine never
+ * knows which tool produced it.
+ */
+export type BlurGeometry =
+  | { type: 'rect'; x: number; y: number; width: number; height: number }
+  | { type: 'ellipse'; x: number; y: number; width: number; height: number }
+  | { type: 'line'; x1: number; y1: number; x2: number; y2: number; width: number }
+
+function resolveBlurGeometry(geometry: BlurGeometry): { bounds: RegionBounds; path: Path2D | null } {
+  if (geometry.type === 'rect') {
+    const path = typeof Path2D !== 'undefined' ? new Path2D() : null
+    path?.rect(geometry.x, geometry.y, geometry.width, geometry.height)
+    return {
+      bounds: {
+        x: Math.max(0, Math.round(geometry.x)),
+        y: Math.max(0, Math.round(geometry.y)),
+        width: Math.round(Math.abs(geometry.width)),
+        height: Math.round(Math.abs(geometry.height))
+      },
+      path
+    }
+  }
+  if (geometry.type === 'ellipse') {
+    const rx = Math.max(1, Math.abs(geometry.width) / 2)
+    const ry = Math.max(1, Math.abs(geometry.height) / 2)
+    const cx = geometry.x + rx
+    const cy = geometry.y + ry
+    const path = typeof Path2D !== 'undefined' ? new Path2D() : null
+    path?.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+    return {
+      bounds: {
+        x: Math.max(0, Math.round(cx - rx)),
+        y: Math.max(0, Math.round(cy - ry)),
+        width: Math.round(rx * 2),
+        height: Math.round(ry * 2)
+      },
+      path
+    }
+  }
+  // line → a capsule (round-capped segment) whose outline is the clip region
+  const half = Math.max(1, geometry.width / 2)
+  const capsule = buildMaskStrokePolygon(
+    [
+      { x: geometry.x1, y: geometry.y1 },
+      { x: geometry.x2, y: geometry.y2 }
+    ],
+    half
+  )
+  const path = typeof Path2D !== 'undefined' ? new Path2D() : null
+  if (path) {
+    capsule.forEach((pt, i) => (i === 0 ? path.moveTo(pt.x, pt.y) : path.lineTo(pt.x, pt.y)))
+    path.closePath()
+  }
+  const minX = Math.min(geometry.x1, geometry.x2)
+  const maxX = Math.max(geometry.x1, geometry.x2)
+  const minY = Math.min(geometry.y1, geometry.y2)
+  const maxY = Math.max(geometry.y1, geometry.y2)
+  return {
+    bounds: {
+      x: Math.max(0, Math.floor(minX - half)),
+      y: Math.max(0, Math.floor(minY - half)),
+      width: Math.max(1, Math.ceil(maxX + half) - Math.floor(minX - half)),
+      height: Math.max(1, Math.ceil(maxY + half) - Math.floor(minY - half))
+    },
+    path
+  }
+}
+
+/**
+ * Blurs the region described by `geometry` on a copy of the target bitmap and
+ * returns the resulting data URL. Clips the blurred composite to the exact
+ * shape (rect / ellipse / round-capped line), so untouched pixels stay intact.
+ */
+export async function applyBlurRegion(
+  target: DestructiveStrokeTarget,
+  geometry: BlurGeometry,
+  radius: number
+): Promise<string | null> {
+  const surface = createRasterSurface(target.width, target.height)
+  if (!surface) return null
+  const existing = await loadImage(target.src)
+  if (!existing) return null
+  surface.ctx.drawImage(existing, 0, 0, target.width, target.height)
+  const { bounds, path } = resolveBlurGeometry(geometry)
+  blurRegionOnSurface(surface, bounds, path, radius)
+  return canvasToDataUrl(surface.canvas)
 }
 
 function applyEraseStroke(

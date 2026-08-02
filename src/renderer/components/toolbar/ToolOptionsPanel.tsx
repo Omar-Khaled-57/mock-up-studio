@@ -4,7 +4,8 @@ import { useTheme } from '../../hooks/useTheme'
 import { toolRegistry } from '../../tools'
 import SliderInput from '../shared/SliderInput'
 import ColorInput from '../shared/ColorInput'
-import { MaskMode, MaskPreviewShape } from '../../runtime/runtimeSlice'
+import { BrushShape, MaskMode, MaskPreviewShape } from '../../runtime/runtimeSlice'
+import { BrushControl, getBrushPreset } from '../../lib/brush-presets'
 
 const MASK_SHAPES: { value: MaskPreviewShape; label: string }[] = [
   { value: 'rectangle', label: 'Rect' },
@@ -15,6 +16,11 @@ const MASK_SHAPES: { value: MaskPreviewShape; label: string }[] = [
 const MASK_MODES: { value: MaskMode; label: string }[] = [
   { value: 'mask', label: 'Mask' },
   { value: 'unmask', label: 'Unmask' }
+]
+
+const SHAPE_OPTIONS: { value: BrushShape; label: string }[] = [
+  { value: 'round', label: 'Round' },
+  { value: 'square', label: 'Square' }
 ]
 
 export default function ToolOptionsPanel() {
@@ -40,20 +46,84 @@ export default function ToolOptionsPanel() {
 
   if (!tool?.options) return null
 
+  const isBrushGroup = tool.group === 'brush'
+  const preset = isBrushGroup ? getBrushPreset(tool.id) : null
+  const hasControl = (control: BrushControl) => preset?.controls.includes(control) ?? false
+
   return (
     <div
       data-tool-options={tool.id}
       className={clsx("flex-shrink-0 flex items-center gap-3 pl-4 pr-3 py-1.5 border-l-2 overflow-x-auto", accent.border)}
     >
-      <span className={clsx("text-[11px] font-medium shrink-0", text.secondary)}>{tool.label} options</span>
-      {effectiveId === 'paint' && (
+      <span className={clsx("text-[11px] font-medium shrink-0", text.secondary)}>{preset?.optionsLabel ?? tool.label} options</span>
+
+      {isBrushGroup && preset && hasControl('color') && (
+        <ColorInput
+          label="Color"
+          value={brush.color}
+          onChange={(color) => setBrush({ color })}
+          className="min-w-0 max-w-44 flex-1"
+        />
+      )}
+
+      {isBrushGroup && preset && hasControl('size') && (
+        <SliderInput
+          label="Size"
+          value={brush.size}
+          min={1}
+          max={120}
+          unit="px"
+          onChange={(size) => setBrush({ size })}
+          className="min-w-0 max-w-52 flex-1"
+        />
+      )}
+
+      {isBrushGroup && preset && hasControl('hardness') && (
+        <SliderInput
+          label="Hard"
+          value={Math.round(brush.hardness * 100)}
+          min={0}
+          max={100}
+          unit="%"
+          onChange={(hardness) => setBrush({ hardness: hardness / 100 })}
+          className="min-w-0 max-w-48 flex-1"
+        />
+      )}
+
+      {isBrushGroup && preset && hasControl('opacity') && (
+        <SliderInput
+          label="Opacity"
+          value={Math.round(brush.opacity * 100)}
+          min={0}
+          max={100}
+          unit="%"
+          onChange={(opacity) => setBrush({ opacity: opacity / 100 })}
+          className="min-w-0 max-w-48 flex-1"
+        />
+      )}
+
+      {isBrushGroup && preset && hasControl('shape') && (
+        <div className="flex items-center gap-1">
+          {SHAPE_OPTIONS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={brush.shape === value}
+              aria-label={`Brush shape ${label}`}
+              onClick={() => setBrush({ shape: value })}
+              className={clsx(
+                "px-2.5 py-1 text-[11px] rounded transition-colors",
+                brush.shape === value ? bg.selected : clsx(bg.button, text.secondary)
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {tool.group === 'blur' && (
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <ColorInput
-            label="Color"
-            value={brush.color}
-            onChange={(color) => setBrush({ color })}
-            className="min-w-0 max-w-44 flex-1"
-          />
           <SliderInput
             label="Size"
             value={brush.size}
@@ -74,7 +144,8 @@ export default function ToolOptionsPanel() {
           />
         </div>
       )}
-      {(effectiveId === 'blur' || effectiveId === 'eraser') && (
+
+      {tool.id === 'eraser' && (
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <SliderInput
             label="Size"
@@ -96,7 +167,8 @@ export default function ToolOptionsPanel() {
           />
         </div>
       )}
-      {effectiveId === 'magic-eraser' && (
+
+      {tool.id === 'magic-eraser' && (
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <SliderInput
             label="Tolerance"
@@ -109,6 +181,7 @@ export default function ToolOptionsPanel() {
           />
         </div>
       )}
+
       {effectiveId === 'mask' && (
         <div className="flex items-center gap-1">
           {MASK_MODES.map(({ value, label }) => (

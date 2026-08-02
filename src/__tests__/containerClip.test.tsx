@@ -52,16 +52,23 @@ describe('buildContainerClip', () => {
     expect(clip.shapeClip).toMatch(/^path\('M 0 50 A 50 50 0 1 1 100 50 A 50 50 0 1 1 0 50 Z'\)$/)
   })
 
-  it('cross shapes fall back to the box clip (no path emitted)', () => {
-    const clip = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', masks: [] })
-    expect(clip.shapeClip).toBeNull()
+  it('cross shapes clip to their exact ✕ union outline (no box fallback)', () => {
+    const clip = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.3, masks: [] })
+    expect(clip.shapeClip).toMatch(/^path\('M .* Z'\)$/)
+    expect(clip.shapeClip).not.toMatch(/^path\('M 0 0 L 100 0 L 100 100 L 0 100 Z'\)$/)
+    expect(clip.shapeClip!.match(/-?\d+\.?\d* -?\d+\.?\d*/g)).toHaveLength(12)
   })
 
-  it('plus/arrow thickness feeds the outline', () => {
+  it('plus/arrow/cross thickness feed the outline', () => {
     const plus = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'plus', plusThickness: 0.5, masks: [] })
     expect(plus.shapeClip).not.toBeNull()
     const arrow = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'arrow-right', arrowThickness: 0.7, masks: [] })
     expect(arrow.shapeClip).not.toBeNull()
+    const crossThin = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.2, masks: [] })
+    const crossThick = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.5, masks: [] })
+    expect(crossThin.shapeClip).not.toBeNull()
+    expect(crossThick.shapeClip).not.toBeNull()
+    expect(crossThin.shapeClip).not.toBe(crossThick.shapeClip)
   })
 })
 
@@ -241,6 +248,22 @@ describe('Scene container clipping', () => {
     const wrapper = wrapperFor('shp-c')
     expect(wrapper).not.toBeNull()
     expect(wrapper!.style.clipPath).toMatch(/^path\('/)
+  })
+
+  it('a cross container clips its children to the ✕ outline path (not the box)', () => {
+    const scene = emptyScene()
+    const container = makeShape({ id: 'shp-x', kind: 'cross', name: 'Cross Container', x: 200, y: 200, width: 120, height: 120, crossThickness: 0.3, zIndex: 5 })
+    scene.shapes = [container]
+    scene.images = [makeImage({ id: 'img-child', x: 250, y: 250, zIndex: 1, containerId: 'shp-x' })]
+    setScene(scene)
+
+    render(<Scene />)
+    const wrapper = wrapperFor('shp-x')
+    expect(wrapper).not.toBeNull()
+    expect(wrapper!.style.clipPath).toMatch(/^path\('M /)
+    expect(wrapper!.style.clipPath).toMatch(/ Z'\)$/)
+    expect(wrapper!.style.clipPath).not.toMatch(/^path\('M 0 0 L 120 0 L 120 120 L 0 120 Z'\)$/)
+    expect(wrapper!.querySelector('[data-element-id="img-child"]')).not.toBeNull()
   })
 
   it('container masks are intersected as a nested clip layer', () => {

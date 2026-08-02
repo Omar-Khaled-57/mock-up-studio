@@ -13,7 +13,7 @@ let pendingMarquee: PendingMarquee | null = null
 export const marqueeTool: Tool = {
   id: 'marquee',
   group: 'select',
-  label: 'Marquee Select',
+  label: 'Marquee',
   icon: 'marquee',
   cursor: 'crosshair',
   shortcut: 'm',

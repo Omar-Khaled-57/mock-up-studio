@@ -57,14 +57,11 @@ describe('useKeyboardShortcuts — tool domain', () => {
     expect(useRuntimeStore.getState().activeToolId).toBe('focus')
   })
 
-  it('B cycles through the brush group (paint, blur)', () => {
+  it('B activates the paint brush (blur is its own group without a shortcut)', () => {
     render(<Harness />)
 
     press('b')
     expect(toolManager.getEffectiveToolId()).toBe('paint')
-
-    press('b')
-    expect(toolManager.getEffectiveToolId()).toBe('blur')
 
     press('b')
     expect(toolManager.getEffectiveToolId()).toBe('paint')

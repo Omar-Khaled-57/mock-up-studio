@@ -131,6 +131,11 @@ export default function ThemesPanel() {
     [updateBackground, pushHistory]
   )
 
+  const toggleTransparent = useCallback(() => {
+    pushHistory(currBg.transparent ? 'Restore background' : 'Transparent canvas')
+    updateBackground({ transparent: !currBg.transparent })
+  }, [currBg.transparent, updateBackground, pushHistory])
+
   return (
     <div className="space-y-4">
       <input
@@ -140,6 +145,17 @@ export default function ThemesPanel() {
         className="hidden"
         onChange={handleImageUpload}
       />
+
+      {/* Transparent Canvas */}
+      <label className={clsx("flex items-center gap-2 text-sm cursor-pointer", text.primary)}>
+        <input
+          type="checkbox"
+          checked={currBg.transparent ?? false}
+          onChange={toggleTransparent}
+          className="custom-checkbox"
+        />
+        Transparent canvas
+      </label>
 
       {/* Type Selector */}
       <div>

@@ -14,17 +14,17 @@ import { useRuntimeStore } from '../../runtime/store'
 import { safeScene } from '../../store/sceneSlice'
 import { getFastOverlayHost } from '../../services/stroke-host'
 
-export const ERASER_VARIANTS = ['eraser', 'delete-element', 'magic-eraser']
+export const ERASER_VARIANTS = ['eraser', 'magic-eraser', 'delete']
 
 export interface DestructiveToolConfig {
-  id: 'blur' | 'eraser' | 'magic-eraser'
+  id: string
   group: ToolGroup
   label: string
   icon: string
   brushType: DestructiveBrushType
   historyLabel: string
-  shortcut: string
-  variants: string[]
+  shortcut?: string
+  variants?: string[]
 }
 
 interface PendingStroke {
@@ -203,6 +203,11 @@ async function commitStroke(
   if (!dataUrl) return
 
   state.pushHistory(stroke.historyLabel)
+  commitBitmapSrc(state, target, dataUrl)
+}
+
+/** Writes a freshly rasterized bitmap back to the target element (shared by all bitmap-editing tools). */
+export function commitBitmapSrc(state: ReturnType<typeof useStore.getState>, target: BitmapTarget, dataUrl: string): void {
   if (target.kind === 'device') {
     state.updateDevice(target.elementId, { screenImage: dataUrl })
   } else if (target.kind === 'shape') {
@@ -212,7 +217,7 @@ async function commitStroke(
   }
 }
 
-function readCurrentSrc(scene: ReturnType<typeof safeScene>, target: BitmapTarget): string | null {
+export function readCurrentSrc(scene: ReturnType<typeof safeScene>, target: BitmapTarget): string | null {
   if (target.kind === 'device') {
     return scene.devices.find((d) => d.id === target.elementId)?.screenImage ?? null
   }

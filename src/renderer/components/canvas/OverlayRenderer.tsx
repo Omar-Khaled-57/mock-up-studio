@@ -1,18 +1,22 @@
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useRuntimeStore } from '../../runtime/store'
+import { useTheme } from '../../hooks/useTheme'
 import { collectSelectionChrome, getElementGeometry, selectionUnionBounds } from '../../services/selection-chrome'
 import { getRotatedBounds, Rect } from '../../services/geometry'
 import { isInFocusScope } from '../../services/focus'
 import { SelectionChromeItem } from '../../services/selection-chrome'
 import { MaskOverlay } from '../masks/MaskRenderer'
 import { collectMaskVisuals } from '../../services/mask-visualization'
+import { resolveLiveGhost } from '../../services/preview'
 import Guides from './Guides'
 import FocusDim from './FocusDim'
 import StrokeSurface from './StrokeSurface'
+import PreviewSurface from './PreviewSurface'
 import ResizeHandles from '../shared/ResizeHandles'
 
-function renderSingleChrome(item: SelectionChromeItem) {
+function renderSingleChrome(item: SelectionChromeItem, liveBounds?: Rect | null) {
+  const bounds = liveBounds ?? item.bounds
   return (
     <div
       key={item.id}
@@ -20,10 +24,12 @@ function renderSingleChrome(item: SelectionChromeItem) {
       data-chrome-element-kind={item.kind}
       style={{
         position: 'absolute',
-        left: item.bounds.x,
-        top: item.bounds.y,
-        width: item.bounds.width,
-        height: item.bounds.height,
+        left: bounds.x,
+        top: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        transform: item.rotation ? `rotate(${item.rotation}deg)` : undefined,
+        transformOrigin: 'center',
         pointerEvents: 'none'
       }}
     >
@@ -62,10 +68,27 @@ export default function OverlayRenderer() {
   const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
   const focusElementId = useRuntimeStore((s) => s.focusElementId)
   const maskPreview = useRuntimeStore((s) => s.maskPreview)
+  const activeInteraction = useRuntimeStore((s) => s.activeInteraction)
+  const preview = useRuntimeStore((s) => s.preview)
 
   const chrome = collectSelectionChrome(scene, selectedIds)
+  const { isLight } = useTheme()
 
   const maskVisuals = collectMaskVisuals(scene)
+
+  // During a resize gesture the element's box grows/shrinks freely in the DOM,
+  // so the store-driven chrome (which commits only on pointer-up) would sit at
+  // the ORIGINAL bounds — a stale box that keeps the element's start aspect
+  // ratio until the resize commits ("snaps" on release). Track the live bounds
+  // instead: the ghost's raw source is the shared live-transform (the element
+  // facade reads the same source), so the chrome follows the resize in real
+  // time. Drags keep the approved origin-outline + destination-ghost behavior
+  // (chrome stays at the start bounds).
+  let resizeLiveBounds: Rect | null = null
+  if (activeInteraction?.kind === 'resize' && chrome.length === 1) {
+    const source = resolveLiveGhost(preview, chrome[0].id)
+    if (source) resizeLiveBounds = { x: source.x, y: source.y, width: source.width, height: source.height }
+  }
 
   let hoverBounds: Rect | null = null
   if (
@@ -85,6 +108,20 @@ export default function OverlayRenderer() {
 
   return (
     <div className="absolute inset-0" style={{ pointerEvents: 'none', zIndex: 10000 }}>
+      {scene.background.transparent && (
+        <div
+          aria-hidden="true"
+          data-transparent-checker="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            border: `1px solid ${isLight ? '#111827' : '#f9fafb'}`,
+            boxShadow: `inset 0 0 0 1px ${isLight ? 'rgba(17, 24, 39, 0.2)' : 'rgba(255, 255, 255, 0.25)'}`,
+            pointerEvents: 'none'
+          }}
+        />
+      )}
+
       <FocusDim />
 
       <Guides
@@ -96,7 +133,7 @@ export default function OverlayRenderer() {
 
       <MaskOverlay width={scene.canvas.width} height={scene.canvas.height} visuals={maskVisuals} preview={maskPreview} />
 
-      {chrome.length === 1 ? renderSingleChrome(chrome[0]) : chrome.length > 1 ? renderUnionChrome(chrome) : null}
+      {chrome.length === 1 ? renderSingleChrome(chrome[0], resizeLiveBounds) : chrome.length > 1 ? renderUnionChrome(chrome) : null}
 
       {dropBounds && (
         <div
@@ -147,6 +184,7 @@ export default function OverlayRenderer() {
       )}
 
       <StrokeSurface />
+      <PreviewSurface />
     </div>
   )
 }

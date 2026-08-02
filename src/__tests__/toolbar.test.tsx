@@ -15,12 +15,12 @@ describe('BottomToolbar', () => {
   it('renders reachable tools with shortcut badges and the active tool label', () => {
     render(<BottomToolbar />)
 
-    expect(screen.getByRole('button', { name: 'Select / Move' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Eraser' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getAllByText('V').length).toBeGreaterThan(0)
     expect(screen.getAllByText('B').length).toBeGreaterThan(0)
     expect(screen.getAllByText('E').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Select / Move').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Select').length).toBeGreaterThan(0)
   })
 
   it('renders the mask group as a single reachable tool with no variant reveal', () => {
@@ -37,15 +37,15 @@ describe('BottomToolbar', () => {
 
     const toggle = screen.getByRole('button', { name: 'Show or hide tools' })
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: 'Select / Move' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Select' })).toBeTruthy()
 
     fireEvent.click(toggle)
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('button', { name: 'Select / Move' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Marquee Select' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Marquee' })).toBeNull()
 
     fireEvent.click(toggle)
-    expect(screen.getByRole('button', { name: 'Select / Move' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Select' })).toBeTruthy()
   })
 
   it('hide/reveal persists across a toolbar remount and survives transient resets', () => {
@@ -57,7 +57,7 @@ describe('BottomToolbar', () => {
     unmount()
     render(<BottomToolbar />)
     expect(screen.getByRole('button', { name: 'Show or hide tools' })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByRole('button', { name: 'Select / Move' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull()
 
     resetRuntime('transient')
     expect(useRuntimeStore.getState().toolbarToolsVisible).toBe(false)
@@ -80,30 +80,30 @@ describe('BottomToolbar', () => {
   it('activates the paint tool on click', () => {
     render(<BottomToolbar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Paint Brush' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Paint' }))
 
     expect(toolManager.getEffectiveToolId()).toBe('paint')
     expect(useRuntimeStore.getState().activeToolId).toBe('paint')
-    expect(screen.getByRole('button', { name: 'Paint Brush' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Paint' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('activates the focus tool on click', () => {
     render(<BottomToolbar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Focus Tool' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Focus' }))
 
     expect(toolManager.getEffectiveToolId()).toBe('focus')
     expect(useRuntimeStore.getState().activeToolId).toBe('focus')
-    expect(screen.getByRole('button', { name: 'Focus Tool' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Focus' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('renders Focus inside the select/move group menu', () => {
     render(<BottomToolbar />)
 
-    expect(screen.getByRole('button', { name: 'Focus Tool' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Focus' })).toBeEnabled()
     const reveal = document.querySelector('[data-group-reveal="select"]')
     expect(reveal).not.toBeNull()
-    expect(reveal!.querySelector('[aria-label="Focus Tool"]')).not.toBeNull()
+    expect(reveal!.querySelector('[aria-label="Focus"]')).not.toBeNull()
   })
 
   it('activates a reachable tool from the revealed select menu', () => {
@@ -122,53 +122,54 @@ describe('BottomToolbar', () => {
     const reveal = document.querySelector('[data-group-reveal="select"]')
     expect(reveal).not.toBeNull()
 
-    const marquee = screen.getByRole('button', { name: 'Marquee Select' })
+    const marquee = screen.getByRole('button', { name: 'Marquee' })
     expect(marquee).not.toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Select / Move' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Select' })).toHaveAttribute('aria-pressed', 'true')
 
     fireEvent.click(marquee)
     expect(toolManager.getEffectiveToolId()).toBe('marquee')
     expect(useRuntimeStore.getState().activeToolId).toBe('marquee')
-    expect(screen.getByRole('button', { name: 'Marquee Select' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Marquee' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('reveals the brush group variants when the brush group is active', () => {
     render(<BottomToolbar />)
 
     // Collapsed: only the face is shown.
-    expect(screen.getAllByRole('button', { name: 'Paint Brush' })).toHaveLength(1)
-    expect(screen.queryByRole('button', { name: 'Blur Brush' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: 'Paint' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Pencil' })).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Paint Brush' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Paint' }))
 
-    // Revealed: every brush is visible side by side inside the rectangle.
+    // Revealed: every brush preset is visible side by side inside the rectangle.
     expect(document.querySelector('[data-group-reveal="brush"]')).not.toBeNull()
-    for (const name of ['Paint Brush', 'Blur Brush']) {
+    for (const name of ['Paint', 'Pencil', 'Airbrush', 'Marker', 'Pen', 'Pixel']) {
       for (const button of screen.getAllByRole('button', { name })) {
         expect(button).not.toBeDisabled()
       }
     }
-    expect(screen.getAllByRole('button', { name: 'Paint Brush' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Paint' })).toHaveLength(1)
     expect(toolManager.getEffectiveToolId()).toBe('paint')
     expect(useRuntimeStore.getState().activeToolId).toBe('paint')
   })
 
-  it('activates blur, eraser and magic-eraser from the revealed group menus', () => {
+  it('activates blur variants and eraser/magic-eraser from the revealed group menus', () => {
     render(<BottomToolbar />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Paint Brush' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Blur Brush' }))
-    expect(toolManager.getEffectiveToolId()).toBe('blur')
-    expect(useRuntimeStore.getState().activeToolId).toBe('blur')
-    expect(screen.getByRole('button', { name: 'Blur Brush' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Blur' }))
+    expect(document.querySelector('[data-group-reveal="blur"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Ellipse' }))
+    expect(toolManager.getEffectiveToolId()).toBe('blur-ellipse')
+    expect(useRuntimeStore.getState().activeToolId).toBe('blur-ellipse')
+    expect(screen.getByRole('button', { name: 'Ellipse' })).toHaveAttribute('aria-pressed', 'true')
 
     // Clicking the eraser face activates it and reveals the eraser group.
     fireEvent.click(screen.getByRole('button', { name: 'Eraser' }))
     expect(document.querySelector('[data-group-reveal="eraser"]')).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Magic Eraser' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Magic' }))
     expect(toolManager.getEffectiveToolId()).toBe('magic-eraser')
     expect(useRuntimeStore.getState().activeToolId).toBe('magic-eraser')
-    expect(screen.getByRole('button', { name: 'Magic Eraser' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Magic' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('highlights the effective tool when a temporary tool is active', () => {
@@ -252,9 +253,10 @@ describe('ToolOptionsPanel', () => {
     expect(screen.getByText('Hard')).toBeTruthy()
 
     const ranges = container.querySelectorAll('input[type="range"]')
-    expect(ranges).toHaveLength(2)
+    expect(ranges).toHaveLength(3)
     expect(ranges[0]).toHaveValue('24')
     expect(ranges[1]).toHaveValue('60')
+    expect(ranges[2]).toHaveValue('100')
   })
 
   it('size slider updates the runtime brush', () => {

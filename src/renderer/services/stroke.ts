@@ -25,6 +25,8 @@ export interface StrokeRenderState {
   width: number
   hardness: number
   pressure: number
+  shape?: 'round' | 'square'
+  opacity?: number
 }
 
 export const DEFAULT_MIN_DISTANCE = 1.5
