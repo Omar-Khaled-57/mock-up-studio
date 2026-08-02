@@ -10,6 +10,7 @@ import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { createToolManager, toolRegistry } from '../renderer/tools'
 import { applyDestructiveStroke } from '../renderer/services/rasterizer'
+import { rasterizeShapeBitmap } from '../renderer/services/shape-rasterizer'
 import { resetStore, makeDevice, makeImage, makeShape, makeTextBox } from './helpers'
 
 vi.mock('../renderer/services/rasterizer', async (importOriginal) => {
@@ -21,7 +22,12 @@ vi.mock('../renderer/services/rasterizer', async (importOriginal) => {
   }
 })
 
+vi.mock('../renderer/services/shape-rasterizer', () => ({
+  rasterizeShapeBitmap: vi.fn(async () => 'data:image/png;base64,rasterized-shape')
+}))
+
 const applyMock = applyDestructiveStroke as unknown as ReturnType<typeof vi.fn>
+const rasterizeMock = rasterizeShapeBitmap as unknown as ReturnType<typeof vi.fn>
 
 type Ptr = {
   pointerId: number
@@ -70,6 +76,7 @@ describe('destructive tools', () => {
   beforeEach(() => {
     resetStore()
     applyMock.mockClear()
+    rasterizeMock.mockClear()
   })
 
   afterEach(() => {

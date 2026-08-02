@@ -88,6 +88,11 @@ export function resolveScreenRegion(device: Device): ScreenRect {
 /**
  * Resolves the bitmap-backed target for a hit element, or null when the
  * element kind carries no raster bitmap (textBox, image/shape without a src).
+ *
+ * Shapes without a backgroundImage now return a target with `src: null` —
+ * the destructive commit pipeline rasterizes the shape's current fill
+ * on-demand (see `ensureBitmapSrc` in destructive.ts) so erasing works on
+ * any shape, not just those with a pre-existing bitmap.
  */
 export function resolveBitmapTarget(scene: Scene, hit: HitTestResult): BitmapTarget | null {
   if (hit.kind === 'image') {
@@ -106,7 +111,11 @@ export function resolveBitmapTarget(scene: Scene, hit: HitTestResult): BitmapTar
   }
   if (hit.kind === 'shape') {
     const shape = scene.shapes.find((s) => s.id === hit.id)
-    if (!shape || !shape.backgroundImage) return null
+    if (!shape) return null
+    // Shapes without a backgroundImage can still be erased/blurred — the
+    // destructive commit pipeline rasterizes the shape's current fill
+    // on-demand (see `ensureBitmapSrc` in destructive.ts) and stores the
+    // result as the shape's backgroundImage.
     return {
       elementId: shape.id,
       kind: 'shape',

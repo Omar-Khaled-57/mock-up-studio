@@ -146,7 +146,7 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
-async function canvasToDataUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string> {
+export async function canvasToDataUrl(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<string> {
   if ('toDataURL' in canvas) {
     return (canvas as HTMLCanvasElement).toDataURL('image/png')
   }

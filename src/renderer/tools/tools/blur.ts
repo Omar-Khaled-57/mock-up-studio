@@ -13,7 +13,7 @@ import { useRuntimeStore } from '../../runtime/store'
 import { safeScene } from '../../store/sceneSlice'
 import { getFastOverlayHost } from '../../services/stroke-host'
 import { buildBlurRegionPreview } from '../../services/preview'
-import { createDestructiveTool, commitBitmapSrc, readCurrentSrc } from './destructive'
+import { createDestructiveTool, commitBitmapSrc, ensureBitmapSrc } from './destructive'
 
 export const BLUR_VARIANTS = ['blur', 'blur-element', 'blur-rect', 'blur-ellipse', 'blur-line']
 
@@ -176,7 +176,7 @@ async function commitRegion(
   const state = useStore.getState()
   const scene = safeScene(state)
   const { target, element, kind, start } = pending
-  const src = readCurrentSrc(scene, target)
+  const src = await ensureBitmapSrc(state, scene, target)
   if (!src) return
 
   const rt = ctx.getRuntime()
@@ -197,7 +197,7 @@ async function commitRegion(
 async function commitElement(ctx: InteractionContext, target: BitmapTarget): Promise<void> {
   const state = useStore.getState()
   const scene = safeScene(state)
-  const src = readCurrentSrc(scene, target)
+  const src = await ensureBitmapSrc(state, scene, target)
   if (!src) return
 
   const rt = ctx.getRuntime()

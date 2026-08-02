@@ -9,6 +9,7 @@ import {
   resolveElementGeometry,
   toLocalPoint
 } from '../../services/bitmap-targets'
+import { rasterizeShapeBitmap } from '../../services/shape-rasterizer'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
 import { safeScene } from '../../store/sceneSlice'
@@ -184,9 +185,9 @@ async function commitStroke(
   const scene = safeScene(state)
   const { target, element } = stroke
 
-  // Re-read the current bitmap from the store so overlapping strokes committed
-  // through the chain composite in document order (the snapshot may be stale).
-  const src = readCurrentSrc(scene, target)
+  // Resolve the bitmap source — rasterizing the shape on-demand when it has
+  // no pre-existing backgroundImage (see ensureBitmapSrc for the contract).
+  const src = await ensureBitmapSrc(state, scene, target)
   if (!src) return
 
   const localPoints = points.map((p) => {
@@ -225,4 +226,36 @@ export function readCurrentSrc(scene: ReturnType<typeof safeScene>, target: Bitm
     return scene.shapes.find((s) => s.id === target.elementId)?.backgroundImage ?? null
   }
   return scene.images.find((i) => i.id === target.elementId)?.src ?? null
+}
+
+/**
+ * Resolves the bitmap source for a destructive commit, rasterizing the shape
+ * on-demand when it has no pre-existing backgroundImage.
+ *
+ * For shapes without a backgroundImage, the shape's current fill (solid color
+ * or gradient) is rendered to a bitmap via `rasterizeShapeBitmap` and returned.
+ * The destructive pipeline then applies the stroke to this bitmap and commits
+ * it as the shape's new `backgroundImage` — one history entry covers the
+ * entire rasterize-then-edit operation (the history snapshot captures the
+ * pre-mutation state where backgroundImage was null).
+ *
+ * Returns null only when the element genuinely has no editable bitmap (textBox,
+ * src-less image, rasterization failure).
+ */
+export async function ensureBitmapSrc(
+  state: ReturnType<typeof useStore.getState>,
+  scene: ReturnType<typeof safeScene>,
+  target: BitmapTarget
+): Promise<string | null> {
+  const existing = readCurrentSrc(scene, target)
+  if (existing) return existing
+
+  // Shapes without a backgroundImage can be rasterized from their data model.
+  if (target.kind === 'shape') {
+    const shape = scene.shapes.find((s) => s.id === target.elementId)
+    if (!shape) return null
+    return rasterizeShapeBitmap(shape)
+  }
+
+  return null
 }

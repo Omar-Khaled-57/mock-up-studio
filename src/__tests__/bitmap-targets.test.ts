@@ -71,10 +71,19 @@ describe('bitmap-targets', () => {
     expect(target).toMatchObject({ kind: 'shape', src: 'data:image/png;base64,shp', width: 120, height: 80 })
   })
 
-  it('resolveBitmapTarget returns null for a shape without a background image', () => {
+  it('resolveBitmapTarget resolves a shape without a background image (rasterized on-demand)', () => {
     const scene = createDefaultScene()
-    scene.shapes.push(makeShape({ id: 'shp-1' }))
-    expect(resolveBitmapTarget(scene, hit('shp-1', 'shape'))).toBeNull()
+    scene.shapes.push(makeShape({ id: 'shp-1', width: 120, height: 80 }))
+    const target = resolveBitmapTarget(scene, hit('shp-1', 'shape'))
+    expect(target).toMatchObject({
+      kind: 'shape',
+      src: null,
+      originX: 0,
+      originY: 0,
+      width: 120,
+      height: 80,
+      srcKey: 'backgroundImage'
+    })
   })
 
   it('resolveBitmapTarget resolves a device screenshot into its screen region', () => {
