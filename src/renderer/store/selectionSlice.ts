@@ -5,6 +5,8 @@ import { FocusFilter } from '../services/focus'
 
 export type AlignmentDirection = 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom'
 
+export type DistributeDirection = 'space-horizontal' | 'space-vertical' | 'center-horizontal' | 'center-vertical'
+
 export const NOOP_FOCUS_FILTER: FocusFilter = () => true
 
 export interface SelectionSlice {
@@ -17,6 +19,7 @@ export interface SelectionSlice {
   selectAll: (filter?: FocusFilter) => void
   isSelected: (id: string) => boolean
   alignSelected: (direction: AlignmentDirection) => void
+  distributeSelected: (direction: DistributeDirection) => void
   selectInRect: (x: number, y: number, w: number, h: number, filter?: FocusFilter) => void
 }
 
@@ -172,6 +175,61 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
         case 'bottom': y = maxY - el.height; break
       }
       patchElement(state, el.id, { x: Math.round(x), y: Math.round(y) })
+    }
+  },
+
+  distributeSelected: (direction) => {
+    const state = get()
+    const elements = findSelectedElements(state)
+    if (elements.length < 3) return
+
+    state.pushHistory('Distribute')
+
+    const setPos = (id: string, x: number, y: number) =>
+      patchElement(state, id, { x: Math.round(x), y: Math.round(y) })
+
+    if (direction === 'space-horizontal') {
+      const sorted = [...elements].sort((a, b) => a.x - b.x)
+      const first = sorted[0]
+      const last = sorted[sorted.length - 1]
+      const span = last.x + last.width - first.x
+      const total = sorted.reduce((sum, e) => sum + e.width, 0)
+      const gap = (span - total) / (sorted.length - 1)
+      let cursor = first.x
+      for (const e of sorted) {
+        setPos(e.id, cursor, e.y)
+        cursor += e.width + gap
+      }
+    } else if (direction === 'space-vertical') {
+      const sorted = [...elements].sort((a, b) => a.y - b.y)
+      const first = sorted[0]
+      const last = sorted[sorted.length - 1]
+      const span = last.y + last.height - first.y
+      const total = sorted.reduce((sum, e) => sum + e.height, 0)
+      const gap = (span - total) / (sorted.length - 1)
+      let cursor = first.y
+      for (const e of sorted) {
+        setPos(e.id, e.x, cursor)
+        cursor += e.height + gap
+      }
+    } else if (direction === 'center-horizontal') {
+      const sorted = [...elements].sort((a, b) => a.x + a.width / 2 - (b.x + b.width / 2))
+      const first = sorted[0].x + sorted[0].width / 2
+      const last = sorted[sorted.length - 1].x + sorted[sorted.length - 1].width / 2
+      const step = (last - first) / (sorted.length - 1)
+      sorted.forEach((e, i) => {
+        const center = first + step * i
+        setPos(e.id, center - e.width / 2, e.y)
+      })
+    } else {
+      const sorted = [...elements].sort((a, b) => a.y + a.height / 2 - (b.y + b.height / 2))
+      const first = sorted[0].y + sorted[0].height / 2
+      const last = sorted[sorted.length - 1].y + sorted[sorted.length - 1].height / 2
+      const step = (last - first) / (sorted.length - 1)
+      sorted.forEach((e, i) => {
+        const center = first + step * i
+        setPos(e.id, e.x, center - e.height / 2)
+      })
     }
   }
 })

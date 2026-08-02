@@ -1,22 +1,24 @@
 /**
  * FocusDim — focus-mode dim layer (rendered by the OverlayRenderer, outside
  * the export node). Renders a translucent scrim over the entire canvas and a
- * highlight ring around the focused group's bounds. Non-focus content stays
- * visible but dimmed — never hidden — so the document remains visually
- * continuous and exports are unaffected (this layer lives in the overlay).
+ * highlight ring around the focused scope's bounds (a group subtree or a
+ * container element + its children). Non-focus content stays visible but
+ * dimmed — never hidden — so the document remains visually continuous and
+ * exports are unaffected (this layer lives in the overlay).
  */
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useRuntimeStore } from '../../runtime/store'
-import { getFocusBounds } from '../../services/focus'
+import { getFocusScopeBounds } from '../../services/focus'
 
 export default function FocusDim() {
   const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
+  const focusElementId = useRuntimeStore((s) => s.focusElementId)
   const scene = useStore(safeScene)
 
-  if (!focusGroupId) return null
+  if (!focusGroupId && !focusElementId) return null
 
-  const bounds = getFocusBounds(scene, focusGroupId)
+  const bounds = getFocusScopeBounds(scene, focusGroupId, focusElementId)
 
   return (
     <>

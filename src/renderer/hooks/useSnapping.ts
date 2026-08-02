@@ -27,7 +27,7 @@ export function useSnapping(options?: UseSnappingOptions) {
     (input: SnapInput): SnapResult => {
       // One-shot state read (no React subscription — this runs in pointermove).
       const scene = safeScene(useStore.getState())
-      const result = computeSnapForScene(scene, input, options?.enabled !== false)
+      const result = computeSnapForScene(scene, input, { smartGuides: options?.enabled !== false, gridSnap: true })
       snapRef.current = result
       return result
     },

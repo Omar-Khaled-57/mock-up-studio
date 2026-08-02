@@ -38,7 +38,8 @@ export function createDefaultShape(kind: ShapeKind, canvasWidth: number, canvasH
     crossThickness: 0.3,
     plusThickness: 0.3,
     arrowThickness: 0.5,
-    groupId: null
+    groupId: null,
+    containerId: null
   }
 }
 

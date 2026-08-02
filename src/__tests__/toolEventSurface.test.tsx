@@ -131,7 +131,7 @@ describe('ToolEventSurface', () => {
 
   it('tracks hover over elements through the active tool and clears on leave', () => {
     const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 100, height: 100 })
-    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], textBoxes: [], devices: [device] }] })
     render(
       <ToolEventSurface onWheel={vi.fn()}>
         <div data-testid="scene" style={{ width: 800, height: 600 }} />
@@ -160,6 +160,52 @@ describe('ToolEventSurface', () => {
 
     fireEvent.pointerCancel(scene, { pointerId: 3, bubbles: true })
     expect(toolManager.getOwner(3)).toBeNull()
+    toolManager.setActiveTool('select')
+  })
+
+  it('resizes from a corner handle regardless of the active tool', () => {
+    const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+
+    const { container } = render(
+      <ToolEventSurface onWheel={vi.fn()}>
+        <div
+          data-testid="scene"
+          data-element-id="dev-1"
+          data-element-kind="device"
+          data-element-locked="false"
+          style={{ position: 'absolute', left: 100, top: 100, width: 600, height: 400 }}
+        />
+        <div
+          data-chrome-element-id="dev-1"
+          data-chrome-element-kind="device"
+          style={{ position: 'absolute', left: 100, top: 100, width: 600, height: 400 }}
+        >
+          <div
+            data-resize-handle="se"
+            style={{ position: 'absolute', bottom: -8, right: -8, width: 12, height: 12 }}
+          />
+        </div>
+      </ToolEventSurface>
+    )
+    const handle = container.querySelector('[data-resize-handle="se"]') as HTMLElement
+
+    toolManager.setActiveTool('mask')
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientX: 720, clientY: 520, bubbles: true })
+    expect(useRuntimeStore.getState().activeInteraction?.kind).toBe('resize')
+    expect(toolManager.getOwner(1)).toBe('select')
+
+    const el = container.querySelector('[data-element-id="dev-1"]') as HTMLElement
+    fireEvent.pointerMove(handle, { pointerId: 1, button: 0, clientX: 820, clientY: 620, bubbles: true })
+    expect(el.style.width).toBe('700px')
+    expect(el.style.height).toBe('500px')
+
+    fireEvent.pointerUp(handle, { pointerId: 1, button: 0, clientX: 820, clientY: 620, bubbles: true })
+    const dev = useStore.getState().scenes[0].devices[0]
+    expect(dev.width).toBe(700)
+    expect(dev.height).toBe(500)
+    expect(useRuntimeStore.getState().activeInteraction).toBeNull()
+    expect(toolManager.getOwner(1)).toBeNull()
     toolManager.setActiveTool('select')
   })
 
@@ -199,7 +245,7 @@ describe('ToolEventSurface', () => {
 
   it('shows a dragging cursor while a move interaction is owned', () => {
     const device = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 100, height: 100 })
-    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [device] }] })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], textBoxes: [], devices: [device] }] })
     const { container } = render(
       <ToolEventSurface onWheel={vi.fn()}>
         <div
@@ -228,6 +274,7 @@ describe('ToolEventSurface', () => {
     useStore.setState({
       scenes: [{
         ...sceneState,
+        textBoxes: [],
         devices: [devIn, devOut],
         groups: [{ id: 'g-1', name: 'G', childIds: ['dev-in'], parentGroupId: null }]
       }]

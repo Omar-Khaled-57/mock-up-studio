@@ -17,30 +17,10 @@ export interface Scene {
   textBoxes: TextBox[]
   images: ImageOverlay[]
   shapes: Shape[]
-  titleText: TitleText
-  sloganText: TitleText
   guides: Guide[]
   grid: GridSettings
   groups: ElementGroup[]
   masks: Mask[]
-}
-
-export interface TitleText {
-  content: string
-  fontSize: number
-  fontFamily: string
-  fontWeight: number
-  textAlign: 'left' | 'center' | 'right'
-  lineHeight: number
-  letterSpacing: number
-  wordSpacing: number
-  textTransform: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
-  strokeColor: string
-  strokeWidth: number
-  color: string
-  gradient: TextGradient | null
-  glow: TextGlow | null
-  shadow: TextShadow | null
 }
 
 export interface TextGradient {
@@ -99,6 +79,7 @@ export interface Device {
     screenRegion: { x: number; y: number; w: number; h: number }
   }
   groupId: string | null
+  containerId: string | null
 }
 
 export interface TextBox {
@@ -110,6 +91,7 @@ export interface TextBox {
   width: number
   height: number
   heightAuto: boolean
+  wrap: boolean
   fontSize: number
   fontFamily: string
   fontWeight: number
@@ -134,6 +116,7 @@ export interface TextBox {
   zIndex: number
   locked: boolean
   groupId: string | null
+  containerId: string | null
 }
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion'
@@ -177,6 +160,7 @@ export interface ImageOverlay {
   locked: boolean
   visible: boolean
   groupId: string | null
+  containerId: string | null
   effects?: ImageEffects
 }
 
@@ -253,6 +237,19 @@ export interface MaskPoint {
  * define the bounding box for rectangle/ellipse masks and the bounds of a
  * brush (freehand) mask; `points` carries the brush polygon. `inverted`
  * toggles punch (inverse) rendering via evenodd clip-path compositing.
+ *
+ * `holes` (restored areas) appears on brush masks after subtractive unmask
+ * strokes: the punched region is `points` (the outer ring) minus `holes`
+ * (previously-restored sub-regions), rendered as nested evenodd contours so a
+ * reveal carved into a punch shows the original content through the hole.
+ *
+ * A mask may carry a `snapshot` — an immutable freeze stamp of the whole scene
+ * captured at the moment the mask was created (or last refreshed). When
+ * present, the mask is a "frozen" mask: instead of clipping the LIVE element
+ * at render time (which lets later layer edits, reordering and new content
+ * leak into the masked region), the element's clip layers render the captured
+ * pixels. Only an explicit refresh/recreate rewrites the snapshot; every other
+ * edit (move/resize/rotate/shape/unmask/delete) touches geometry alone.
  */
 export interface Mask {
   id: string
@@ -264,6 +261,32 @@ export interface Mask {
   height: number
   points: MaskPoint[]
   inverted: boolean
+  holes?: MaskPoint[][]
+  /**
+   * Immutable whole-scene freeze stamp. Present only on frozen masks. The
+   * image renders inside the element's clip layers with `background:
+   * transparent`, so the masked region shows exactly what the canvas looked
+   * like at capture time (including other layers, z-order and the scene
+   * background) — never the live canvas behind it.
+   */
+  snapshot?: MaskSnapshot
+}
+
+/**
+ * A frozen-mask snapshot: a PNG data URL of the whole scene (captured from
+ * `[data-scene-export]`) plus the capture metadata needed to place it back.
+ * `sourceBounds` is the region of the scene the element occupied at capture
+ * time; `width`/`height` are the image's pixel dimensions (rounded from
+ * scene-units × scale).
+ */
+export interface MaskSnapshot {
+  dataUrl: string
+  width: number
+  height: number
+  /** Scene-space bounds of the target element when the snapshot was captured. */
+  sourceBounds: { x: number; y: number; width: number; height: number }
+  /** Wall-clock ms at capture time (0 in tests / legacy data). */
+  capturedAt: number
 }
 
 export interface Shape {
@@ -291,5 +314,6 @@ export interface Shape {
   plusThickness: number
   arrowThickness: number
   groupId: string | null
+  containerId: string | null
   effects?: ImageEffects
 }

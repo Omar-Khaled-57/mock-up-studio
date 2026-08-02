@@ -1,8 +1,11 @@
 import { Tool, InteractionContext } from '../types'
-import { MaskPoint, Scene } from '@shared/types'
+import { Scene } from '@shared/types'
 import { getCapabilities } from '../../services/capabilities'
 import { isInFocusScope } from '../../services/focus'
 import { ElementGeometry, resolveElementGeometry, toLocalPoint } from '../../services/bitmap-targets'
+import { boundsOf, buildMaskStrokePolygon } from '../../services/mask-brush'
+import { ellipseRing, rectRing, resolveUnmaskCommit } from '../../services/mask-diff'
+import { BACKGROUND_MASK_TARGET_ID } from '../../services/mask-visualization'
 import { HitTestResult } from '../../services/hit-test'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
@@ -36,8 +39,8 @@ interface PendingMask {
   last: { x: number; y: number }
   /** Scene-space polyline for brush strokes. */
   points: { x: number; y: number }[]
-  /** The mask being re-drawn (edit), or null when drawing a fresh one. */
-  existingMaskId: string | null
+  /** Brush radius in scene units (brush strokes only). */
+  radius: number
 }
 
 let pendingMask: PendingMask | null = null
@@ -49,22 +52,55 @@ function pushPreview(rt: RuntimeSlice, pm: PendingMask): void {
   rt.setMaskPreview({
     targetId: pm.targetId,
     shape: pm.shape,
-    points: pm.shape === 'brush' ? pm.points : [pm.anchor, pm.last]
+    points: pm.shape === 'brush' ? pm.points : [pm.anchor, pm.last],
+    element: pm.element,
+    inverted: pm.inverted,
+    radius: pm.shape === 'brush' ? pm.radius : undefined
   })
 }
 
-function boundsOf(points: MaskPoint[]): { x: number; y: number; width: number; height: number } {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const p of points) {
-    if (p.x < minX) minX = p.x
-    if (p.y < minY) minY = p.y
-    if (p.x > maxX) maxX = p.x
-    if (p.y > maxY) maxY = p.y
+/**
+ * Commits a mask-mode (inverted) stroke as a LIVE mask: pushes a single history
+ * entry and adds the mask with no snapshot, so the masked region renders the
+ * transparency checkerboard and the mask stays visible right after the stroke.
+ *
+ * A mask is frozen (embedding a whole-scene capture) only via the explicit
+ * PropertiesPanel Refresh action (`refreshMaskSnapshot`). Auto-capturing at
+ * creation was reverted: a snapshot taken at creation time captures the same
+ * canvas the user is looking at, so the frozen pixels are pixel-identical to
+ * the live scene and the freshly-drawn mask is invisible — exactly the reported
+ * "the mask disappears on mouse release" regression.
+ */
+function commitLiveMask(
+  pm: PendingMask,
+  rect: { x: number; y: number; width: number; height: number },
+  stroke: { x: number; y: number }[]
+): void {
+  const state = useStore.getState()
+  state.pushHistory('Add mask')
+  if (pm.shape === 'brush') {
+    const box = boundsOf(stroke)
+    state.addMask({
+      id: generateId(),
+      targetId: pm.targetId,
+      inverted: true,
+      shape: 'brush' as const,
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      points: stroke
+    })
+  } else {
+    state.addMask({
+      id: generateId(),
+      targetId: pm.targetId,
+      shape: pm.shape,
+      points: [],
+      inverted: true,
+      ...rect
+    })
   }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
 export const maskTool: Tool = {
@@ -79,31 +115,53 @@ export const maskTool: Tool = {
   onPointerDown(ctx: InteractionContext, e: PointerEvent) {
     if (e.button !== 0) return
     const hit = ctx.hitResult
-    if (!hit) return
-    if (!getCapabilities(hit.kind).maskable || hit.locked) return
-
     const rt = ctx.getRuntime()
     const scene = safeScene(useStore.getState())
-    if (rt.focusGroupId && !isInFocusScope(hit.id, rt.focusGroupId, scene)) {
-      ctx.actions.clearSelection()
-      return
+
+    let targetId: string
+    let element: ElementGeometry
+    if (hit) {
+      if (!getCapabilities(hit.kind).maskable || hit.locked) return
+      if ((rt.focusGroupId || rt.focusElementId) && !isInFocusScope(hit.id, rt.focusGroupId, scene, rt.focusElementId)) {
+        ctx.actions.clearSelection()
+        return
+      }
+      const resolved = resolveMaskGeometry(scene, hit)
+      if (!resolved) return
+      targetId = hit.id
+      element = resolved
+      ctx.actions.selectDirect(hit.id)
+    } else {
+      // Painting on empty canvas targets the scene background, so the mask
+      // brush behaves like the normal paint brush — freehand strokes apply
+      // masks to the canvas layer itself (scene coords, origin 0,0).
+      // The background is never part of the focus scope, so focus blocks it.
+      if (rt.focusGroupId || rt.focusElementId) return
+      targetId = BACKGROUND_MASK_TARGET_ID
+      element = {
+        id: BACKGROUND_MASK_TARGET_ID,
+        x: 0,
+        y: 0,
+        width: scene.canvas.width,
+        height: scene.canvas.height,
+        rotation: 0
+      }
     }
 
-    const element = resolveMaskGeometry(scene, hit)
-    if (!element) return
     if (!ctx.claimPointer(e.pointerId)) return
 
-    const existing = scene.masks.find((m) => m.targetId === hit.id) ?? null
     pendingMask = {
       pointerId: e.pointerId,
-      targetId: hit.id,
+      targetId,
       shape: rt.maskShape,
-      inverted: rt.maskMode === 'unmask',
+      // 'mask' mode cuts the DRAWN region out of the target (the shape becomes
+      // transparent); 'unmask' mode keeps the drawn region and hides the rest.
+      inverted: rt.maskMode === 'mask',
       element,
       anchor: { x: ctx.scenePoint.x, y: ctx.scenePoint.y },
       last: { x: ctx.scenePoint.x, y: ctx.scenePoint.y },
       points: [{ x: ctx.scenePoint.x, y: ctx.scenePoint.y }],
-      existingMaskId: existing?.id ?? null
+      radius: rt.brush.size / 2
     }
 
     rt.beginInteraction({ toolId: 'mask', pointerId: e.pointerId, kind: 'mask', startedAt: Date.now() })
@@ -132,6 +190,16 @@ export const maskTool: Tool = {
 
     // The pointer-up point is authoritative even when no move was delivered.
     pm.last = { x: ctx.scenePoint.x, y: ctx.scenePoint.y }
+    // Cap the brush polyline at the release point so the stroke reaches the
+    // cursor even when the final move was more than the sample distance away.
+    if (pm.shape === 'brush') {
+      const prev = pm.points[pm.points.length - 1]
+      const dx = pm.last.x - prev.x
+      const dy = pm.last.y - prev.y
+      if (dx * dx + dy * dy >= BRUSH_MIN_DISTANCE_SQ) {
+        pm.points.push({ x: pm.last.x, y: pm.last.y })
+      }
+    }
 
     const rt = ctx.getRuntime()
     rt.endInteraction()
@@ -141,43 +209,49 @@ export const maskTool: Tool = {
       const dx = pm.last.x - pm.anchor.x
       const dy = pm.last.y - pm.anchor.y
       if (dx * dx + dy * dy < MIN_DRAG_DISTANCE_SQ) return
-    } else if (pm.points.length < 2) {
-      return
     }
 
     const localAnchor = toLocalPoint(pm.element, ZERO_ORIGIN, pm.anchor)
     const localLast = toLocalPoint(pm.element, ZERO_ORIGIN, pm.last)
+    const rect = {
+      x: Math.min(localAnchor.x, localLast.x),
+      y: Math.min(localAnchor.y, localLast.y),
+      width: Math.abs(localLast.x - localAnchor.x),
+      height: Math.abs(localLast.y - localAnchor.y)
+    }
+    const stroke =
+      pm.shape === 'brush'
+        ? buildMaskStrokePolygon(
+            pm.points.map((p) => toLocalPoint(pm.element, ZERO_ORIGIN, p)),
+            pm.radius
+          )
+        : pm.shape === 'ellipse'
+          ? ellipseRing(rect.x, rect.y, rect.width, rect.height)
+          : rectRing(rect.x, rect.y, rect.width, rect.height)
 
-    const state = useStore.getState()
-    state.pushHistory(pm.existingMaskId ? 'Edit mask' : pm.inverted ? 'Unmask' : 'Add mask')
-
-    if (pm.shape === 'brush') {
-      const localPoints = pm.points.map((p) => toLocalPoint(pm.element, ZERO_ORIGIN, p))
-      const box = boundsOf(localPoints)
-      const patch = {
-        shape: 'brush' as const,
-        x: box.x,
-        y: box.y,
-        width: box.width,
-        height: box.height,
-        points: localPoints
-      }
-      if (pm.existingMaskId) {
-        state.updateMask(pm.existingMaskId, { ...patch, inverted: pm.inverted })
-      } else {
-        state.addMask({ id: generateId(), targetId: pm.targetId, inverted: pm.inverted, ...patch })
-      }
+    if (pm.inverted) {
+      // Mask mode: the drawn region becomes transparent. Additive — every
+      // stroke adds a fresh mask and never removes a previous one on the same
+      // target (masks compose by intersection, so strokes stack). Committed
+      // LIVE so the checkerboard stays visible; Refresh freezes the current
+      // canvas into the mask (`refreshMaskSnapshot`).
+      commitLiveMask(pm, rect, stroke)
     } else {
-      const rect = {
-        x: Math.min(localAnchor.x, localLast.x),
-        y: Math.min(localAnchor.y, localLast.y),
-        width: Math.abs(localLast.x - localAnchor.x),
-        height: Math.abs(localLast.y - localAnchor.y)
-      }
-      if (pm.existingMaskId) {
-        state.updateMask(pm.existingMaskId, { shape: pm.shape, x: rect.x, y: rect.y, width: rect.width, height: rect.height, points: [], inverted: pm.inverted })
-      } else {
-        state.addMask({ id: generateId(), targetId: pm.targetId, shape: pm.shape, points: [], inverted: pm.inverted, ...rect })
+      // Unmask mode: the drawn region is restored. Subtractive — carve the
+      // stroke out of every existing mask on the target. A no-op stroke
+      // (nothing masked under the stroke) changes nothing and pushes no
+      // history entry, so unmask never masks anything by itself.
+      const scene = safeScene(useStore.getState())
+      const commit = resolveUnmaskCommit(
+        scene.masks.filter((m) => m.targetId === pm.targetId),
+        stroke,
+        pm.element.width,
+        pm.element.height
+      )
+      if (commit) {
+        const state = useStore.getState()
+        state.pushHistory('Unmask')
+        state.replaceTargetMasks(pm.targetId, commit)
       }
     }
   },

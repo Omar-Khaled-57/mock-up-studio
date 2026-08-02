@@ -34,7 +34,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         <div className={`flex flex-col items-center justify-center h-full p-8 gap-4 ${isLight ? 'bg-white text-zinc-700' : 'bg-zinc-950 text-zinc-300'}`}>
           <AlertTriangle size={40} className="text-amber-500/80" />
           <h2 className={`text-lg font-semibold ${isLight ? 'text-zinc-900' : 'text-zinc-100'}`}>Something went wrong</h2>
-          <p className={`text-sm text-center max-w-md ${isLight ? 'text-zinc-500' : 'text-zinc-500'}`}>
+          <p className={`text-sm text-center max-w-md ${isLight ? 'text-zinc-600' : 'text-zinc-400'}`}>
             {this.state.error?.message || 'An unexpected error occurred.'}
           </p>
           <button

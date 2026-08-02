@@ -37,7 +37,7 @@ export const paintTool: Tool = {
 
     // Focus mode: painting an existing paint layer outside the focused subtree
     // would edit dimmed content — reject it the same way the Select tool does.
-    if (rt.focusGroupId && active && !isInFocusScope(active.id, rt.focusGroupId, scene)) {
+    if ((rt.focusGroupId || rt.focusElementId) && active && !isInFocusScope(active.id, rt.focusGroupId, scene, rt.focusElementId)) {
       ctx.actions.clearSelection()
       return
     }

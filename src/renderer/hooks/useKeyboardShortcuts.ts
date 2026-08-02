@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useStore } from '../store'
 import { safeScene } from '../store/sceneSlice'
 import { useRuntimeStore } from '../runtime/store'
-import { focusFilterFor } from '../services/focus'
+import { focusFilterFor, isContainer } from '../services/focus'
 import { toolManager } from '../tools'
 
 export function useKeyboardShortcuts() {
@@ -23,7 +23,6 @@ export function useKeyboardShortcuts() {
   const copySelected = useStore((s) => s.copySelected)
   const cutSelected = useStore((s) => s.cutSelected)
   const pasteClipboard = useStore((s) => s.pasteClipboard)
-  const setSidebarTab = useStore((s) => s.setSidebarTab)
 
   useEffect(() => {
     function findElement(id: string) {
@@ -171,15 +170,15 @@ export function useKeyboardShortcuts() {
       if (mod && e.key === 'a') {
         e.preventDefault()
         const scene = safeScene(useStore.getState())
-        const focusGroupId = useRuntimeStore.getState().focusGroupId
-        useStore.getState().selectAll(focusFilterFor(focusGroupId, scene))
+        const rt = useRuntimeStore.getState()
+        useStore.getState().selectAll(focusFilterFor(rt.focusGroupId, scene, rt.focusElementId))
         return
       }
 
       // Export: Ctrl+E
       if (mod && e.key === 'e') {
         e.preventDefault()
-        setSidebarTab('export')
+        useRuntimeStore.getState().openExportModal()
         return
       }
 
@@ -215,7 +214,7 @@ export function useKeyboardShortcuts() {
           break
         case 'Escape':
           toolManager.handleEscape()
-          if (useRuntimeStore.getState().focusGroupId) {
+          if (useRuntimeStore.getState().focusGroupId || useRuntimeStore.getState().focusElementId) {
             useRuntimeStore.getState().exitFocus()
           } else {
             clearSelection()
@@ -232,6 +231,9 @@ export function useKeyboardShortcuts() {
             if (match) {
               e.preventDefault()
               useRuntimeStore.getState().enterFocus(match.id)
+            } else if (sel.length === 1 && isContainer(scene, sel[0])) {
+              e.preventDefault()
+              useRuntimeStore.getState().enterElementFocus(sel[0])
             }
           }
           break
@@ -306,7 +308,6 @@ export function useKeyboardShortcuts() {
     newProject,
     copySelected,
     cutSelected,
-    pasteClipboard,
-    setSidebarTab
+    pasteClipboard
   ])
 }

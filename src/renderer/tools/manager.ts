@@ -76,13 +76,15 @@ const documentActions: DocumentActions = {
   clearSelection: () => useStore.getState().clearSelection(),
   selectInRect: (x, y, width, height) => {
     const state = useStore.getState()
-    const filter = focusFilterFor(useRuntimeStore.getState().focusGroupId, safeScene(state))
+    const rt = useRuntimeStore.getState()
+    const filter = focusFilterFor(rt.focusGroupId, safeScene(state), rt.focusElementId)
     state.selectInRect(x, y, width, height, filter)
   },
   getSelectedIds: () => useStore.getState().selectedIds,
   select: (id, multi) => {
     const state = useStore.getState()
-    const filter = focusFilterFor(useRuntimeStore.getState().focusGroupId, safeScene(state))
+    const rt = useRuntimeStore.getState()
+    const filter = focusFilterFor(rt.focusGroupId, safeScene(state), rt.focusElementId)
     state.select(id, multi, filter)
   },
   selectDirect: (id) => useStore.getState().selectDirect(id),
@@ -110,6 +112,14 @@ const documentActions: DocumentActions = {
     } else if (scene.shapes.some((el) => el.id === id)) {
       state.updateShape(id, patch)
     }
+  },
+  setElementContainer: (id, containerId) => {
+    const state = useStore.getState()
+    const scene = safeScene(state)
+    if (scene.devices.some((el) => el.id === id)) state.updateDevice(id, { containerId })
+    else if (scene.textBoxes.some((el) => el.id === id)) state.updateTextBox(id, { containerId })
+    else if (scene.images.some((el) => el.id === id)) state.updateImage(id, { containerId })
+    else if (scene.shapes.some((el) => el.id === id)) state.updateShape(id, { containerId })
   },
   pushHistory: (label) => useStore.getState().pushHistory(label),
   uploadScreenImage: (id) => {
@@ -159,8 +169,10 @@ export function createToolManager(registry: ToolRegistry): ToolManager {
       resizeHandle: overrides?.resizeHandle ?? null,
       actions: documentActions,
       getRuntime: () => useRuntimeStore.getState(),
-      focusEditable: (id) =>
-        isInFocusScope(id, useRuntimeStore.getState().focusGroupId, safeScene(useStore.getState())),
+      focusEditable: (id) => {
+        const rt = useRuntimeStore.getState()
+        return isInFocusScope(id, rt.focusGroupId, safeScene(useStore.getState()), rt.focusElementId)
+      },
       fastOverlay: getFastOverlayHost(),
       claimPointer: (pointerId) => acquirePointer(pointerId, toolId),
       releasePointer: (pointerId) => releasePointer(pointerId)

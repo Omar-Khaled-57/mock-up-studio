@@ -5,6 +5,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { exportScene, exportAllScenes, copyExportToClipboard, getExportFilename } from '../../lib/export-engine'
 import type { ExportFormat, ExportScale, ExportBackground, ExportScope } from '../../lib/export-engine'
 import type { WatermarkSettings } from '../../store/watermarkSlice'
+import Modal from '../primitives/Modal'
 import { Eye, Download, Clipboard } from 'lucide-react'
 
 const FORMAT_OPTIONS: { value: ExportFormat; label: string }[] = [
@@ -56,7 +57,7 @@ function ToggleGroup<T extends string | number>({
   )
 }
 
-export default function ExportDialog() {
+export default function ExportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { clsx, bg, border, text } = useTheme()
   const exportFormat = useStore((s) => s.exportFormat)
   const exportScale = useStore((s) => s.exportScale)
@@ -215,9 +216,7 @@ export default function ExportDialog() {
   const outHeight = scene.canvas.height * exportScale
 
   return (
-    <div className="space-y-4">
-      <h3 className={clsx("text-xs font-semibold uppercase tracking-wider", text.secondary)}>Export</h3>
-
+    <Modal open={open} onClose={onClose} title="Export" width={520} className="space-y-4">
       {sceneCount > 1 && (
         <div>
           <label className={clsx("text-xs mb-1 block", text.secondary)}>Scope</label>
@@ -374,6 +373,6 @@ export default function ExportDialog() {
           />
         </div>
       )}
-    </div>
+    </Modal>
   )
 }

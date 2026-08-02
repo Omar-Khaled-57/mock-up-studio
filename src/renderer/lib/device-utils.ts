@@ -1,4 +1,4 @@
-import { TitleText } from '@shared/types'
+import { TextBox } from '@shared/types'
 
 export const THEME_COLORS = {
   dark: { bezel: '#27272a', border: '#09090b' },
@@ -22,7 +22,7 @@ export function resolveThemeColors(
   return base
 }
 
-export function buildTextStyle(t: Pick<TitleText, 'fontSize' | 'fontFamily' | 'fontWeight' | 'color' | 'gradient' | 'glow' | 'shadow' | 'textAlign'> & { letterSpacing?: number; wordSpacing?: number; lineHeight?: number; textTransform?: string; strokeColor?: string; strokeWidth?: number }): React.CSSProperties {
+export function buildTextStyle(t: Pick<TextBox, 'fontSize' | 'fontFamily' | 'fontWeight' | 'color' | 'gradient' | 'glow' | 'shadow' | 'textAlign'> & { letterSpacing?: number; wordSpacing?: number; lineHeight?: number; textTransform?: string; strokeColor?: string; strokeWidth?: number }): React.CSSProperties {
   const style: React.CSSProperties = {
     fontSize: t.fontSize,
     fontFamily: t.fontFamily,

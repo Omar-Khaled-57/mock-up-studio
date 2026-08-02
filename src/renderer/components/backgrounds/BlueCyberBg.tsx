@@ -2,14 +2,14 @@ export default function BlueCyberBg() {
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ background: 'linear-gradient(160deg, #000428, #004e92)' }}>
       <div
-        className="absolute inset-0 opacity-20"
+        className="bg-animation-exempt absolute inset-0 opacity-20"
         style={{
           backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 180, 255, 0.15) 2px, rgba(0, 180, 255, 0.15) 4px)',
           animation: 'cyber-scanlines 8s linear infinite'
         }}
       />
       <div
-        className="absolute inset-0"
+        className="bg-animation-exempt absolute inset-0"
         style={{
           background: 'radial-gradient(circle at 30% 40%, rgba(0, 120, 255, 0.15) 0%, transparent 50%), radial-gradient(circle at 70% 60%, rgba(0, 200, 255, 0.1) 0%, transparent 50%)',
           animation: 'cyber-pulse 6s ease-in-out infinite alternate'
@@ -18,7 +18,7 @@ export default function BlueCyberBg() {
       {[...Array(12)].map((_, i) => (
         <div
           key={i}
-          className="absolute rounded-full"
+          className="bg-animation-exempt absolute rounded-full"
           style={{
             width: `${2 + (i % 3)}px`,
             height: `${2 + (i % 3)}px`,

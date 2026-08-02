@@ -3,7 +3,7 @@ import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import { Plus, Copy, Trash2, Pin, PinOff, Pencil, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 
-export default function SceneTabs() {
+export default function SceneTabs({ chrome = false }: { chrome?: boolean }) {
   const scenes = useStore((s) => s.scenes)
   const activeSceneIndex = useStore((s) => s.activeSceneIndex)
   const setActiveSceneIndex = useStore((s) => s.setActiveSceneIndex)
@@ -181,6 +181,7 @@ export default function SceneTabs() {
 
   const pinned = scenes.filter((s) => s.pinned)
   const unpinned = scenes.filter((s) => !s.pinned)
+  const showTabs = chrome || tabsVisible
 
   const renderTab = (scene: (typeof scenes)[number], idx: number) => (
     <div
@@ -223,20 +224,22 @@ export default function SceneTabs() {
   )
 
   return (
-    <div className={clsx("border-t w-full min-w-0 overflow-x-hidden", bg.surface)}>
-      <button
-        onClick={() => setTabsVisible((v) => !v)}
-        className={clsx(
-          "w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold transition-colors",
-          text.secondary,
-          bg.hover
-        )}
-      >
-        <span>{scenes[activeSceneIndex]?.name ?? 'Scenes'}</span>
-        {tabsVisible ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-      </button>
-      {tabsVisible && (
-        <div className="px-2 pb-1.5">
+    <div className={chrome ? "w-full min-w-0" : clsx("border-t w-full min-w-0 overflow-x-hidden", bg.surface)}>
+      {!chrome && (
+        <button
+          onClick={() => setTabsVisible((v) => !v)}
+          className={clsx(
+            "w-full flex items-center justify-between px-3 py-1.5 text-xs font-semibold transition-colors",
+            text.secondary,
+            bg.hover
+          )}
+        >
+          <span>{scenes[activeSceneIndex]?.name ?? 'Scenes'}</span>
+          {tabsVisible ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+        </button>
+      )}
+      {showTabs && (
+        <div className={chrome ? "px-1" : "px-2 pb-1.5"}>
           <div className="flex items-center gap-0">
             {canScrollLeft && (
               <button

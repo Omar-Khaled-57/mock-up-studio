@@ -5,7 +5,8 @@ import { collectSelectionChrome, getElementGeometry, selectionUnionBounds } from
 import { getRotatedBounds, Rect } from '../../services/geometry'
 import { isInFocusScope } from '../../services/focus'
 import { SelectionChromeItem } from '../../services/selection-chrome'
-import { collectMaskOutlines, MaskOverlay } from '../masks/MaskRenderer'
+import { MaskOverlay } from '../masks/MaskRenderer'
+import { collectMaskVisuals } from '../../services/mask-visualization'
 import Guides from './Guides'
 import FocusDim from './FocusDim'
 import StrokeSurface from './StrokeSurface'
@@ -55,27 +56,31 @@ export default function OverlayRenderer() {
   const scene = useStore(safeScene)
   const selectedIds = useStore((s) => s.selectedIds)
   const snapGuides = useRuntimeStore((s) => s.snapGuides)
+  const containerDropTarget = useRuntimeStore((s) => s.containerDropTarget)
   const marqueeRect = useRuntimeStore((s) => s.marqueeRect)
   const hoveredElement = useRuntimeStore((s) => s.hoveredElement)
   const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
-  const activeToolId = useRuntimeStore((s) => s.activeToolId)
-  const temporaryToolStack = useRuntimeStore((s) => s.temporaryToolStack)
+  const focusElementId = useRuntimeStore((s) => s.focusElementId)
   const maskPreview = useRuntimeStore((s) => s.maskPreview)
 
   const chrome = collectSelectionChrome(scene, selectedIds)
 
-  const maskToolActive =
-    activeToolId === 'mask' || (temporaryToolStack.length > 0 && temporaryToolStack[temporaryToolStack.length - 1].toolId === 'mask')
-  const maskOutlines = maskToolActive ? collectMaskOutlines(scene) : []
+  const maskVisuals = collectMaskVisuals(scene)
 
   let hoverBounds: Rect | null = null
   if (
     hoveredElement &&
     !chrome.some((c) => c.id === hoveredElement.id) &&
-    isInFocusScope(hoveredElement.id, focusGroupId, scene)
+    isInFocusScope(hoveredElement.id, focusGroupId, scene, focusElementId)
   ) {
     const el = getElementGeometry(scene, hoveredElement.id)
     if (el) hoverBounds = getRotatedBounds(el)
+  }
+
+  let dropBounds: Rect | null = null
+  if (containerDropTarget) {
+    const el = getElementGeometry(scene, containerDropTarget)
+    if (el) dropBounds = getRotatedBounds(el)
   }
 
   return (
@@ -89,16 +94,25 @@ export default function OverlayRenderer() {
         canvasHeight={scene.canvas.height}
       />
 
-      {maskToolActive && (
-        <MaskOverlay
-          width={scene.canvas.width}
-          height={scene.canvas.height}
-          outlines={maskOutlines}
-          preview={maskPreview}
-        />
-      )}
+      <MaskOverlay width={scene.canvas.width} height={scene.canvas.height} visuals={maskVisuals} preview={maskPreview} />
 
       {chrome.length === 1 ? renderSingleChrome(chrome[0]) : chrome.length > 1 ? renderUnionChrome(chrome) : null}
+
+      {dropBounds && (
+        <div
+          data-container-drop-target={containerDropTarget!}
+          style={{
+            position: 'absolute',
+            left: dropBounds.x,
+            top: dropBounds.y,
+            width: dropBounds.width,
+            height: dropBounds.height,
+            border: '2px dashed #6366f1',
+            borderRadius: 4,
+            pointerEvents: 'none'
+          }}
+        />
+      )}
 
       {marqueeRect && marqueeRect.width > 0 && marqueeRect.height > 0 && (
         <div

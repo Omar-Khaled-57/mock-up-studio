@@ -27,6 +27,7 @@ const TRANSIENT_RESET: Partial<RuntimeState> = {
   strokeDirty: false,
   temporaryTransform: null,
   snapGuides: { verticalGuides: [], horizontalGuides: [] },
+  containerDropTarget: null,
   maskPreview: null,
   editing: null,
   contextMenu: null
@@ -37,9 +38,14 @@ const FULL_RESET: Partial<RuntimeState> = {
   activeToolId: DEFAULT_TOOL_ID,
   temporaryToolStack: [],
   focusGroupId: null,
+  focusElementId: null,
   brush: { ...DEFAULT_BRUSH_OPTIONS },
   maskShape: 'rectangle',
-  maskMode: 'mask'
+  maskMode: 'mask',
+  canvasEmptyStateDismissed: false,
+  propertiesSections: {},
+  exportModalOpen: false,
+  toolbarToolsVisible: true
 }
 
 let fullResetHook: (() => void) | null = null

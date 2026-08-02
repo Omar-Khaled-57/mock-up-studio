@@ -97,3 +97,16 @@ export function buildEffectsFilter(effects: ImageEffects | null | undefined): st
   }
   return parts.join(' ')
 }
+
+/**
+ * True when every present field equals its neutral default (or is absent).
+ * Used to auto-collapse the Effects section and drive its accent dot.
+ */
+export function isEffectsNeutral(effects: ImageEffects | null | undefined): boolean {
+  if (!effects) return true
+  for (const def of EFFECTS_REGISTRY) {
+    const v = effects[def.id]
+    if (v != null && v !== def.defaultValue) return false
+  }
+  return true
+}

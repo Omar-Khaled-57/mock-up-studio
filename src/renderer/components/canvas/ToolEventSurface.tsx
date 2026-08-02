@@ -36,6 +36,7 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
   const hoveredElement = useRuntimeStore((s) => s.hoveredElement)
   const activeInteraction = useRuntimeStore((s) => s.activeInteraction)
   const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
+  const focusElementId = useRuntimeStore((s) => s.focusElementId)
 
   const effectiveToolId =
     temporaryToolStack.length > 0 ? temporaryToolStack[temporaryToolStack.length - 1].toolId : activeToolId
@@ -45,8 +46,8 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
       ? getCapabilities(hoveredElement.kind as SceneElementKind)
       : NO_CAPABILITIES
     const focusDimmed =
-      !!hoveredElement && !!focusGroupId &&
-      !isInFocusScope(hoveredElement.id, focusGroupId, safeScene(useStore.getState()))
+      !!hoveredElement && (!!focusGroupId || !!focusElementId) &&
+      !isInFocusScope(hoveredElement.id, focusGroupId, safeScene(useStore.getState()), focusElementId)
     return toolManager.getCursor({
       toolId: effectiveToolId,
       pointerOwned: activeInteraction !== null,
@@ -54,7 +55,7 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
       hoveredCapabilities: caps,
       focusDimmed
     })
-  }, [effectiveToolId, hoveredElement, activeInteraction, focusGroupId])
+  }, [effectiveToolId, hoveredElement, activeInteraction, focusGroupId, focusElementId])
 
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
@@ -78,17 +79,39 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
     return !!el.closest('[data-canvas-chrome], [data-guide]')
   }
 
+  const resolveChromeHit = (target: EventTarget | null): HitTestResult | null => {
+    const chrome = (target as HTMLElement | null)?.closest?.('[data-chrome-element-id]') as HTMLElement | null
+    const id = chrome?.getAttribute('data-chrome-element-id')
+    if (!id) return null
+    const scene = safeScene(useStore.getState())
+    const d = scene.devices.find((x) => x.id === id)
+    if (d) return { id, kind: 'device', zIndex: d.zIndex, locked: d.locked }
+    const t = scene.textBoxes.find((x) => x.id === id)
+    if (t) return { id, kind: 'textBox', zIndex: t.zIndex, locked: t.locked }
+    const i = scene.images.find((x) => x.id === id)
+    if (i) return { id, kind: 'image', zIndex: i.zIndex, locked: i.locked }
+    const s = scene.shapes.find((x) => x.id === id)
+    if (s) return { id, kind: 'shape', zIndex: s.zIndex, locked: s.locked }
+    return null
+  }
+
   const computeHit = (target: EventTarget | null, scenePoint: { x: number; y: number }): HitTestResult | null => {
     const hit = hitTest(safeScene(useStore.getState()), scenePoint)
     if (hit) return hit
     const el = (target as HTMLElement | null)?.closest?.('[data-element-id]') as HTMLElement | null
-    if (!el) return null
-    return {
-      id: el.dataset.elementId ?? '',
-      kind: (el.dataset.elementKind as SceneElementKind) ?? 'device',
-      zIndex: 0,
-      locked: el.dataset.elementLocked === 'true'
+    if (el) {
+      return {
+        id: el.dataset.elementId ?? '',
+        kind: (el.dataset.elementKind as SceneElementKind) ?? 'device',
+        zIndex: 0,
+        locked: el.dataset.elementLocked === 'true'
+      }
     }
+    // Resize handles render inside the selection-chrome wrapper
+    // (`data-chrome-element-id`), which sits outside the element's own box.
+    // Resolve the hit from the scene so a handle grab always targets the
+    // selected element regardless of where the handle is clicked.
+    return resolveChromeHit(target)
   }
 
   const resolveHandle = (target: EventTarget | null): 'nw' | 'ne' | 'sw' | 'se' | null => {
@@ -109,12 +132,38 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (isCanvasChromeTarget(e.target)) return
-    if (isPanGesture(e)) e.preventDefault()
+    const panGesture = isPanGesture(e)
+    if (panGesture) e.preventDefault()
     const scenePoint = scenePointFor(e)
     const rt = useRuntimeStore.getState()
     rt.setPointerScenePos(scenePoint)
     rt.setPointerInCanvas(true)
     rt.setHoveredElement(null)
+
+    // Resize handles are tool-independent selection chrome: grabbing a corner
+    // handle resizes the selected element for ANY active tool. Route the grab
+    // to the Select tool's resize path before dispatching to the active tool
+    // (which would otherwise draw/paint/mask over the element). The chrome hit
+    // resolution in `computeHit` makes the handle click target the element.
+    const handle = resolveHandle(e.target)
+    if (handle && !panGesture) {
+      const select = toolRegistry.get('select')
+      if (select?.onPointerDown) {
+        select.onPointerDown(
+          toolManager.buildContext({
+            scenePoint,
+            hitResult: computeHit(e.target, scenePoint),
+            resizeHandle: handle,
+            toolId: 'select'
+          }),
+          e.nativeEvent
+        )
+        if (toolManager.getOwner(e.pointerId) === 'select') {
+          e.currentTarget.setPointerCapture?.(e.pointerId)
+        }
+      }
+      return
+    }
 
     const tool = resolveTool(e)
     if (!tool?.onPointerDown) return

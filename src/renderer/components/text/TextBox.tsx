@@ -65,6 +65,7 @@ export default function TextBox({ textBox }: Props) {
         onCommit={handleContentCommit}
         onStopEdit={handleStopEdit}
         selfStart={false}
+        wrap={textBox.wrap}
         style={buildTextStyle(textBox)}
         className="w-full h-full"
         placeholder="Type here..."

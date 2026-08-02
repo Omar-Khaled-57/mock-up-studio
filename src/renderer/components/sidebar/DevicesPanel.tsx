@@ -144,7 +144,8 @@ export default function DevicesPanel() {
         colorTheme: 'dark',
         screenImage: null,
         objectFit: 'contain',
-        groupId: null
+        groupId: null,
+        containerId: null
       }
       pushHistory(`Add ${type}`)
       addDevice(device)
@@ -199,9 +200,10 @@ export default function DevicesPanel() {
       <div>
         <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Add Device</h3>
         <div className="grid grid-cols-2 gap-1.5">
-          {DEVICE_TYPES.map(({ type, label }) => (
+          {DEVICE_TYPES.map(({ type, label }, i) => (
             <button
               key={type}
+              data-device-primary={i === 0 ? true : undefined}
               onClick={() => handleAdd(type)}
               className={clsx("flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg transition-all duration-150", bg.button)}
             >

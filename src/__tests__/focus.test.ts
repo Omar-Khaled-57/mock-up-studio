@@ -18,11 +18,6 @@ function makeScene(groups: Scene['groups'], elements: Scene['devices']): Scene {
   return {
     canvas: { width: 800, height: 600, aspectRatio: '4:3' },
     background: { type: 'solid', color: '#ffffff' },
-    titleText: {
-      content: '', visible: false, fontSize: 24, fontFamily: 'Inter', fontWeight: 400,
-      textAlign: 'left', color: '#ffffff', x: 20, y: 20, zIndex: -1, lineHeight: 1.2,
-      letterSpacing: 0, wordSpacing: 0, textTransform: 'none', strokeColor: '#ffffff', strokeWidth: 0
-    },
     grid: { enabled: false, color: '#e4e4e7', size: 20, cellSize: 100, dotSize: 2 },
     guides: [],
     devices: elements,

@@ -2,7 +2,7 @@ export default function NeonGridBg() {
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ background: '#0a0a0a' }}>
       <div
-        className="absolute inset-0"
+        className="bg-animation-exempt absolute inset-0"
         style={{
           backgroundImage: `
             linear-gradient(rgba(0, 255, 200, 0.06) 1px, transparent 1px),

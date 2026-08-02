@@ -19,7 +19,7 @@
  */
 
 import { StateCreator } from 'zustand'
-import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, TitleText, GridSettings, ElementGroup } from '@shared/types'
+import { Scene, Device, CanvasSettings, Background, TextBox, ImageOverlay, GridSettings, ElementGroup } from '@shared/types'
 import { StoreState } from './index'
 import { DEFAULT_CANVAS } from '../lib/constants'
 import { generateId } from '../lib/id'
@@ -43,14 +43,16 @@ function clampIndex(scenes: Scene[], index: number): number {
   return Math.min(index, scenes.length - 1)
 }
 
-function defaultTitleText(): TitleText {
+/** Shared defaults for every seeded/user text box (style + chrome fields). */
+function textBoxBase(zIndex: number): Omit<TextBox, 'id' | 'name' | 'content' | 'x' | 'y' | 'width' | 'height'> {
   return {
-    content: 'Your Title',
-    fontSize: 64,
+    heightAuto: true,
+    wrap: true,
+    fontSize: 24,
     fontFamily: 'Inter',
-    fontWeight: 800,
-    textAlign: 'left',
-    lineHeight: 1.1,
+    fontWeight: 600,
+    textAlign: 'center',
+    lineHeight: 1.3,
     letterSpacing: 0,
     wordSpacing: 0,
     textTransform: 'none',
@@ -59,36 +61,72 @@ function defaultTitleText(): TitleText {
     color: '#ffffff',
     gradient: null,
     glow: null,
-    shadow: null
+    shadow: null,
+    visible: true,
+    backgroundVisible: false,
+    backgroundColor: '#00000040',
+    borderVisible: false,
+    borderColor: '#ffffff40',
+    borderRadius: 4,
+    stylePreset: 'custom',
+    zIndex,
+    locked: false,
+    groupId: null,
+    containerId: null
   }
 }
 
-function defaultSloganText(): TitleText {
+/**
+ * The hero title/slogan are real, first-class text boxes (they live in
+ * `scene.textBoxes` and share selection/drag/resize/layer/clipboard/z-order
+ * machinery). `stylePreset` marks them so theme presets can recolor the hero
+ * copy distinctly from user text boxes.
+ */
+function defaultTitleTextBox(canvasW: number): TextBox {
   return {
+    ...textBoxBase(1),
+    id: generateId(),
+    name: 'Title',
+    content: 'Your Title',
+    x: 60,
+    y: 60,
+    width: Math.max(320, Math.round(canvasW * 0.5)),
+    height: 72,
+    fontSize: 64,
+    fontWeight: 800,
+    textAlign: 'left',
+    lineHeight: 1.1,
+    color: '#ffffff',
+    stylePreset: 'title'
+  }
+}
+
+function defaultSloganTextBox(canvasW: number): TextBox {
+  return {
+    ...textBoxBase(0),
+    id: generateId(),
+    name: 'Slogan',
     content: 'Your slogan goes here',
+    x: 60,
+    y: 152,
+    width: Math.max(320, Math.round(canvasW * 0.5)),
+    height: 36,
     fontSize: 24,
-    fontFamily: 'Inter',
     fontWeight: 400,
     textAlign: 'left',
     lineHeight: 1.3,
-    letterSpacing: 0,
-    wordSpacing: 0,
-    textTransform: 'none',
-    strokeColor: '#ffffff',
-    strokeWidth: 0,
     color: '#a1a1aa',
-    gradient: null,
-    glow: null,
-    shadow: null
+    stylePreset: 'slogan'
   }
 }
 
 export function createDefaultScene(): Scene {
+  const canvas = { ...DEFAULT_CANVAS }
   return {
     id: generateId(),
     name: 'Scene 1',
     pinned: false,
-    canvas: { ...DEFAULT_CANVAS },
+    canvas,
     background: {
       type: 'gradient',
       gradient: {
@@ -99,11 +137,9 @@ export function createDefaultScene(): Scene {
       }
     },
     devices: [],
-    textBoxes: [],
+    textBoxes: [defaultSloganTextBox(canvas.width), defaultTitleTextBox(canvas.width)],
     images: [],
     shapes: [],
-    titleText: defaultTitleText(),
-    sloganText: defaultSloganText(),
     guides: [],
     grid: { enabled: false, size: 20, color: '#ffffff20', snapEnabled: false, style: 'dotted' },
     groups: [],
@@ -166,8 +202,6 @@ export interface SceneSlice {
   setActiveSceneIndex: (index: number) => void
   updateCanvas: (settings: Partial<CanvasSettings>) => void
   updateBackground: (bg: Partial<Background>) => void
-  updateTitleText: (patch: Partial<TitleText>) => void
-  updateSloganText: (patch: Partial<TitleText>) => void
   addDevice: (device: Device) => void
   updateDevice: (deviceId: string, patch: Partial<Device>) => void
   removeDevice: (deviceId: string) => void
@@ -254,29 +288,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       return { scenes }
     }),
 
-  updateTitleText: (patch) =>
-    set((state) => {
-      const scenes = [...state.scenes]
-      const scene = scenes[state.activeSceneIndex]
-      scenes[state.activeSceneIndex] = {
-        ...scene,
-        titleText: { ...scene.titleText, ...patch }
-      }
-      return { scenes }
-    }),
-
-  updateSloganText: (patch) =>
-    set((state) => {
-      const scenes = [...state.scenes]
-      const scene = scenes[state.activeSceneIndex]
-      scenes[state.activeSceneIndex] = {
-        ...scene,
-        sloganText: { ...scene.sloganText, ...patch }
-      }
-      return { scenes }
-    }),
-
-  addDevice: (device) =>
+  addDevice: (device: Device) =>
     set((state) => {
       const scenes = [...state.scenes]
       const scene = scenes[state.activeSceneIndex]
@@ -592,9 +604,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       scenes[state.activeSceneIndex] = {
         ...scene,
         background,
-        titleText: { ...scene.titleText, color: preset.titleColor },
-        sloganText: { ...scene.sloganText, color: preset.sloganColor },
-        textBoxes: scene.textBoxes.map((t) => ({ ...t, color: preset.sloganColor })),
+        textBoxes: scene.textBoxes.map((t) => ({ ...t, color: t.stylePreset === 'title' ? preset.titleColor : preset.sloganColor })),
         shapes: scene.shapes.map((s) => ({ ...s, color: preset.accentColor })),
         devices: scene.devices.map((d) => ({ ...d, colorTheme: preset.deviceTheme }))
       }

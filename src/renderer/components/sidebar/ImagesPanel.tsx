@@ -61,7 +61,8 @@ export default function ImagesPanel() {
             zIndex: maxZ + 1,
             locked: false,
             visible: true,
-            groupId: null
+            groupId: null,
+            containerId: null
           }
           pushHistory('Add image')
           addImage(image)

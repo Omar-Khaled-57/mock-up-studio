@@ -2,7 +2,20 @@ import { StateCreator } from 'zustand'
 import { StoreState } from './index'
 
 export type Theme = 'dark' | 'light'
-export type SidebarTab = 'themes' | 'theme-presets' | 'devices' | 'images' | 'text' | 'shapes' | 'layers' | 'export' | 'presets' | 'grid' | 'history'
+export type SidebarTab =
+  | 'canvas'
+  | 'background'
+  | 'themes' // legacy — merged into 'background'
+  | 'theme-presets' // legacy — merged into 'background'
+  | 'presets' // legacy — canvas size is its own 'canvas' tab again (post-5e polish)
+  | 'export' // legacy — becomes a modal (Phase 5e); kept for backward-compat of stored UI state
+  | 'devices'
+  | 'images'
+  | 'text'
+  | 'shapes'
+  | 'layers'
+  | 'grid'
+  | 'history'
 
 export interface UiSlice {
   sidebarTab: SidebarTab
@@ -13,6 +26,7 @@ export interface UiSlice {
   sidebarPanelWidth: number
   propertiesPanelWidth: number
   showRulers: boolean
+  showSmartGuides: boolean
   downloadProgress: number | null
   setSidebarTab: (tab: SidebarTab) => void
   toggleSidebar: () => void
@@ -24,6 +38,7 @@ export interface UiSlice {
   setPropertiesPanelWidth: (width: number) => void
   toggleRulers: () => void
   setShowRulers: (show: boolean) => void
+  toggleSmartGuides: () => void
   setDownloadProgress: (percent: number | null) => void
 }
 
@@ -36,6 +51,7 @@ export const createUiSlice: StateCreator<StoreState, [], [], UiSlice> = (set) =>
   sidebarPanelWidth: 224,
   propertiesPanelWidth: 208,
   showRulers: false,
+  showSmartGuides: true,
   downloadProgress: null,
 
   setSidebarTab: (tab) => set({ sidebarTab: tab }),
@@ -60,6 +76,9 @@ export const createUiSlice: StateCreator<StoreState, [], [], UiSlice> = (set) =>
     set((state) => ({ showRulers: !state.showRulers })),
 
   setShowRulers: (show) => set({ showRulers: show }),
+
+  toggleSmartGuides: () =>
+    set((state) => ({ showSmartGuides: !state.showSmartGuides })),
 
   setDownloadProgress: (percent) => set({ downloadProgress: percent })
 })

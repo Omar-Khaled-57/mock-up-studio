@@ -1,135 +1,42 @@
 /**
- * MaskRenderer — mask clip-path builder + mask overlay rendering (M13).
+ * MaskOverlay — checkerboard transparency visualization for masks.
  *
- * The clip is a CSS `clip-path` applied on the target's own positioned box so
- * it lives in the element's local coordinate frame and rotates with it
- * (architecture §10.2). `ElementFacade` applies it; the `MaskOverlay` draws
- * editable outlines + control points and the live tool preview in scene
- * coordinates (a sibling overlay, never part of `[data-scene-export]`).
+ * Rendered as a sibling overlay (never inside `[data-scene-export]`), in scene
+ * coordinates, on top of the scene. It shows, per masked element, the classic
+ * transparency checkerboard (dark + blue squares) exactly where the element is
+ * masked out, so the user immediately sees "here is transparent, here is
+ * content". While a mask stroke is in flight it additionally renders a focus
+ * scrim (everything but the target dimmed), a live checkerboard preview of the
+ * stroke, and a mode badge.
  *
- * Inversion ("punch") uses evenodd clip-path compositing: the full element
- * bounds as the outer contour plus the mask shape as a hole (architecture
- * §10.2 "punch → inverse via clip-path compositing"). Ellipse holes are
- * approximated as a 32-point polygon.
+ * The checkerboard is transient editor chrome: the export engine clones only
+ * the scene node and the overlay is its sibling, so it can never appear in
+ * exports. Mask geometry lives in the target's local frame and rotates with
+ * the element; each element's visuals render inside a rotation-matched wrapper.
  */
 
-import { Scene } from '@shared/types'
-import type { Mask, MaskPoint, MaskShape } from '@shared/types'
-import type { MaskPreviewState } from '../../runtime/runtimeSlice'
+import { MaskPreviewState } from '../../runtime/runtimeSlice'
+import { buildSceneDimPunch, MaskVisual, MaskVisualItem, previewToMaskVisual } from '../../services/mask-visualization'
 
-export interface MaskOutlineItem {
-  maskId: string
-  targetId: string
-  shape: MaskShape
-  inverted: boolean
-  /** Scene-space center of the target element (rotation pivot). */
-  center: { x: number; y: number }
-  /** Target element rotation in degrees. */
-  rotation: number
-  /** Scene-space origin of the target element box. */
-  origin: { x: number; y: number }
-  /** Mask bounding box in element-local coordinates. */
-  rect: { x: number; y: number; width: number; height: number }
-  /** Brush (freehand) polygon in element-local coordinates (null for rect/ellipse). */
-  points: MaskPoint[] | null
+/** Black square of the transparency checkerboard. */
+export const CHECKER_DARK = '#000000'
+/** Blue square of the transparency checkerboard (Windows-Photos style). */
+export const CHECKER_BLUE = '#2563eb'
+/** Edge length of one checkerboard cell in scene units. */
+export const CHECKER_SIZE = 64
+
+const CHECKER_IMAGE = `repeating-conic-gradient(${CHECKER_DARK} 0% 25%, ${CHECKER_BLUE} 0% 50%)`
+const CHECKER_BG: React.CSSProperties = {
+  backgroundImage: CHECKER_IMAGE,
+  // The conic gradient encodes a 2x2 checkerboard per tile, so the tile is
+  // twice the cell edge to keep each square exactly CHECKER_SIZE wide/tall.
+  backgroundSize: `${CHECKER_SIZE * 2}px ${CHECKER_SIZE * 2}px`
 }
 
-function fmt(v: number): string {
-  return `${Math.round(v * 100) / 100}px`
-}
+const OUTLINE = '#6366f1'
+const INVERTED_OUTLINE = '#f59e0b'
 
-function invertedOuter(width: number, height: number): string {
-  return `0px 0px, ${fmt(width)} 0px, ${fmt(width)} ${fmt(height)}, 0px ${fmt(height)}`
-}
-
-function ellipsePolygonPoints(mask: Mask, count: number): string {
-  const cx = mask.x + mask.width / 2
-  const cy = mask.y + mask.height / 2
-  const rx = mask.width / 2
-  const ry = mask.height / 2
-  const parts: string[] = []
-  for (let i = 0; i < count; i++) {
-    const t = (i / count) * Math.PI * 2
-    parts.push(`${fmt(cx + rx * Math.cos(t))} ${fmt(cy + ry * Math.sin(t))}`)
-  }
-  return parts.join(', ')
-}
-
-/**
- * Builds the CSS `clip-path` value for a mask in a target box of the given
- * local dimensions. Null is never returned for a well-formed mask.
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function buildMaskClipPath(mask: Mask, width: number, height: number): string {
-  if (mask.shape === 'rectangle') {
-    if (mask.inverted) {
-      const inner = `${fmt(mask.x)} ${fmt(mask.y)}, ${fmt(mask.x + mask.width)} ${fmt(mask.y)}, ${fmt(mask.x + mask.width)} ${fmt(mask.y + mask.height)}, ${fmt(mask.x)} ${fmt(mask.y + mask.height)}`
-      return `polygon(${invertedOuter(width, height)}, ${inner}, evenodd)`
-    }
-    const right = width - mask.x - mask.width
-    const bottom = height - mask.y - mask.height
-    return `inset(${fmt(mask.y)} ${fmt(right)} ${fmt(bottom)} ${fmt(mask.x)})`
-  }
-  if (mask.shape === 'ellipse') {
-    if (mask.inverted) {
-      return `polygon(${invertedOuter(width, height)}, ${ellipsePolygonPoints(mask, 32)}, evenodd)`
-    }
-    const cx = mask.x + mask.width / 2
-    const cy = mask.y + mask.height / 2
-    return `ellipse(${fmt(mask.width / 2)} ${fmt(mask.height / 2)} at ${fmt(cx)} ${fmt(cy)})`
-  }
-  const points = mask.points.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join(', ')
-  if (mask.inverted) {
-    return `polygon(${invertedOuter(width, height)}, ${points}, evenodd)`
-  }
-  return `polygon(${points})`
-}
-
-interface MaskTarget {
-  id: string
-  x: number
-  y: number
-  width: number
-  height: number
-  rotation: number
-  visible: boolean
-}
-
-function findMaskTarget(scene: Scene, id: string): MaskTarget | null {
-  const d = scene.devices.find((x) => x.id === id)
-  if (d) return { id: d.id, x: d.x, y: d.y, width: d.width, height: d.height, rotation: d.rotation ?? 0, visible: d.visible }
-  const t = scene.textBoxes.find((x) => x.id === id)
-  if (t) return { id: t.id, x: t.x, y: t.y, width: t.width, height: t.height, rotation: 0, visible: t.visible }
-  const i = scene.images.find((x) => x.id === id)
-  if (i) return { id: i.id, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation ?? 0, visible: i.visible }
-  const s = scene.shapes.find((x) => x.id === id)
-  if (s) return { id: s.id, x: s.x, y: s.y, width: s.width, height: s.height, rotation: s.rotation ?? 0, visible: s.visible }
-  return null
-}
-
-/** Resolves every visible-target mask to a scene-space outline for the overlay renderer. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function collectMaskOutlines(scene: Scene): MaskOutlineItem[] {
-  const items: MaskOutlineItem[] = []
-  for (const mask of scene.masks) {
-    const el = findMaskTarget(scene, mask.targetId)
-    if (!el || !el.visible) continue
-    items.push({
-      maskId: mask.id,
-      targetId: mask.targetId,
-      shape: mask.shape,
-      inverted: mask.inverted,
-      center: { x: el.x + el.width / 2, y: el.y + el.height / 2 },
-      rotation: el.rotation,
-      origin: { x: el.x, y: el.y },
-      rect: { x: mask.x, y: mask.y, width: mask.width, height: mask.height },
-      points: mask.shape === 'brush' ? mask.points : null
-    })
-  }
-  return items
-}
-
-function localCorners(rect: { x: number; y: number; width: number; height: number }): MaskPoint[] {
+function localCorners(rect: { x: number; y: number; width: number; height: number }): { x: number; y: number }[] {
   const { x, y, width, height } = rect
   return [
     { x, y },
@@ -139,125 +46,219 @@ function localCorners(rect: { x: number; y: number; width: number; height: numbe
   ]
 }
 
-const OUTLINE_STROKE = '#8b5cf6'
-const INVERTED_STROKE = '#f59e0b'
-
-function PreviewShape({ preview }: { preview: MaskPreviewState }) {
-  if (preview.shape === 'brush') {
-    if (preview.points.length < 2) return null
+function MaskOutline({ item, emphasized }: { item: MaskVisualItem; emphasized: boolean }) {
+  const stroke = item.inverted ? INVERTED_OUTLINE : OUTLINE
+  const strokeWidth = emphasized ? 1.5 : 1
+  const dash = emphasized ? '6 3' : '4 3'
+  const controls = emphasized ? 3 : 2
+  if (item.shape === 'brush' && item.points && item.points.length >= 2) {
     return (
-      <polyline
-        points={preview.points.map((p) => `${p.x},${p.y}`).join(' ')}
-        fill="none"
-        stroke={OUTLINE_STROKE}
-        strokeWidth={1}
-        strokeDasharray="4 3"
-      />
+      <g>
+        <polygon
+          fill="none"
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dash}
+          points={item.points.map((p) => `${p.x},${p.y}`).join(' ')}
+        />
+        {item.holes?.map((h, i) => (
+          <polygon
+            key={i}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            strokeDasharray={dash}
+            points={h.map((p) => `${p.x},${p.y}`).join(' ')}
+          />
+        ))}
+      </g>
     )
   }
-  const a = preview.points[0]
-  const b = preview.points[1]
-  if (!a || !b) return null
-  const x = Math.min(a.x, b.x)
-  const y = Math.min(a.y, b.y)
-  const w = Math.abs(b.x - a.x)
-  const h = Math.abs(b.y - a.y)
-  const common = {
-    fill: 'rgba(139, 92, 246, 0.15)',
-    stroke: OUTLINE_STROKE,
-    strokeWidth: 1,
-    strokeDasharray: '4 3'
-  } as const
-  if (preview.shape === 'ellipse') {
-    return <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={h / 2} {...common} />
+  if (item.shape === 'ellipse') {
+    return (
+      <g>
+        <ellipse
+          cx={item.rect.x + item.rect.width / 2}
+          cy={item.rect.y + item.rect.height / 2}
+          rx={item.rect.width / 2}
+          ry={item.rect.height / 2}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeDasharray={dash}
+        />
+        {localCorners(item.rect).map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r={controls} fill="#0f0f14" stroke={stroke} strokeWidth={1} />
+        ))}
+      </g>
+    )
   }
-  return <rect x={x} y={y} width={w} height={h} {...common} />
+  return (
+    <g>
+      <rect
+        x={item.rect.x}
+        y={item.rect.y}
+        width={item.rect.width}
+        height={item.rect.height}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeDasharray={dash}
+      />
+      {localCorners(item.rect).map((p, i) => (
+        <circle key={i} cx={p.x} cy={p.y} r={controls} fill="#0f0f14" stroke={stroke} strokeWidth={1} />
+      ))}
+    </g>
+  )
+}
+
+function rotateStyle(rotation: number, width: number, height: number): React.CSSProperties {
+  return rotation
+    ? { transform: `rotate(${rotation}deg)`, transformOrigin: `${width / 2}px ${height / 2}px` }
+    : {}
+}
+
+function MaskElementVisual({ visual, editing }: { visual: MaskVisual; editing: boolean }) {
+  return (
+    <div
+      data-mask-visual
+      data-mask-element-id={visual.elementId}
+      style={{
+        position: 'absolute',
+        left: visual.origin.x,
+        top: visual.origin.y,
+        width: visual.width,
+        height: visual.height,
+        ...rotateStyle(visual.rotation, visual.width, visual.height)
+      }}
+    >
+      {visual.items.map((item) => (
+        <div
+          key={item.maskId}
+          data-mask-checkerboard
+          data-mask-checker-for={item.maskId}
+          style={{ position: 'absolute', inset: 0, clipPath: item.hiddenClipPath, ...CHECKER_BG, opacity: editing ? 1 : 0.85 }}
+        />
+      ))}
+      {editing &&
+        visual.items.map((item) => (
+          <div
+            key={item.maskId}
+            data-mask-visible-highlight
+            data-mask-highlight-for={item.maskId}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              clipPath: item.visibleClipPath,
+              background: 'rgba(59, 130, 246, 0.16)',
+              boxShadow: item.inverted ? 'inset 0 0 0 1px rgba(245, 158, 11, 0.8)' : 'inset 0 0 0 1px rgba(59, 130, 246, 0.8)'
+            }}
+          />
+        ))}
+      <svg width={visual.width} height={visual.height} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+        {visual.items.map((item) => (
+          <MaskOutline key={item.maskId} item={item} emphasized={editing} />
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+function MaskPreviewVisual({ preview }: { preview: MaskPreviewState }) {
+  const visual = previewToMaskVisual(preview)
+  if (!visual) return null
+  const item = visual.items[0]
+  return (
+    <div
+      data-mask-preview
+      data-mask-preview-target={preview.targetId}
+      style={{
+        position: 'absolute',
+        left: visual.origin.x,
+        top: visual.origin.y,
+        width: visual.width,
+        height: visual.height,
+        ...rotateStyle(visual.rotation, visual.width, visual.height)
+      }}
+    >
+      {/* Mask strokes show a checkerboard preview of the region that will
+          become transparent. Unmask strokes are subtractive — nothing is being
+          masked — so they render as a "restore" highlight over the stroke
+          instead of a checkerboard. */}
+      {preview.inverted && (
+        <div data-mask-preview-checkerboard style={{ position: 'absolute', inset: 0, clipPath: item.hiddenClipPath, ...CHECKER_BG }} />
+      )}
+      <div
+        data-mask-preview-highlight
+        style={{
+          position: 'absolute',
+          inset: 0,
+          clipPath: item.visibleClipPath,
+          background: preview.inverted ? 'rgba(59, 130, 246, 0.18)' : 'rgba(52, 211, 153, 0.22)'
+        }}
+      />
+      <svg width={visual.width} height={visual.height} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+        <MaskOutline item={item} emphasized />
+      </svg>
+    </div>
+  )
 }
 
 export interface MaskOverlayProps {
   width: number
   height: number
-  outlines: MaskOutlineItem[]
+  visuals: MaskVisual[]
   preview: MaskPreviewState | null
 }
 
 /**
- * Overlay layer drawing every committed mask outline (+ control points) and
- * the live mask being drawn. Rendered in scene coordinates inside the
- * transformed canvas space; never part of the export node.
+ * Overlay layer drawing the transparency checkerboard for every committed
+ * mask, plus the live mask preview + focus scrim + mode badge while a stroke
+ * is in flight. Rendered in scene coordinates inside the transformed canvas
+ * space; never part of the export node.
  */
-export function MaskOverlay({ width, height, outlines, preview }: MaskOverlayProps) {
+export function MaskOverlay({ width, height, visuals, preview }: MaskOverlayProps) {
+  const target = preview?.element ?? null
   return (
     <div data-mask-overlay className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-      <svg width={width} height={height} style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }}>
-        {outlines.map((item) => {
-          const stroke = item.inverted ? INVERTED_STROKE : OUTLINE_STROKE
-          return (
-            <g key={item.maskId} transform={`rotate(${item.rotation} ${item.center.x} ${item.center.y})`}>
-              {item.shape === 'brush' && item.points ? (
-                <>
-                  <polygon
-                    fill="none"
-                    stroke={stroke}
-                    strokeWidth={1}
-                    strokeDasharray="4 3"
-                    points={item.points.map((p) => `${item.origin.x + p.x},${item.origin.y + p.y}`).join(' ')}
-                  />
-                  {item.points.map((p, i) => (
-                    <circle
-                      key={i}
-                      cx={item.origin.x + p.x}
-                      cy={item.origin.y + p.y}
-                      r={2.5}
-                      fill="#ffffff"
-                      stroke={stroke}
-                      strokeWidth={1}
-                    />
-                  ))}
-                </>
-              ) : (
-                <>
-                  {item.shape === 'ellipse' ? (
-                    <ellipse
-                      cx={item.origin.x + item.rect.x + item.rect.width / 2}
-                      cy={item.origin.y + item.rect.y + item.rect.height / 2}
-                      rx={item.rect.width / 2}
-                      ry={item.rect.height / 2}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={1}
-                      strokeDasharray="4 3"
-                    />
-                  ) : (
-                    <rect
-                      x={item.origin.x + item.rect.x}
-                      y={item.origin.y + item.rect.y}
-                      width={item.rect.width}
-                      height={item.rect.height}
-                      fill="none"
-                      stroke={stroke}
-                      strokeWidth={1}
-                      strokeDasharray="4 3"
-                    />
-                  )}
-                  {localCorners(item.rect).map((p, i) => (
-                    <circle
-                      key={i}
-                      cx={item.origin.x + p.x}
-                      cy={item.origin.y + p.y}
-                      r={2.5}
-                      fill="#ffffff"
-                      stroke={stroke}
-                      strokeWidth={1}
-                    />
-                  ))}
-                </>
-              )}
-            </g>
-          )
-        })}
-        {preview && <PreviewShape preview={preview} />}
-      </svg>
+      {target && (
+        <div
+          data-mask-edit-dim
+          data-mask-edit-target={preview!.targetId}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            clipPath: buildSceneDimPunch(width, height, target.x, target.y, target.width, target.height, target.rotation) ?? undefined,
+            background: 'rgba(9, 9, 11, 0.35)'
+          }}
+        />
+      )}
+      {visuals.map((visual) => (
+        <MaskElementVisual key={visual.elementId} visual={visual} editing={preview?.targetId === visual.elementId} />
+      ))}
+      {preview && <MaskPreviewVisual preview={preview} />}
+      {target && (
+        <div
+          data-mask-edit-badge
+          data-mask-edit-target={preview!.targetId}
+          style={{
+            position: 'absolute',
+            left: target.x,
+            top: Math.max(4, target.y - 26),
+            padding: '2px 8px',
+            borderRadius: 999,
+            background: 'rgba(15, 15, 20, 0.92)',
+            border: '1px solid rgba(99, 102, 241, 0.5)',
+            color: '#c7d2fe',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: 0.2,
+            whiteSpace: 'nowrap'
+          }}
+        >
+          {preview!.inverted ? 'Hide mask' : 'Unmask'}
+        </div>
+      )}
     </div>
   )
 }

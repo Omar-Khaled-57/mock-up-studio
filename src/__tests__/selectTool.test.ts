@@ -593,6 +593,39 @@ describe('select tool', () => {
     ])
   })
 
+  it('context menu on a container offers Enter Focus', () => {
+    const container = makeDevice({ id: 'cont-1', x: 100, y: 100, width: 600, height: 400 })
+    const child = makeTextBox({ id: 'tb-child', containerId: 'cont-1' })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [container], textBoxes: [child] }] })
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    const ctx = manager.buildContext({ scenePoint: point(150, 150), hitResult: { id: container.id, kind: 'device', zIndex: 0, locked: false } })
+    tool.onContextMenu?.(ctx, mouse({ clientX: 150, clientY: 150 }))
+
+    const menu = useRuntimeStore.getState().contextMenu
+    expect(menu).not.toBeNull()
+    expect(menu!.items[0].label).toBe('Enter Focus')
+
+    menu!.items[0].action()
+    expect(useRuntimeStore.getState().focusElementId).toBe('cont-1')
+    expect(useRuntimeStore.getState().focusGroupId).toBeNull()
+  })
+
+  it('context menu on a non-container does not offer Enter Focus', () => {
+    const lonely = makeDevice({ id: 'lonely-1', x: 100, y: 100, width: 600, height: 400 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [lonely] }] })
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onContextMenu?.(manager.buildContext({ scenePoint: point(150, 150), hitResult: { id: lonely.id, kind: 'device', zIndex: 0, locked: false } }), mouse({ clientX: 150, clientY: 150 }))
+
+    const menu = useRuntimeStore.getState().contextMenu
+    expect(menu!.items[0].label).toBe('Bring to Front')
+  })
+
   it('empty-canvas context menu with 2+ selected offers grouping', () => {
     const dev1 = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400 })
     const dev2 = makeDevice({ id: 'dev-2', x: 900, y: 100, width: 600, height: 400 })
@@ -616,5 +649,154 @@ describe('select tool', () => {
     tool.onContextMenu?.(manager.buildContext({ scenePoint: point(50, 50) }), mouse({}))
 
     expect(useRuntimeStore.getState().contextMenu).toBeNull()
+  })
+
+  it('dragging an element onto another element nests it into that container', () => {
+    const target = makeDevice({ id: 'dev-target', x: 0, y: 0, width: 200, height: 200, zIndex: 0 })
+    const dragged = makeTextBox({ id: 'tb-drag', x: 300, y: 300, width: 100, height: 100, zIndex: 1 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [target], textBoxes: [dragged] }] })
+    mountElement('tb-drag', 'textBox')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(350, 350), hitResult: { id: 'tb-drag', kind: 'textBox', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 350, clientY: 350 })
+    )
+
+    // The live drop ring follows the pointer over the target.
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(100, 100), toolId: 'select' }),
+      evt({ clientX: 100, clientY: 100 })
+    )
+    expect(useRuntimeStore.getState().containerDropTarget).toBe('dev-target')
+
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(100, 100), toolId: 'select' }),
+      evt({ clientX: 100, clientY: 100 })
+    )
+
+    const tb = useStore.getState().scenes[0].textBoxes[0]
+    expect(tb.containerId).toBe('dev-target')
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move into container')
+    expect(useRuntimeStore.getState().containerDropTarget).toBeNull()
+    expect(useRuntimeStore.getState().activeInteraction).toBeNull()
+  })
+
+  it('dropping a nested child on empty canvas un-nests it', () => {
+    const target = makeDevice({ id: 'dev-target', x: 0, y: 0, width: 200, height: 200, zIndex: 0 })
+    const child = makeTextBox({ id: 'tb-child', containerId: 'dev-target', x: 50, y: 50, width: 100, height: 100, zIndex: 1 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [target], textBoxes: [child] }] })
+    mountElement('tb-child', 'textBox')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(100, 100), hitResult: { id: 'tb-child', kind: 'textBox', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 100, clientY: 100 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(500, 500), toolId: 'select' }),
+      evt({ clientX: 500, clientY: 500 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(500, 500), toolId: 'select' }),
+      evt({ clientX: 500, clientY: 500 })
+    )
+
+    const tb = useStore.getState().scenes[0].textBoxes[0]
+    expect(tb.containerId).toBeNull()
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move out of container')
+  })
+
+  it('a click without movement does not nest', () => {
+    const target = makeDevice({ id: 'dev-target', x: 0, y: 0, width: 200, height: 200, zIndex: 0 })
+    const dragged = makeTextBox({ id: 'tb-drag', x: 300, y: 300, width: 100, height: 100, zIndex: 1 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [target], textBoxes: [dragged] }] })
+    mountElement('tb-drag', 'textBox')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(350, 350), hitResult: { id: 'tb-drag', kind: 'textBox', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 350, clientY: 350 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(350, 350), toolId: 'select' }),
+      evt({ clientX: 350, clientY: 350 })
+    )
+
+    const tb = useStore.getState().scenes[0].textBoxes[0]
+    expect(tb.containerId).toBeNull()
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move text box')
+  })
+
+  it('dragging onto an element outside the focus scope does not nest', () => {
+    const inside = makeDevice({ id: 'dev-in', x: 0, y: 0, width: 200, height: 200, zIndex: 1 })
+    const outside = makeDevice({ id: 'dev-out', x: 300, y: 0, width: 200, height: 200, zIndex: 2 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [inside, outside] }] })
+    useRuntimeStore.getState().enterElementFocus('dev-in')
+    mountElement('dev-in', 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(50, 50), hitResult: { id: 'dev-in', kind: 'device', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 50, clientY: 50 })
+    )
+    // Over the out-of-scope element the ring must stay clear and the drop
+    // resolves to a plain move, never a nest.
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(350, 100), toolId: 'select' }),
+      evt({ clientX: 350, clientY: 100 })
+    )
+    expect(useRuntimeStore.getState().containerDropTarget).toBeNull()
+
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(350, 100), toolId: 'select' }),
+      evt({ clientX: 350, clientY: 100 })
+    )
+
+    const dev = useStore.getState().scenes[0].devices[0]
+    expect(dev.containerId).toBeNull()
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move device')
+    expect(useRuntimeStore.getState().containerDropTarget).toBeNull()
+  })
+
+  it('multi-drag is a pure move and never nests', () => {
+    const target = makeDevice({ id: 'dev-target', x: 0, y: 0, width: 200, height: 200, zIndex: 0 })
+    const d1 = makeDevice({ id: 'dev-1', x: 300, y: 300, width: 100, height: 100, zIndex: 1 })
+    const d2 = makeDevice({ id: 'dev-2', x: 450, y: 300, width: 100, height: 100, zIndex: 2 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [target, d1, d2] }] })
+    useStore.setState({ selectedIds: ['dev-1', 'dev-2'], selectionMode: 'multi' })
+    mountElement('dev-1', 'device')
+    mountElement('dev-2', 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(350, 350), hitResult: { id: 'dev-1', kind: 'device', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 350, clientY: 350 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(100, 100), toolId: 'select' }),
+      evt({ clientX: 100, clientY: 100 })
+    )
+    expect(useRuntimeStore.getState().containerDropTarget).toBeNull()
+
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(100, 100), toolId: 'select' }),
+      evt({ clientX: 100, clientY: 100 })
+    )
+
+    const scene = useStore.getState().scenes[0]
+    expect(scene.devices.find((d) => d.id === 'dev-1')?.containerId).toBeNull()
+    expect(scene.devices.find((d) => d.id === 'dev-2')?.containerId).toBeNull()
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move device')
   })
 })

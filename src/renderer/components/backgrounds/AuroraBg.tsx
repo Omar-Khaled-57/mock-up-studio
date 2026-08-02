@@ -2,7 +2,7 @@ export default function AuroraBg() {
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ background: '#0b1628' }}>
       <div
-        className="absolute rounded-full blur-3xl opacity-50"
+        className="bg-animation-exempt absolute rounded-full blur-3xl opacity-50"
         style={{
           width: '60%',
           height: '60%',
@@ -13,7 +13,7 @@ export default function AuroraBg() {
         }}
       />
       <div
-        className="absolute rounded-full blur-3xl opacity-40"
+        className="bg-animation-exempt absolute rounded-full blur-3xl opacity-40"
         style={{
           width: '50%',
           height: '50%',
@@ -24,7 +24,7 @@ export default function AuroraBg() {
         }}
       />
       <div
-        className="absolute rounded-full blur-3xl opacity-30"
+        className="bg-animation-exempt absolute rounded-full blur-3xl opacity-30"
         style={{
           width: '40%',
           height: '40%',

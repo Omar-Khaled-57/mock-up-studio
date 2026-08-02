@@ -11,6 +11,7 @@ let scene: Scene
 
 beforeEach(() => {
   scene = createDefaultScene()
+  scene.textBoxes = []
 })
 
 describe('hitTest', () => {

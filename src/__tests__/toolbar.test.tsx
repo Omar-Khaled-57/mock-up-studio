@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import { useRuntimeStore } from '../renderer/runtime/store'
+import { render, screen, fireEvent, act } from '@testing-library/react'
+import { useRuntimeStore, resetRuntime } from '../renderer/runtime/store'
 import { useStore } from '../renderer/store'
 import { toolManager } from '../renderer/tools'
-import { resetStore } from './helpers'
+import { resetStore, makeDevice } from './helpers'
 import BottomToolbar from '../renderer/components/toolbar/BottomToolbar'
 import ToolOptionsPanel from '../renderer/components/toolbar/ToolOptionsPanel'
 
@@ -48,6 +48,24 @@ describe('BottomToolbar', () => {
     expect(screen.getByRole('button', { name: 'Select / Move' })).toBeTruthy()
   })
 
+  it('hide/reveal persists across a toolbar remount and survives transient resets', () => {
+    const { unmount } = render(<BottomToolbar />)
+    const toggle = screen.getByRole('button', { name: 'Show or hide tools' })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+    unmount()
+    render(<BottomToolbar />)
+    expect(screen.getByRole('button', { name: 'Show or hide tools' })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: 'Select / Move' })).toBeNull()
+
+    resetRuntime('transient')
+    expect(useRuntimeStore.getState().toolbarToolsVisible).toBe(false)
+
+    resetRuntime('all')
+    expect(useRuntimeStore.getState().toolbarToolsVisible).toBe(true)
+  })
+
   it('activates the mask tool on click', () => {
     render(<BottomToolbar />)
 
@@ -79,9 +97,10 @@ describe('BottomToolbar', () => {
     expect(screen.getByRole('button', { name: 'Focus Tool' })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('includes the focus tool inside the revealed select menu', () => {
+  it('renders Focus inside the select/move group menu', () => {
     render(<BottomToolbar />)
 
+    expect(screen.getByRole('button', { name: 'Focus Tool' })).toBeEnabled()
     const reveal = document.querySelector('[data-group-reveal="select"]')
     expect(reveal).not.toBeNull()
     expect(reveal!.querySelector('[aria-label="Focus Tool"]')).not.toBeNull()
@@ -176,6 +195,42 @@ describe('BottomToolbar', () => {
     expect(screen.getByRole('button', { name: 'Phone Group' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Exit focus mode' })).toBeTruthy()
   })
+
+  it('undo/redo buttons gate on history and drive the store', () => {
+    render(<BottomToolbar />)
+
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled()
+
+    act(() => useStore.getState().pushHistory('test edit'))
+    act(() => useStore.getState().addDevice(makeDevice()))
+
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(useStore.getState().scenes[0].devices).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Redo' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Redo' }))
+    expect(useStore.getState().scenes[0].devices).toHaveLength(1)
+  })
+
+  it('Export button opens the export modal', () => {
+    render(<BottomToolbar />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    expect(useRuntimeStore.getState().exportModalOpen).toBe(true)
+  })
+
+  it('renders tool options inline beneath the active group face', () => {
+    toolManager.setActiveTool('paint')
+    render(<BottomToolbar />)
+
+    const options = document.querySelector('[data-tool-options="paint"]')
+    expect(options).not.toBeNull()
+    expect(screen.getByText('Color')).toBeTruthy()
+  })
 })
 
 describe('ToolOptionsPanel', () => {
@@ -263,5 +318,27 @@ describe('ToolOptionsPanel', () => {
 
     fireEvent.change(container.querySelector('input[type="range"]')!, { target: { value: '30' } })
     expect(useRuntimeStore.getState().brush.hardness).toBeCloseTo(0.3)
+  })
+
+  it('mask tool Clear masks empties every scene mask (incl. background) with one history entry', () => {
+    resetStore()
+    toolManager.setActiveTool('mask')
+    act(() => {
+      const state = useStore.getState()
+      state.addMask({ id: 'm1', targetId: 'dev-1', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, points: [], inverted: false })
+      state.addMask({ id: 'mbg', targetId: '__background__', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, points: [], inverted: true })
+    })
+    render(<ToolOptionsPanel />)
+
+    expect(document.querySelector('[data-tool-options="mask"]')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Clear all masks/ }))
+
+    expect(useStore.getState().scenes[0].masks).toHaveLength(0)
+    expect(useStore.getState().undoStack.length).toBe(1)
+
+    act(() => {
+      useStore.getState().undo()
+    })
+    expect(useStore.getState().scenes[0].masks).toHaveLength(2)
   })
 })

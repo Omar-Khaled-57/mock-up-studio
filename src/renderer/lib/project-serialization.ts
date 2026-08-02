@@ -26,6 +26,7 @@
  */
 
 import { ImageEffects } from '@shared/types'
+import { generateId } from './id'
 
 /**
  * Base64 ↔ binary helpers. The renderer runs sandboxed (no Node.js runtime),
@@ -73,8 +74,6 @@ interface SerializedScene {
   textBoxes: SerializedTextBox[]
   images: SerializedImage[]
   shapes?: SerializedShape[]
-  titleText: SerializedTitleText
-  sloganText: SerializedTitleText
   guides: SerializedGuide[]
   grid: SerializedGrid
   groups?: { id: string; name: string; childIds: string[] }[]
@@ -91,6 +90,15 @@ interface SerializedMask {
   height: number
   points: { x: number; y: number }[]
   inverted: boolean
+  holes?: { x: number; y: number }[][]
+  /** Frozen-mask snapshot. `dataUrl` round-trips through the asset walk. */
+  snapshot?: {
+    dataUrl: string
+    width: number
+    height: number
+    sourceBounds: { x: number; y: number; width: number; height: number }
+    capturedAt: number
+  }
 }
 
 interface SerializedBackground {
@@ -120,6 +128,7 @@ interface SerializedDevice {
   objectFit: string
   customFrame?: { svgData: string; screenRegion: { x: number; y: number; w: number; h: number } }
   groupId: string | null
+  containerId?: string | null
 }
 
 interface SerializedTextBox {
@@ -131,6 +140,7 @@ interface SerializedTextBox {
   width: number
   height: number
   heightAuto: boolean
+  wrap?: boolean
   fontSize: number
   fontFamily: string
   fontWeight: number
@@ -155,6 +165,7 @@ interface SerializedTextBox {
   zIndex: number
   locked: boolean
   groupId: string | null
+  containerId?: string | null
 }
 
 interface SerializedImage {
@@ -178,6 +189,7 @@ interface SerializedImage {
   glow?: SerializedImageGlow[]
   shadow?: SerializedImageShadow[]
   effects?: ImageEffects
+  containerId?: string | null
 }
 
 interface SerializedShape {
@@ -205,6 +217,7 @@ interface SerializedShape {
   plusThickness: number
   arrowThickness: number
   groupId: string | null
+  containerId?: string | null
   effects?: ImageEffects
 }
 
@@ -213,24 +226,6 @@ interface SerializedImageGlow {
 }
 interface SerializedImageShadow {
   enabled: boolean; color: string; offsetX: number; offsetY: number; blur: number; spread: number; opacity: number; inset: boolean
-}
-
-interface SerializedTitleText {
-  content: string
-  fontSize: number
-  fontFamily: string
-  fontWeight: number
-  textAlign: string
-  lineHeight: number
-  letterSpacing: number
-  wordSpacing: number
-  textTransform: string
-  strokeColor: string
-  strokeWidth: number
-  color: string
-  gradient: SerializedTextGradient | null
-  glow: SerializedTextGlow | null
-  shadow: SerializedTextShadow | null
 }
 
 interface SerializedTextGradient {
@@ -323,8 +318,6 @@ export function serializeProject(
       textBoxes: SerializedTextBox[]
       images: SerializedImage[]
       shapes: SerializedShape[]
-      titleText: SerializedTitleText
-      sloganText: SerializedTitleText
       guides: SerializedGuide[]
       grid: SerializedGrid
       masks?: SerializedMask[]
@@ -348,6 +341,14 @@ export function serializeProject(
       }
     }
 
+    const masks = (s.masks ?? []).map((m) => {
+      const snapshot = (m as { snapshot?: { dataUrl?: string } }).snapshot
+      if (!snapshot?.dataUrl) return m as SerializedMask
+      const ref = replaceDataUrlWithRef(snapshot.dataUrl, assets)
+      if (!ref) return m as SerializedMask
+      return { ...m, snapshot: { ...snapshot, dataUrl: ref } } as SerializedMask
+    })
+
     return {
       id: s.id,
       name: s.name,
@@ -358,12 +359,10 @@ export function serializeProject(
       textBoxes: s.textBoxes,
       images,
       shapes: s.shapes ?? [],
-      titleText: s.titleText,
-      sloganText: s.sloganText,
       guides: s.guides,
       grid: s.grid,
       groups: (s as unknown as Record<string, unknown>).groups as { id: string; name: string; childIds: string[] }[] ?? [],
-      masks: s.masks ?? []
+      masks
     }
   })
 
@@ -440,15 +439,102 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Uin
     return []
   }
 
+  /**
+   * Legacy hero text shape (v1 files stored `scene.titleText`/`scene.sloganText`
+   * as chromeless TitleBlock styles). Files saved before the heroes became
+   * first-class text boxes carry these keys; newer files don't.
+   */
+  interface LegacyHeroText {
+    content?: string
+    fontSize?: number
+    fontFamily?: string
+    fontWeight?: number
+    textAlign?: string
+    lineHeight?: number
+    letterSpacing?: number
+    wordSpacing?: number
+    textTransform?: string
+    strokeColor?: string
+    strokeWidth?: number
+    color?: string
+    gradient?: SerializedTextGradient | null
+    glow?: SerializedTextGlow | null
+    shadow?: SerializedTextShadow | null
+    x?: number
+    y?: number
+    width?: number
+    height?: number
+    visible?: boolean
+    zIndex?: number
+  }
+
+  interface LegacyHeroSpec {
+    name: string
+    stylePreset: 'title' | 'slogan'
+    y: number
+    height: number
+    zIndex: number
+    fallbackContent: string
+    fallbackFontSize: number
+    fallbackFontWeight: number
+    fallbackColor: string
+  }
+
+  function legacyHeroToTextBox(
+    legacy: LegacyHeroText,
+    canvasWidth: number,
+    spec: LegacyHeroSpec
+  ): SerializedTextBox {
+    const width = legacy.width ?? Math.max(320, Math.round(canvasWidth * 0.5))
+    return {
+      id: generateId(),
+      name: spec.name,
+      content: legacy.content ?? spec.fallbackContent,
+      x: legacy.x ?? 60,
+      y: legacy.y ?? spec.y,
+      width,
+      height: legacy.height ?? spec.height,
+      heightAuto: true,
+      wrap: true,
+      fontSize: legacy.fontSize ?? spec.fallbackFontSize,
+      fontFamily: legacy.fontFamily ?? 'Inter',
+      fontWeight: legacy.fontWeight ?? spec.fallbackFontWeight,
+      textAlign: (legacy.textAlign as 'left' | 'center' | 'right') ?? 'left',
+      lineHeight: legacy.lineHeight ?? (spec.stylePreset === 'title' ? 1.1 : 1.3),
+      letterSpacing: legacy.letterSpacing ?? 0,
+      wordSpacing: legacy.wordSpacing ?? 0,
+      textTransform: (legacy.textTransform as SerializedTextBox['textTransform']) ?? 'none',
+      strokeColor: legacy.strokeColor ?? '#ffffff',
+      strokeWidth: legacy.strokeWidth ?? 0,
+      color: legacy.color ?? spec.fallbackColor,
+      gradient: legacy.gradient ?? null,
+      glow: legacy.glow ?? null,
+      shadow: legacy.shadow ?? null,
+      visible: legacy.visible ?? true,
+      backgroundVisible: false,
+      backgroundColor: '#00000040',
+      borderVisible: false,
+      borderColor: '#ffffff40',
+      borderRadius: 4,
+      stylePreset: spec.stylePreset,
+      zIndex: legacy.zIndex ?? spec.zIndex,
+      locked: false,
+      groupId: null,
+      containerId: null
+    }
+  }
+
   const scenes = manifest.scenes.map((scene) => {
     const devices = scene.devices.map((d) => ({
       ...d,
-      screenImage: resolveAssetRef(d.screenImage, assets)
+      screenImage: resolveAssetRef(d.screenImage, assets),
+      containerId: d.containerId ?? null
     }))
 
     const images = scene.images.map((img) => ({
       ...img,
-      src: resolveAssetRef(img.src, assets)
+      src: resolveAssetRef(img.src, assets),
+      containerId: img.containerId ?? null
     }))
 
     const background = { ...scene.background }
@@ -462,18 +548,54 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Uin
     const shapes = (scene.shapes ?? []).map((shape) => ({
       ...shape,
       shadow: normalizeShapeShadow(shape.shadow),
-      glow: normalizeShapeGlow(shape.glow)
+      glow: normalizeShapeGlow(shape.glow),
+      containerId: shape.containerId ?? null
     }))
 
+    const masks = (scene.masks ?? []).map((m) => {
+      const snap = (m as { snapshot?: { dataUrl?: string } }).snapshot
+      if (!snap?.dataUrl) return m as SerializedMask
+      return { ...m, snapshot: { ...snap, dataUrl: resolveAssetRef(snap.dataUrl, assets) ?? snap.dataUrl } } as SerializedMask
+    })
+
+    // Pre-v0.3.0 files stored the hero title/slogan as chromeless styles on
+    // the scene (`titleText`/`sloganText`). Migrate them into real text boxes
+    // marked with `stylePreset` so theme presets still recolor the hero copy.
+    const raw = scene as unknown as Record<string, unknown>
+    const legacyTitle = raw.titleText as LegacyHeroText | undefined
+    const legacySlogan = raw.sloganText as LegacyHeroText | undefined
+    const canvasWidth = scene.canvas?.width ?? 1280
+
+    const textBoxes = [
+      ...(scene.textBoxes ?? []).map((tb) => ({ ...tb, wrap: tb.wrap ?? true, containerId: tb.containerId ?? null })),
+      ...(legacyTitle && typeof legacyTitle === 'object'
+        ? [legacyHeroToTextBox(legacyTitle, canvasWidth, {
+            name: 'Title', stylePreset: 'title', y: 60, height: 72, zIndex: 1,
+            fallbackContent: 'Your Title', fallbackFontSize: 64, fallbackFontWeight: 800, fallbackColor: '#ffffff'
+          })]
+        : []),
+      ...(legacySlogan && typeof legacySlogan === 'object'
+        ? [legacyHeroToTextBox(legacySlogan, canvasWidth, {
+            name: 'Slogan', stylePreset: 'slogan', y: 152, height: 36, zIndex: 0,
+            fallbackContent: 'Your slogan goes here', fallbackFontSize: 24, fallbackFontWeight: 400, fallbackColor: '#a1a1aa'
+          })]
+        : [])
+    ]
+
+    const rest: Record<string, unknown> = { ...raw }
+    delete rest.titleText
+    delete rest.sloganText
+
     return {
-      ...scene,
+      ...rest,
       pinned: scene.pinned ?? false,
       devices,
       images,
       shapes,
       background,
+      textBoxes,
       groups: scene.groups ?? [],
-      masks: scene.masks ?? []
+      masks
     }
   })
 

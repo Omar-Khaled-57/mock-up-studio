@@ -72,7 +72,7 @@ function renderBlock(block: DocBlock, idx: number): React.ReactNode {
       return (
         <figure key={idx} className="mb-2">
           <img src={block.src} alt={block.alt} className="max-w-full rounded border border-zinc-800" />
-          {block.caption && <figcaption className="text-[10px] text-zinc-500 mt-1 text-center">{block.caption}</figcaption>}
+          {block.caption && <figcaption className="text-[10px] text-zinc-400 mt-1 text-center">{block.caption}</figcaption>}
         </figure>
       )
     case 'link':
@@ -193,7 +193,7 @@ export default function UserGuide() {
                               ? 'bg-indigo-600/20 text-indigo-300'
                               : hasMatch
                                 ? 'text-amber-300 hover:text-zinc-200'
-                                : 'text-zinc-500 hover:text-zinc-300'
+                                : 'text-zinc-400 hover:text-zinc-200'
                           }`}
                         >
                           {highlightMatch(page.title, search)}
@@ -205,7 +205,7 @@ export default function UserGuide() {
               </div>
             ))}
             {filteredDocs.length === 0 && (
-              <p className="text-[11px] text-zinc-600 text-center py-4">No results found.</p>
+              <p className="text-[11px] text-zinc-400 text-center py-4">No results found.</p>
             )}
           </nav>
         </aside>
@@ -215,7 +215,7 @@ export default function UserGuide() {
           <div className="max-w-2xl mx-auto px-6 py-4">
             {/* Breadcrumb */}
             {breadcrumb.length > 0 && (
-              <nav className="flex items-center gap-1 text-[10px] text-zinc-600 mb-4 flex-wrap">
+              <nav className="flex items-center gap-1 text-[10px] text-zinc-400 mb-4 flex-wrap">
                 {breadcrumb.map((b, i) => (
                   <span key={i} className="flex items-center gap-1">
                     {i > 0 && <span className="text-zinc-700">/</span>}
@@ -237,7 +237,7 @@ export default function UserGuide() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-sm text-zinc-600">Select a topic from the sidebar to get started.</p>
+                <p className="text-sm text-zinc-400">Select a topic from the sidebar to get started.</p>
               </div>
             )}
 
@@ -246,7 +246,7 @@ export default function UserGuide() {
               {prevPage ? (
                 <button
                   onClick={() => navigateTo(prevPage.sectionId, prevPage.pageId)}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
                 >
                   ← Previous
                 </button>
@@ -254,7 +254,7 @@ export default function UserGuide() {
               {nextPage ? (
                 <button
                   onClick={() => navigateTo(nextPage.sectionId, nextPage.pageId)}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
                 >
                   Next →
                 </button>
@@ -279,3 +279,4 @@ function highlightMatch(text: string, query: string): React.ReactNode {
     </>
   )
 }
+

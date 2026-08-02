@@ -13,8 +13,8 @@ describe('uiSlice', () => {
   })
 
   it('setSidebarTab changes tab', () => {
-    useStore.getState().setSidebarTab('export')
-    expect(useStore.getState().sidebarTab).toBe('export')
+    useStore.getState().setSidebarTab('background')
+    expect(useStore.getState().sidebarTab).toBe('background')
   })
 
   it('toggleSidebar toggles collapsed state', () => {
@@ -74,6 +74,7 @@ describe('uiSlice', () => {
   })
 
   it('toggleRulers toggles rulers', () => {
+    expect(useStore.getState().showRulers).toBe(false)
     useStore.getState().toggleRulers()
     expect(useStore.getState().showRulers).toBe(true)
     useStore.getState().toggleRulers()

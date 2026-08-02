@@ -13,7 +13,7 @@ const SECTIONS = [
       { keys: 'Ctrl+O', action: 'Open project' },
       { keys: 'Ctrl+S', action: 'Save' },
       { keys: 'Ctrl+Shift+S', action: 'Save As' },
-      { keys: 'Ctrl+E', action: 'Open export panel' }
+      { keys: 'Ctrl+E', action: 'Open export dialog' }
     ]
   },
   {
@@ -68,7 +68,7 @@ export default function ShortcutsModal({ onClose }: Props) {
           <h2 className={clsx("text-sm font-semibold", isLight ? "text-zinc-800" : "text-zinc-200")}>Keyboard Shortcuts</h2>
           <button
             onClick={onClose}
-            className={clsx("text-xs", isLight ? "text-zinc-400 hover:text-zinc-600" : "text-zinc-500 hover:text-zinc-300")}
+            className={clsx("text-xs", isLight ? "text-zinc-600 hover:text-zinc-800" : "text-zinc-400 hover:text-zinc-200")}
           >
             Close
           </button>
@@ -77,7 +77,7 @@ export default function ShortcutsModal({ onClose }: Props) {
         <div className="space-y-5">
           {SECTIONS.map((section) => (
             <div key={section.title}>
-              <h3 className={clsx("text-[10px] font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-600" : "text-zinc-500")}>
+              <h3 className={clsx("text-[10px] font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-700" : "text-zinc-400")}>
                 {section.title}
               </h3>
               <div className="space-y-1">

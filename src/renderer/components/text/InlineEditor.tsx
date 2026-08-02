@@ -7,6 +7,7 @@ interface Props {
   onStopEdit: () => void
   onStartEdit?: () => void
   selfStart?: boolean
+  wrap?: boolean
   style?: React.CSSProperties
   className?: string
   placeholder?: string
@@ -19,6 +20,7 @@ export default function InlineEditor({
   onStopEdit,
   onStartEdit,
   selfStart = true,
+  wrap = true,
   style,
   className,
   placeholder = 'Type here...'
@@ -96,8 +98,10 @@ export default function InlineEditor({
         ...style,
         outline: 'none',
         cursor: isEditing ? 'text' : 'inherit',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
+        whiteSpace: wrap ? 'pre-wrap' : 'nowrap',
+        wordBreak: wrap ? 'break-word' : 'normal',
+        overflow: wrap ? undefined : isEditing ? 'visible' : 'hidden',
+        textOverflow: wrap || isEditing ? undefined : 'ellipsis',
         minHeight: '1em'
       }}
       data-placeholder={showPlaceholder ? placeholder : undefined}

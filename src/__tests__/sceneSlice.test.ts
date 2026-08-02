@@ -56,9 +56,12 @@ describe('createDefaultScene', () => {
     expect(scene.devices).toHaveLength(0)
   })
 
-  it('has empty text boxes and images', () => {
+  it('seeds hero title/slogan text boxes but no user elements', () => {
     const scene = createDefaultScene()
-    expect(scene.textBoxes).toHaveLength(0)
+    expect(scene.textBoxes).toHaveLength(2)
+    expect(scene.textBoxes.filter((t) => t.stylePreset === 'title')).toHaveLength(1)
+    expect(scene.textBoxes.filter((t) => t.stylePreset === 'slogan')).toHaveLength(1)
+    expect(scene.textBoxes.filter((t) => t.stylePreset === 'custom')).toHaveLength(0)
     expect(scene.images).toHaveLength(0)
   })
 
@@ -124,8 +127,8 @@ describe('addTextBox', () => {
     const tb = makeTextBox({ id: 'tb-1' })
     useStore.getState().addTextBox(tb)
     const scene = safeScene(useStore.getState())
-    expect(scene.textBoxes).toHaveLength(1)
-    expect(scene.textBoxes[0].id).toBe('tb-1')
+    expect(scene.textBoxes).toHaveLength(3)
+    expect(scene.textBoxes[2].id).toBe('tb-1')
   })
 })
 
@@ -135,7 +138,7 @@ describe('updateTextBox', () => {
     useStore.getState().addTextBox(tb)
     useStore.getState().updateTextBox('tb-up', { content: 'Updated' })
     const scene = safeScene(useStore.getState())
-    expect(scene.textBoxes[0].content).toBe('Updated')
+    expect(scene.textBoxes.find((t) => t.id === 'tb-up')?.content).toBe('Updated')
   })
 })
 
@@ -145,7 +148,7 @@ describe('removeTextBox', () => {
     useStore.getState().addTextBox(tb)
     useStore.getState().removeTextBox('tb-rm')
     const scene = safeScene(useStore.getState())
-    expect(scene.textBoxes).toHaveLength(0)
+    expect(scene.textBoxes).toHaveLength(2)
   })
 })
 
@@ -206,6 +209,7 @@ describe('z-order operations', () => {
   })
 
   it('bringForward increases zIndex by 1', () => {
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], textBoxes: [] }] })
     const d1 = makeDevice({ id: 'd1', zIndex: 0 })
     const d2 = makeDevice({ id: 'd2', zIndex: 3 })
     useStore.getState().addDevice(d1)
@@ -217,6 +221,7 @@ describe('z-order operations', () => {
   })
 
   it('sendBackward decreases zIndex by 1', () => {
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], textBoxes: [] }] })
     const d1 = makeDevice({ id: 'd1', zIndex: 0 })
     const d2 = makeDevice({ id: 'd2', zIndex: 3 })
     useStore.getState().addDevice(d1)
@@ -400,8 +405,8 @@ describe('applyThemePreset', () => {
       deviceTheme: 'light'
     })
     const scene = safeScene(useStore.getState())
-    expect(scene.titleText.color).toBe('#ff0000')
-    expect(scene.sloganText.color).toBe('#00ff00')
+    expect(scene.textBoxes.find((t) => t.stylePreset === 'title')?.color).toBe('#ff0000')
+    expect(scene.textBoxes.find((t) => t.stylePreset === 'slogan')?.color).toBe('#00ff00')
   })
 
   it('updates existing textBox colors to slogan color', () => {
@@ -573,8 +578,8 @@ describe('applyThemePreset', () => {
     const scene = safeScene(useStore.getState())
     expect(scene.background.type).toBe('solid')
     expect(scene.background.color).toBe('#ff0000')
-    expect(scene.titleText.color).toBe('#ffffff')
-    expect(scene.sloganText.color).toBe('#cccccc')
+    expect(scene.textBoxes.find((t) => t.stylePreset === 'title')?.color).toBe('#ffffff')
+    expect(scene.textBoxes.find((t) => t.stylePreset === 'slogan')?.color).toBe('#cccccc')
   })
 
   it('applies a gradient background preset', () => {

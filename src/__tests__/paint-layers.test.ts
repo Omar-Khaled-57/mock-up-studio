@@ -57,7 +57,7 @@ describe('paint layers — registry', () => {
   })
 
   it('nextPaintLayerZIndex starts at 0 for an empty scene', () => {
-    expect(nextPaintLayerZIndex(createDefaultScene())).toBe(0)
+    expect(nextPaintLayerZIndex({ ...createDefaultScene(), textBoxes: [] })).toBe(0)
   })
 
   it('createPaintLayer is a full-canvas, unlocked, topmost image', () => {

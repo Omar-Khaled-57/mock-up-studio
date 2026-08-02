@@ -39,6 +39,7 @@ export function resetStore(): void {
       showSplash: true,
       theme: 'dark',
       showRulers: false,
+      showSmartGuides: true,
       sidebarPanelWidth: 224,
       propertiesPanelWidth: 208,
       // Export
@@ -85,6 +86,7 @@ export function makeDevice(overrides?: Partial<import('@shared/types').Device>):
     screenImage: null,
     objectFit: 'contain',
     groupId: null,
+    containerId: null,
     ...overrides
   }
 }
@@ -100,6 +102,7 @@ export function makeTextBox(overrides?: Partial<import('@shared/types').TextBox>
     width: 200,
     height: 60,
     heightAuto: true,
+    wrap: true,
     fontSize: 24,
     fontFamily: 'Inter',
     fontWeight: 400,
@@ -124,6 +127,7 @@ export function makeTextBox(overrides?: Partial<import('@shared/types').TextBox>
     zIndex: 1,
     locked: false,
     groupId: null,
+    containerId: null,
     ...overrides
   }
 }
@@ -155,6 +159,7 @@ export function makeShape(overrides?: Partial<import('@shared/types').Shape>): i
     plusThickness: 0.3,
     arrowThickness: 0.5,
     groupId: null,
+    containerId: null,
     ...overrides
   }
 }
@@ -182,6 +187,7 @@ export function makeImage(overrides?: Partial<import('@shared/types').ImageOverl
     locked: false,
     visible: true,
     groupId: null,
+    containerId: null,
     ...overrides
   }
 }

@@ -82,6 +82,12 @@ export interface MaskPreviewState {
   targetId: string
   shape: MaskPreviewShape
   points: { x: number; y: number }[]
+  /** Scene-space geometry of the element the mask is being drawn on. */
+  element: { id: string; x: number; y: number; width: number; height: number; rotation: number }
+  /** Whether the stroke will commit inverted (unmask / hide region). */
+  inverted: boolean
+  /** Brush radius in scene units (brush strokes only). */
+  radius?: number
 }
 
 export interface TemporaryTransform {
@@ -117,12 +123,23 @@ export interface RuntimeState {
   brush: BrushOptions
   temporaryTransform: TemporaryTransform | null
   focusGroupId: string | null
+  /** Focused container element (device/textBox/image/shape). Mutually exclusive with `focusGroupId`. */
+  focusElementId: string | null
   snapGuides: SnapGuides
+  /** Potential container the Select tool would nest a dragged element into (live drop ring). */
+  containerDropTarget: string | null
   maskPreview: MaskPreviewState | null
   maskShape: MaskPreviewShape
   maskMode: MaskMode
   editing: EditingTarget | null
   contextMenu: RuntimeContextMenu | null
+  canvasEmptyStateDismissed: boolean
+  /** Per-session open/closed state for collapsible Properties sections, keyed by `kind:sectionId`. */
+  propertiesSections: Record<string, boolean>
+  /** Whether the Export modal (Phase 5e) is open. Session-scoped chrome state. */
+  exportModalOpen: boolean
+  /** Whether the bottom toolbar's tool-groups row + options are revealed. Session-scoped chrome state. */
+  toolbarToolsVisible: boolean
 }
 
 export const DEFAULT_TOOL_ID = 'select'
@@ -149,14 +166,21 @@ export interface RuntimeSlice extends RuntimeState {
   setBrush: (patch: Partial<BrushOptions>) => void
   setTemporaryTransform: (transform: TemporaryTransform | null) => void
   enterFocus: (groupId: string) => void
+  enterElementFocus: (elementId: string) => void
   exitFocus: () => void
   setSnapGuides: (guides: SnapGuides) => void
+  setContainerDropTarget: (targetId: string | null) => void
   setMaskPreview: (preview: MaskPreviewState | null) => void
   setMaskShape: (shape: MaskPreviewShape) => void
   setMaskMode: (mode: MaskMode) => void
   setEditing: (target: EditingTarget | null) => void
   openContextMenu: (menu: RuntimeContextMenu) => void
   closeContextMenu: () => void
+  dismissCanvasEmptyState: () => void
+  setPropertiesSectionOpen: (section: string, open: boolean) => void
+  openExportModal: () => void
+  closeExportModal: () => void
+  toggleToolbarTools: () => void
 }
 
 export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice> = (set) => ({
@@ -172,12 +196,18 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   brush: { ...DEFAULT_BRUSH_OPTIONS },
   temporaryTransform: null,
   focusGroupId: null,
+  focusElementId: null,
   snapGuides: { verticalGuides: [], horizontalGuides: [] },
+  containerDropTarget: null,
   maskPreview: null,
   maskShape: 'rectangle',
   maskMode: 'mask',
   editing: null,
   contextMenu: null,
+  canvasEmptyStateDismissed: false,
+  propertiesSections: {},
+  exportModalOpen: false,
+  toolbarToolsVisible: true,
 
   setActiveTool: (toolId) => set({ activeToolId: toolId }),
 
@@ -212,11 +242,15 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
 
   setTemporaryTransform: (transform) => set({ temporaryTransform: transform }),
 
-  enterFocus: (groupId) => set({ focusGroupId: groupId }),
+  enterFocus: (groupId) => set({ focusGroupId: groupId, focusElementId: null }),
 
-  exitFocus: () => set({ focusGroupId: null }),
+  enterElementFocus: (elementId) => set({ focusGroupId: null, focusElementId: elementId }),
+
+  exitFocus: () => set({ focusGroupId: null, focusElementId: null }),
 
   setSnapGuides: (guides) => set({ snapGuides: guides }),
+
+  setContainerDropTarget: (targetId) => set({ containerDropTarget: targetId }),
 
   setMaskPreview: (preview) => set({ maskPreview: preview }),
   setMaskShape: (shape) => set({ maskShape: shape }),
@@ -226,5 +260,16 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
 
   openContextMenu: (menu) => set({ contextMenu: menu }),
 
-  closeContextMenu: () => set({ contextMenu: null })
+  closeContextMenu: () => set({ contextMenu: null }),
+
+  dismissCanvasEmptyState: () => set({ canvasEmptyStateDismissed: true }),
+
+  setPropertiesSectionOpen: (section, open) =>
+    set((state) => ({ propertiesSections: { ...state.propertiesSections, [section]: open } })),
+
+  openExportModal: () => set({ exportModalOpen: true }),
+
+  closeExportModal: () => set({ exportModalOpen: false }),
+
+  toggleToolbarTools: () => set((state) => ({ toolbarToolsVisible: !state.toolbarToolsVisible }))
 })

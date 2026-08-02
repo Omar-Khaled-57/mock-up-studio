@@ -17,6 +17,13 @@ export interface SnapInput {
   height: number
 }
 
+export interface SnapOptions {
+  /** Element-alignment (smart-guide) snapping. Independent of grid snap. */
+  smartGuides: boolean
+  /** Master gate for grid snapping (still requires `scene.grid.snapEnabled`). */
+  gridSnap: boolean
+}
+
 export interface SnapResult {
   x: number
   y: number
@@ -46,20 +53,29 @@ function gatherSnapTargets(scene: Scene, excludeId: string) {
   return { verticals, horizontals }
 }
 
-export function computeSnapForScene(scene: Scene, input: SnapInput, enabled: boolean): SnapResult {
-  if (!enabled) return { x: input.x, y: input.y, verticalGuides: [], horizontalGuides: [] }
+export function computeSnapForScene(scene: Scene, input: SnapInput, options: SnapOptions): SnapResult {
+  if (!options.smartGuides && !options.gridSnap) {
+    return { x: input.x, y: input.y, verticalGuides: [], horizontalGuides: [] }
+  }
 
-  const { verticals, horizontals } = gatherSnapTargets(scene, input.id)
+  let snappedX = input.x
+  let snappedY = input.y
+  const vGuides: number[] = []
+  const hGuides: number[] = []
 
-  const xResult = snapAxis({ pos: input.x, size: input.width, targets: verticals, canvasSize: scene.canvas.width, threshold: SNAP_THRESHOLD })
-  const yResult = snapAxis({ pos: input.y, size: input.height, targets: horizontals, canvasSize: scene.canvas.height, threshold: SNAP_THRESHOLD })
+  if (options.smartGuides) {
+    const { verticals, horizontals } = gatherSnapTargets(scene, input.id)
 
-  let snappedX = xResult.snapped
-  let snappedY = yResult.snapped
-  const vGuides: number[] = xResult.guide !== null ? [xResult.guide] : []
-  const hGuides: number[] = yResult.guide !== null ? [yResult.guide] : []
+    const xResult = snapAxis({ pos: input.x, size: input.width, targets: verticals, canvasSize: scene.canvas.width, threshold: SNAP_THRESHOLD })
+    const yResult = snapAxis({ pos: input.y, size: input.height, targets: horizontals, canvasSize: scene.canvas.height, threshold: SNAP_THRESHOLD })
 
-  if (scene.grid.snapEnabled && scene.grid.size > 0) {
+    snappedX = xResult.snapped
+    snappedY = yResult.snapped
+    if (xResult.guide !== null) vGuides.push(xResult.guide)
+    if (yResult.guide !== null) hGuides.push(yResult.guide)
+  }
+
+  if (options.gridSnap && scene.grid.snapEnabled && scene.grid.size > 0) {
     snappedX = Math.round(input.x / scene.grid.size) * scene.grid.size
     snappedY = Math.round(input.y / scene.grid.size) * scene.grid.size
     vGuides.push(snappedX)

@@ -73,7 +73,7 @@ export function createDestructiveTool(config: DestructiveToolConfig): Tool {
 
       // Focus mode: destructive edits to a dimmed (out-of-scope) element are
       // rejected the same way the Select tool rejects drags on dimmed content.
-      if (rt.focusGroupId && !isInFocusScope(element.id, rt.focusGroupId, scene)) {
+      if ((rt.focusGroupId || rt.focusElementId) && !isInFocusScope(element.id, rt.focusGroupId, scene, rt.focusElementId)) {
         ctx.actions.clearSelection()
         return
       }

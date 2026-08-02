@@ -190,6 +190,100 @@ describe('alignSelected', () => {
   })
 })
 
+describe('distributeSelected', () => {
+  beforeEach(() => {
+    useStore.getState().addDevice(makeDevice({ id: 'd1', x: 0, y: 0, width: 100, height: 100 }))
+    useStore.getState().addDevice(makeDevice({ id: 'd2', x: 150, y: 0, width: 100, height: 100 }))
+    useStore.getState().addDevice(makeDevice({ id: 'd3', x: 500, y: 0, width: 100, height: 100 }))
+    useStore.getState().select('d1', true)
+    useStore.getState().select('d2', true)
+    useStore.getState().select('d3', true)
+  })
+
+  it('evenly spaces horizontal gaps between the outer elements', () => {
+    useStore.getState().distributeSelected('space-horizontal')
+    const scene = useStore.getState().scenes[0]
+    const d1 = scene.devices.find((d) => d.id === 'd1')!
+    const d2 = scene.devices.find((d) => d.id === 'd2')!
+    const d3 = scene.devices.find((d) => d.id === 'd3')!
+    // span = 500+100-0 = 600, total widths = 300, gap = (600-300)/2 = 150
+    // first/last stay pinned: d1@0, d3@500; d2 = 0+100+150 = 250
+    expect(d1.x).toBe(0)
+    expect(d2.x).toBe(250)
+    expect(d3.x).toBe(500)
+    expect(d2.x - d1.x - 100).toBe(150)
+    expect(d3.x - d2.x - 100).toBe(150)
+  })
+
+  it('evenly spaces vertical gaps', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{
+        ...scene,
+        devices: scene.devices.map((d) => d.id === 'd3' ? { ...d, y: 300 } : d)
+      }]
+    })
+    useStore.getState().distributeSelected('space-vertical')
+    const s = useStore.getState().scenes[0]
+    const d2 = s.devices.find((d) => d.id === 'd2')!
+    const d3 = s.devices.find((d) => d.id === 'd3')!
+    // span = 300+100-0 = 400, total heights = 300, gap = (400-300)/2 = 50
+    expect(d2.y).toBe(150)
+    expect(d3.y).toBe(300)
+  })
+
+  it('distributes horizontal centers evenly', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{
+        ...scene,
+        devices: scene.devices.map((d) => d.id === 'd2' ? { ...d, x: 100 } : d)
+      }]
+    })
+    useStore.getState().distributeSelected('center-horizontal')
+    const s = useStore.getState().scenes[0]
+    const d2 = s.devices.find((d) => d.id === 'd2')!
+    const d3 = s.devices.find((d) => d.id === 'd3')!
+    // centers 50 / 150 / 550 → step 250 → d2 center 300 (x 250), d3 center 550 (x 500)
+    expect(d2.x).toBe(250)
+    expect(d3.x).toBe(500)
+  })
+
+  it('distributes vertical centers evenly', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{
+        ...scene,
+        devices: scene.devices.map((d) => d.id === 'd2' ? { ...d, y: 100 } : d).map((d) => d.id === 'd3' ? { ...d, y: 500 } : d)
+      }]
+    })
+    useStore.getState().distributeSelected('center-vertical')
+    const s = useStore.getState().scenes[0]
+    const d2 = s.devices.find((d) => d.id === 'd2')!
+    const d3 = s.devices.find((d) => d.id === 'd3')!
+    // centers 50 / 150 / 550 → d2 center 300 (y 250), d3 center 550 (y 500)
+    expect(d2.y).toBe(250)
+    expect(d3.y).toBe(500)
+  })
+
+  it('does nothing with fewer than 3 selected elements', () => {
+    useStore.getState().clearSelection()
+    useStore.getState().select('d1')
+    useStore.getState().select('d2', true)
+    const before = useStore.getState().scenes[0].devices.find((d) => d.id === 'd2')!.x
+    useStore.getState().distributeSelected('space-horizontal')
+    expect(useStore.getState().scenes[0].devices.find((d) => d.id === 'd2')!.x).toBe(before)
+  })
+
+  it('pushes history so undo restores the original positions', () => {
+    useStore.getState().distributeSelected('space-horizontal')
+    expect(useStore.getState().undoStack.length).toBeGreaterThan(0)
+    useStore.getState().undo()
+    const d3 = useStore.getState().scenes[0].devices.find((d) => d.id === 'd3')!
+    expect(d3.x).toBe(500)
+  })
+})
+
 describe('selectDirect', () => {
   it('selects a single element without group expansion', () => {
     const d1 = makeDevice({ id: 'sel-direct-1' })
@@ -243,6 +337,7 @@ describe('selectInRect', () => {
   })
 
   it('selects all element types in rect', () => {
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], textBoxes: [] }] })
     const d = makeDevice({ x: 0, y: 0, width: 100, height: 100 })
     const t = makeTextBox({ x: 10, y: 10, width: 100, height: 50 })
     const s = makeShape({ x: 20, y: 20, width: 80, height: 80 })

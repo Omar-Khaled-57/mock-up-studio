@@ -34,6 +34,12 @@ export function createMenu(mainWindow: BrowserWindow): void {
           click: () => send('save-project-as')
         },
         { type: 'separator' },
+        {
+          label: 'Export…',
+          accelerator: 'CmdOrCtrl+Shift+E',
+          click: () => send('export')
+        },
+        { type: 'separator' },
         { role: isMac ? 'close' : 'quit' }
       ]
     },

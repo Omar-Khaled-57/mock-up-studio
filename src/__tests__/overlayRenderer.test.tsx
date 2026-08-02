@@ -158,4 +158,25 @@ describe('OverlayRenderer', () => {
     render(<OverlayRenderer />)
     expect(document.querySelector('[data-hover-outline]')).toBeNull()
   })
+
+  it('renders a drop-target ring over the potential nest container', () => {
+    const target = makeDevice({ id: 'dev-target', x: 100, y: 100, width: 100, height: 100 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [target] }] })
+    useRuntimeStore.getState().setContainerDropTarget('dev-target')
+
+    render(<OverlayRenderer />)
+
+    const ring = document.querySelector('[data-container-drop-target]') as HTMLElement
+    expect(ring).not.toBeNull()
+    expect(ring.getAttribute('data-container-drop-target')).toBe('dev-target')
+    expect(ring.style.left).toBe('100px')
+    expect(ring.style.top).toBe('100px')
+    expect(ring.style.width).toBe('100px')
+    expect(ring.style.height).toBe('100px')
+  })
+
+  it('renders no drop-target ring when the drag is over empty canvas', () => {
+    render(<OverlayRenderer />)
+    expect(document.querySelector('[data-container-drop-target]')).toBeNull()
+  })
 })

@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import Canvas from './components/canvas/Canvas'
+import CanvasChromeBar from './components/canvas/CanvasChromeBar'
 import Sidebar from './components/sidebar/Sidebar'
 import PropertiesPanel from './components/sidebar/PropertiesPanel'
 import SplashScreen from './components/splash/SplashScreen'
@@ -12,11 +13,11 @@ import type { ChangelogVersion } from './components/shared/UpdateModal'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { useStore } from './store'
 import { loadProjectFromZipResult } from './lib/project-serialization'
-import { resetRuntime } from './runtime/store'
+import { resetRuntime, useRuntimeStore } from './runtime/store'
 import { withDirtySuppressed } from './store/dirtyTracking'
 import { useTheme } from './hooks/useTheme'
 import BottomToolbar from './components/toolbar/BottomToolbar'
-import ToolOptionsPanel from './components/toolbar/ToolOptionsPanel'
+import ExportDialog from './components/sidebar/ExportDialog'
 
 const STORAGE_KEY = 'mockup-studio-last-seen-version'
 
@@ -43,6 +44,8 @@ export default function App() {
   const [updateVersion, setUpdateVersion] = useState<ChangelogVersion | null>(null)
   const downloadProgress = useStore((s) => s.downloadProgress)
   const setDownloadProgress = useStore((s) => s.setDownloadProgress)
+  const exportModalOpen = useRuntimeStore((s) => s.exportModalOpen)
+  const closeExportModal = useRuntimeStore((s) => s.closeExportModal)
 
   const toggleShortcuts = useCallback(() => setShowShortcuts((v) => !v), [])
 
@@ -133,6 +136,9 @@ export default function App() {
               alert('Update Check Failed\n\nCould not check for updates. No release has been published yet.\n\nMake sure you are connected to the internet and try again.')
             }
           })
+          break
+        case 'export':
+          useRuntimeStore.getState().openExportModal()
           break
       }
     })
@@ -226,8 +232,8 @@ export default function App() {
         }} />
         <ErrorBoundary label="Canvas">
           <div className="flex flex-col flex-1 min-w-0">
+            <CanvasChromeBar />
             <Canvas />
-            <ToolOptionsPanel />
             <BottomToolbar />
           </div>
         </ErrorBoundary>
@@ -238,6 +244,7 @@ export default function App() {
         <PropertiesPanel />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
+        <ExportDialog open={exportModalOpen} onClose={closeExportModal} />
         {downloadProgress !== null && (
           <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-2 bg-zinc-900 border-t border-zinc-700 px-4 py-2 text-xs text-zinc-400">
             <span>Downloading update… {Math.round(downloadProgress)}%</span>

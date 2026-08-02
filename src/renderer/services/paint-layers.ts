@@ -46,7 +46,12 @@ export function nextPaintLayerZIndex(scene: Scene): number {
   return max + 1
 }
 
-export function createPaintLayer(scene: Scene, src: string, groupId: string | null): ImageOverlay {
+export function createPaintLayer(
+  scene: Scene,
+  src: string,
+  groupId: string | null,
+  containerId: string | null = null
+): ImageOverlay {
   return {
     id: generateId(),
     name: PAINT_LAYER_NAME,
@@ -67,7 +72,8 @@ export function createPaintLayer(scene: Scene, src: string, groupId: string | nu
     zIndex: nextPaintLayerZIndex(scene),
     locked: false,
     visible: true,
-    groupId
+    groupId,
+    containerId
   }
 }
 

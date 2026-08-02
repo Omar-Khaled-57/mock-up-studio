@@ -14,7 +14,7 @@ interface Props {
 export default function SliderInput({ label, value, min, max, step = 1, unit, onChange, className = '' }: Props) {
   const { clsx, text } = useTheme()
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
+    <div className={`flex items-center gap-2 min-w-0 ${className}`}>
       <span className={clsx("text-[10px] min-w-7 shrink-0", text.secondary)}>{label}</span>
       <input
         type="range"
@@ -23,9 +23,9 @@ export default function SliderInput({ label, value, min, max, step = 1, unit, on
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1 h-1 accent-indigo-500"
+        className="flex-1 min-w-0 h-1 accent-indigo-500"
       />
-      <span className={clsx("text-[10px] w-10 text-right", text.tertiary)}>
+      <span className={clsx("text-[10px] w-10 shrink-0 text-right tabular-nums", text.tertiary)}>
         {value}{unit}
       </span>
     </div>

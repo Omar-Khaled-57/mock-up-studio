@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronUp, ChevronRight, X } from 'lucide-react'
+import { useMemo } from 'react'
+import { ChevronDown, ChevronUp, ChevronRight, X, Undo2, Redo2, Download } from 'lucide-react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useRuntimeStore } from '../../runtime/store'
-import { getFocusPath } from '../../services/focus'
+import { getFocusBreadcrumb } from '../../services/focus'
 import { toolManager, toolRegistry, toolsInGroup, isToolReachable, Tool, ToolGroup } from '../../tools'
 import { useTheme } from '../../hooks/useTheme'
 import ToolButton from './ToolButton'
+import ToolOptionsPanel from './ToolOptionsPanel'
 
 const GROUP_ORDER: { group: ToolGroup; label: string }[] = [
   { group: 'select', label: 'Select' },
@@ -19,17 +20,28 @@ export default function BottomToolbar() {
   const activeToolId = useRuntimeStore((s) => s.activeToolId)
   const temporaryToolStack = useRuntimeStore((s) => s.temporaryToolStack)
   const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
+  const focusElementId = useRuntimeStore((s) => s.focusElementId)
   const enterFocus = useRuntimeStore((s) => s.enterFocus)
+  const enterElementFocus = useRuntimeStore((s) => s.enterElementFocus)
   const exitFocus = useRuntimeStore((s) => s.exitFocus)
+  const openExportModal = useRuntimeStore((s) => s.openExportModal)
+  const toolbarToolsVisible = useRuntimeStore((s) => s.toolbarToolsVisible)
+  const toggleToolbarTools = useRuntimeStore((s) => s.toggleToolbarTools)
   const scene = useStore(safeScene)
-  const { clsx, bg, text, border } = useTheme()
-  const [toolsVisible, setToolsVisible] = useState(true)
+  const undo = useStore((s) => s.undo)
+  const redo = useStore((s) => s.redo)
+  const canUndo = useStore((s) => s.undoStack.length > 0)
+  const canRedo = useStore((s) => s.redoStack.length > 0)
+  const { clsx, bg, text, border, accent } = useTheme()
 
   const effectiveToolId =
     temporaryToolStack.length > 0 ? temporaryToolStack[temporaryToolStack.length - 1].toolId : activeToolId
   const activeTool = toolRegistry.get(effectiveToolId)
 
-  const focusPath = useMemo(() => getFocusPath(scene, focusGroupId), [scene, focusGroupId])
+  const focusPath = useMemo(
+    () => getFocusBreadcrumb(scene, focusGroupId, focusElementId),
+    [scene, focusGroupId, focusElementId]
+  )
 
   const activate = (toolId: string) => {
     toolManager.setActiveTool(toolId)
@@ -46,16 +58,22 @@ export default function BottomToolbar() {
     )
   }
 
+  const iconBtn = clsx(
+    "h-7 w-7 flex items-center justify-center rounded-md transition-colors shrink-0 disabled:opacity-30 disabled:cursor-not-allowed",
+    bg.button,
+    text.secondary
+  )
+
   return (
     <div className={clsx("border-t w-full min-w-0", bg.surface)}>
       {/* Header strip (SceneTabs-style): active tool + collapse toggle on the
-          left, focus breadcrumb pinned to the right. */}
+          left; focus breadcrumb, Export, and history pinned to the right. */}
       <div className="flex items-center gap-2 px-2">
         <button
           type="button"
           aria-label="Show or hide tools"
-          aria-expanded={toolsVisible}
-          onClick={() => setToolsVisible((v) => !v)}
+          aria-expanded={toolbarToolsVisible}
+          onClick={toggleToolbarTools}
           className={clsx(
             "flex items-center gap-2 px-2 py-1.5 text-xs font-semibold rounded-lg transition-colors select-none",
             text.secondary,
@@ -68,30 +86,32 @@ export default function BottomToolbar() {
               {activeTool.shortcut.toUpperCase()}
             </kbd>
           )}
-          {toolsVisible ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+          {toolbarToolsVisible ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
         </button>
 
         <div className="flex-1" />
 
-        {focusGroupId && (
+        {(focusGroupId || focusElementId) && (
           <div
             data-focus-breadcrumb
             className={clsx("flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg", bg.active, text.secondary)}
           >
             {focusPath.length > 0 ? (
-              focusPath.map((group, index) => (
-                <span key={group.id} className="flex items-center gap-1 min-w-0">
+              focusPath.map((crumb, index) => (
+                <span key={crumb.id} className="flex items-center gap-1 min-w-0">
                   {index > 0 && <ChevronRight size={10} className="flex-shrink-0" />}
                   <button
                     type="button"
-                    title={`Focus ${group.name}`}
-                    onClick={() => enterFocus(group.id)}
+                    title={`Focus ${crumb.name}`}
+                    onClick={() =>
+                      crumb.kind === 'group' ? enterFocus(crumb.id) : enterElementFocus(crumb.id)
+                    }
                     className={clsx(
                       "truncate max-w-28 hover:underline",
                       index === focusPath.length - 1 ? "font-semibold" : text.tertiary
                     )}
                   >
-                    {group.name}
+                    {crumb.name}
                   </button>
                 </span>
               ))
@@ -109,57 +129,95 @@ export default function BottomToolbar() {
             </button>
           </div>
         )}
+
+        <button
+          type="button"
+          aria-label="Undo"
+          title="Undo (Ctrl+Z)"
+          disabled={!canUndo}
+          onClick={undo}
+          className={iconBtn}
+        >
+          <Undo2 size={14} strokeWidth={1.75} />
+        </button>
+        <button
+          type="button"
+          aria-label="Redo"
+          title="Redo (Ctrl+Shift+Z)"
+          disabled={!canRedo}
+          onClick={redo}
+          className={iconBtn}
+        >
+          <Redo2 size={14} strokeWidth={1.75} />
+        </button>
+
+        <button
+          type="button"
+          onClick={openExportModal}
+          className={clsx(
+            "h-7 flex items-center gap-1.5 px-2.5 rounded-md text-xs font-medium transition-colors shrink-0",
+            bg.button,
+            accent.text,
+            accent.hover
+          )}
+        >
+          <Download size={14} strokeWidth={1.75} />
+          Export
+        </button>
       </div>
 
       {/* Revealed tool groups (hide/reveal like the scene-tabs container). */}
-      {toolsVisible && (
-        <div className="flex items-center gap-1 px-2 pb-1.5 overflow-x-auto">
-          {GROUP_ORDER.map(({ group, label }) => {
-            const groupTools = toolsInGroup(toolRegistry, group)
-            const displayTool = displayToolFor(group)
-            if (!displayTool) return null
-            const groupActive = activeTool?.group === group
-            const hasVariants = groupTools.length > 1
+      {toolbarToolsVisible && (
+        <>
+          <div className="flex items-center gap-1 px-2 pb-1.5 overflow-x-auto">
+            {GROUP_ORDER.map(({ group, label }) => {
+              const groupTools = toolsInGroup(toolRegistry, group)
+              const displayTool = displayToolFor(group)
+              if (!displayTool) return null
+              const groupActive = activeTool?.group === group
+              const hasVariants = groupTools.length > 1
 
-            // Reveal side menu: while a group with variants is active its whole
-            // tool set renders inline in a bordered rectangle so every variant
-            // is visible for one-click switching (no popup flyout).
-            if (groupActive && hasVariants) {
+              // Reveal side menu: while a group with variants is active its whole
+              // tool set renders inline in a bordered rectangle so every variant
+              // is visible for one-click switching (no popup flyout).
+              if (groupActive && hasVariants) {
+                return (
+                  <div
+                    key={group}
+                    data-group-reveal={group}
+                    className={clsx(
+                      "flex items-center gap-0.5 p-0.5 rounded-lg border shrink-0",
+                      bg.primary,
+                      border.secondary
+                    )}
+                  >
+                    {groupTools.map((tool) => (
+                      <ToolButton
+                        key={tool.id}
+                        tool={tool}
+                        active={tool.id === effectiveToolId}
+                        disabled={!isToolReachable(tool)}
+                        onClick={() => activate(tool.id)}
+                      />
+                    ))}
+                  </div>
+                )
+              }
+
               return (
-                <div
+                <ToolButton
                   key={group}
-                  data-group-reveal={group}
-                  className={clsx(
-                    "flex items-center gap-0.5 p-0.5 rounded-lg border shrink-0",
-                    bg.primary,
-                    border.secondary
-                  )}
-                >
-                  {groupTools.map((tool) => (
-                    <ToolButton
-                      key={tool.id}
-                      tool={tool}
-                      active={tool.id === effectiveToolId}
-                      disabled={!isToolReachable(tool)}
-                      onClick={() => activate(tool.id)}
-                    />
-                  ))}
-                </div>
+                  tool={displayTool}
+                  label={label}
+                  active={groupActive}
+                  disabled={!isToolReachable(displayTool)}
+                  onClick={() => activate(displayTool.id)}
+                />
               )
-            }
-
-            return (
-              <ToolButton
-                key={group}
-                tool={displayTool}
-                label={label}
-                active={groupActive}
-                disabled={!isToolReachable(displayTool)}
-                onClick={() => activate(displayTool.id)}
-              />
-            )
-          })}
-        </div>
+            })}
+          </div>
+          <ToolOptionsPanel />
+        </>
       )}
     </div>
   )

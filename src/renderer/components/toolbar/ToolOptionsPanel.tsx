@@ -1,4 +1,5 @@
 import { useRuntimeStore } from '../../runtime/store'
+import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import { toolRegistry } from '../../tools'
 import SliderInput from '../shared/SliderInput'
@@ -25,27 +26,33 @@ export default function ToolOptionsPanel() {
   const setMaskShape = useRuntimeStore((s) => s.setMaskShape)
   const maskMode = useRuntimeStore((s) => s.maskMode)
   const setMaskMode = useRuntimeStore((s) => s.setMaskMode)
-  const { clsx, bg, border, text } = useTheme()
+  const { clsx, bg, text, accent } = useTheme()
 
   const effectiveId =
     temporaryToolStack.length > 0 ? temporaryToolStack[temporaryToolStack.length - 1].toolId : activeToolId
   const tool = toolRegistry.get(effectiveId)
+
+  const clearAllMasks = () => {
+    const state = useStore.getState()
+    state.pushHistory('Clear masks')
+    state.clearAllMasks()
+  }
 
   if (!tool?.options) return null
 
   return (
     <div
       data-tool-options={tool.id}
-      className={clsx("flex-shrink-0 flex items-center gap-3 px-3 py-1.5 border-b", bg.tabRail, border.primary)}
+      className={clsx("flex-shrink-0 flex items-center gap-3 pl-4 pr-3 py-1.5 border-l-2 overflow-x-auto", accent.border)}
     >
-      <span className={clsx("text-[11px] font-medium", text.secondary)}>{tool.label} options</span>
+      <span className={clsx("text-[11px] font-medium shrink-0", text.secondary)}>{tool.label} options</span>
       {effectiveId === 'paint' && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <ColorInput
             label="Color"
             value={brush.color}
             onChange={(color) => setBrush({ color })}
-            className="w-44"
+            className="min-w-0 max-w-44 flex-1"
           />
           <SliderInput
             label="Size"
@@ -54,7 +61,7 @@ export default function ToolOptionsPanel() {
             max={120}
             unit="px"
             onChange={(size) => setBrush({ size })}
-            className="w-52"
+            className="min-w-0 max-w-52 flex-1"
           />
           <SliderInput
             label="Hard"
@@ -63,12 +70,12 @@ export default function ToolOptionsPanel() {
             max={100}
             unit="%"
             onChange={(hardness) => setBrush({ hardness: hardness / 100 })}
-            className="w-48"
+            className="min-w-0 max-w-48 flex-1"
           />
         </div>
       )}
       {(effectiveId === 'blur' || effectiveId === 'eraser') && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <SliderInput
             label="Size"
             value={brush.size}
@@ -76,7 +83,7 @@ export default function ToolOptionsPanel() {
             max={120}
             unit="px"
             onChange={(size) => setBrush({ size })}
-            className="w-52"
+            className="min-w-0 max-w-52 flex-1"
           />
           <SliderInput
             label="Hard"
@@ -85,12 +92,12 @@ export default function ToolOptionsPanel() {
             max={100}
             unit="%"
             onChange={(hardness) => setBrush({ hardness: hardness / 100 })}
-            className="w-48"
+            className="min-w-0 max-w-48 flex-1"
           />
         </div>
       )}
       {effectiveId === 'magic-eraser' && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <SliderInput
             label="Tolerance"
             value={Math.round(brush.hardness * 100)}
@@ -98,7 +105,7 @@ export default function ToolOptionsPanel() {
             max={100}
             unit="%"
             onChange={(hardness) => setBrush({ hardness: hardness / 100 })}
-            className="w-48"
+            className="min-w-0 max-w-48 flex-1"
           />
         </div>
       )}
@@ -135,6 +142,29 @@ export default function ToolOptionsPanel() {
               {label}
             </button>
           ))}
+          {maskShape === 'brush' && (
+            <div className={clsx("w-px h-4 mx-1.5", bg.tertiary)} />
+          )}
+          {maskShape === 'brush' && (
+            <SliderInput
+              label="Size"
+              value={brush.size}
+              min={1}
+              max={120}
+              unit="px"
+              onChange={(size) => setBrush({ size })}
+              className="min-w-0 max-w-52 flex-1"
+            />
+          )}
+          <div className={clsx("w-px h-4 mx-1.5", bg.tertiary)} />
+          <button
+            type="button"
+            aria-label="Clear all masks"
+            onClick={clearAllMasks}
+            className={clsx("px-2.5 py-1 text-[11px] rounded transition-colors", bg.danger)}
+          >
+            Clear masks
+          </button>
         </div>
       )}
     </div>

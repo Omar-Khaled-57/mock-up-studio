@@ -1,11 +1,13 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
+import { useRuntimeStore } from '../../runtime/store'
 import { useTheme } from '../../hooks/useTheme'
 import Scene from './Scene'
 import Ruler from './Ruler'
 import ToolEventSurface from './ToolEventSurface'
 import OverlayRenderer from './OverlayRenderer'
+import CanvasEmptyState from './CanvasEmptyState'
 
 const RULER_SIZE = 20
 
@@ -18,12 +20,39 @@ export default function Canvas() {
   const setZoom = useStore((s) => s.setZoom)
   const fitToWindow = useStore((s) => s.fitToWindow)
   const showRulers = useStore((s) => s.showRulers)
-  const { isLight, clsx } = useTheme()
+  const emptyStateDismissed = useRuntimeStore((s) => s.canvasEmptyStateDismissed)
+  const dismissCanvasEmptyState = useRuntimeStore((s) => s.dismissCanvasEmptyState)
+  const { clsx, bg, text, border } = useTheme()
 
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+  // Seeded hero title/slogan boxes (`stylePreset`) are part of the default
+  // scene, not user content — exclude them so a fresh scene still shows the
+  // empty state until the user adds their own elements.
+  const userElementCount =
+    scene.devices.length +
+    scene.textBoxes.filter((t) => t.stylePreset === 'custom').length +
+    scene.images.length +
+    scene.shapes.length
+  const showEmptyState = !emptyStateDismissed && userElementCount === 0
+
+  // First user element add permanently dismisses the empty state for the
+  // session (so undoing all the way back to an empty scene doesn't resurrect it).
+  useEffect(() => {
+    if (userElementCount > 0) dismissCanvasEmptyState()
+  }, [userElementCount, dismissCanvasEmptyState])
+
+  const handlePointerDownCapture = useCallback(
+    (e: React.PointerEvent) => {
+      const target = e.target as HTMLElement
+      if (target.closest('[data-empty-state]')) return
+      dismissCanvasEmptyState()
+    },
+    [dismissCanvasEmptyState]
+  )
 
   const handleWheel = useCallback(
     (e: React.WheelEvent) => {
@@ -63,9 +92,13 @@ export default function Canvas() {
   return (
     <div
       ref={containerRef}
-      className={clsx("flex-1 relative select-none", isLight ? "bg-zinc-100" : "bg-zinc-950")}
+      data-canvas-viewport
+      onPointerDownCapture={handlePointerDownCapture}
+      className={clsx("flex-1 relative select-none", bg.canvas)}
       style={{ touchAction: 'none' }}
     >
+      {showEmptyState && <CanvasEmptyState />}
+
       {/* Guide preview overlay while dragging from ruler */}
       <div
         id="ruler-guide-preview"
@@ -80,7 +113,7 @@ export default function Canvas() {
         {showRulers && (
           <div className="flex flex-shrink-0" style={{ height: RULER_SIZE }}>
             <div
-              className={clsx("flex-shrink-0", isLight ? "bg-zinc-100 border-b border-r border-zinc-200" : "bg-zinc-900 border-b border-r border-zinc-800")}
+              className={clsx("flex-shrink-0 border-b border-r", bg.ruler)}
               style={{ width: RULER_SIZE, height: RULER_SIZE }}
             />
             <div className="flex-1 overflow-hidden">
@@ -93,7 +126,7 @@ export default function Canvas() {
         <div className="flex flex-1 overflow-hidden">
           {showRulers && (
             <div
-              className={clsx("flex-shrink-0 overflow-visible", isLight ? "bg-zinc-100 border-r border-zinc-200" : "bg-zinc-900 border-r border-zinc-800")}
+              className={clsx("flex-shrink-0 overflow-visible border-r", bg.ruler)}
               style={{ width: RULER_SIZE }}
             >
               <Ruler orientation="vertical" viewportLength={vRulerLength} />
@@ -119,9 +152,7 @@ export default function Canvas() {
         </div>
       </div>
 
-      <div className={clsx("absolute bottom-3 right-3 flex items-center gap-2 text-xs px-2 py-1 rounded pointer-events-none", isLight ? "text-zinc-500 bg-white/80 border border-zinc-200" : "text-zinc-500 bg-zinc-900/80")}>
-        <span>{Math.round(zoom * 100)}%</span>
-        <span className={isLight ? "text-zinc-300" : "text-zinc-700"}>|</span>
+      <div className={clsx("absolute bottom-3 right-3 flex items-center gap-2 text-xs px-2 py-1 rounded pointer-events-none border", text.tertiary, bg.primary, border.primary)}>
         <span>
           {scene.canvas.width} x {scene.canvas.height}
         </span>

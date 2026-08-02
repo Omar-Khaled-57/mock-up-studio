@@ -5,6 +5,7 @@ import { useTheme } from '../../hooks/useTheme'
 import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
 import { generateId } from '../../lib/id'
 import { Plus, AlignLeft, AlignCenter, AlignRight, Eye, EyeOff, Lock, Unlock, Trash2, Copy } from 'lucide-react'
+import ToggleSwitch from '../shared/ToggleSwitch'
 import type { TextBox as TextBoxType } from '@shared/types'
 
 const FONT_FAMILIES = [
@@ -23,9 +24,26 @@ const FONT_WEIGHTS = [
   { label: 'Black', value: 900 }
 ]
 
-type Target = 'title' | 'slogan' | null
-
 const DEFAULT_TEXT_SIZE = 200
+
+/** Neutral fallback style shown when no text box is selected. */
+const NEUTRAL_STYLE = {
+  fontSize: 48,
+  fontFamily: 'Inter',
+  fontWeight: 600,
+  color: '#ffffff',
+  textAlign: 'center' as const,
+  lineHeight: 1.3,
+  letterSpacing: 0,
+  wordSpacing: 0,
+  textTransform: 'none' as const,
+  strokeColor: '#ffffff',
+  strokeWidth: 0,
+  gradient: null,
+  glow: null,
+  shadow: null,
+  wrap: true
+}
 
 function defaultTextBox(canvasW: number, canvasH: number, zIndex: number, index: number): TextBoxType {
   return {
@@ -37,6 +55,7 @@ function defaultTextBox(canvasW: number, canvasH: number, zIndex: number, index:
     width: DEFAULT_TEXT_SIZE,
     height: 60,
     heightAuto: true,
+    wrap: true,
     fontSize: 24,
     fontFamily: 'Inter',
     fontWeight: 600,
@@ -60,21 +79,18 @@ function defaultTextBox(canvasW: number, canvasH: number, zIndex: number, index:
     stylePreset: 'custom',
     zIndex,
     locked: false,
-    groupId: null
+    groupId: null,
+    containerId: null
   }
 }
 
 export default function TextPanel() {
   const { clsx, bg, text, border } = useTheme()
   const scene = useStore(safeScene)
-  const titleText = scene.titleText
-  const sloganText = scene.sloganText
   const canvas = scene.canvas
   const textBoxes = scene.textBoxes
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
-  const updateTitleText = useStore((s) => s.updateTitleText)
-  const updateSloganText = useStore((s) => s.updateSloganText)
   const addTextBox = useStore((s) => s.addTextBox)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const removeTextBox = useStore((s) => s.removeTextBox)
@@ -89,40 +105,35 @@ export default function TextPanel() {
 
   const maxZ = textBoxes.reduce((max, t) => Math.max(max, t.zIndex), -1)
 
-  const [activeTarget, setActiveTarget] = useState<Target>('title')
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
   const activeStyle = useMemo(() => {
-    if (activeTarget === 'title') return titleText
-    if (activeTarget === 'slogan') return sloganText
-    if (selectedTextBox) {
-      return {
-        fontSize: selectedTextBox.fontSize,
-        fontFamily: selectedTextBox.fontFamily,
-        fontWeight: selectedTextBox.fontWeight,
-        color: selectedTextBox.color,
-        textAlign: selectedTextBox.textAlign,
-        lineHeight: selectedTextBox.lineHeight,
-        letterSpacing: selectedTextBox.letterSpacing,
-        wordSpacing: selectedTextBox.wordSpacing,
-        textTransform: selectedTextBox.textTransform,
-        strokeColor: selectedTextBox.strokeColor,
-        strokeWidth: selectedTextBox.strokeWidth,
-        gradient: selectedTextBox.gradient,
-        glow: selectedTextBox.glow,
-        shadow: selectedTextBox.shadow
-      }
+    if (!selectedTextBox) return NEUTRAL_STYLE
+    return {
+      fontSize: selectedTextBox.fontSize,
+      fontFamily: selectedTextBox.fontFamily,
+      fontWeight: selectedTextBox.fontWeight,
+      color: selectedTextBox.color,
+      textAlign: selectedTextBox.textAlign,
+      lineHeight: selectedTextBox.lineHeight,
+      letterSpacing: selectedTextBox.letterSpacing,
+      wordSpacing: selectedTextBox.wordSpacing,
+      textTransform: selectedTextBox.textTransform,
+      strokeColor: selectedTextBox.strokeColor,
+      strokeWidth: selectedTextBox.strokeWidth,
+      gradient: selectedTextBox.gradient,
+      glow: selectedTextBox.glow,
+      shadow: selectedTextBox.shadow,
+      wrap: selectedTextBox.wrap
     }
-    return titleText
-  }, [activeTarget, titleText, sloganText, selectedTextBox])
+  }, [selectedTextBox])
 
   const handleAddText = useCallback(() => {
     const tb = defaultTextBox(canvas.width, canvas.height, maxZ + 1, textBoxes.length)
     pushHistory('Add text box')
     addTextBox(tb)
     select(tb.id)
-    setActiveTarget(null)
   }, [canvas, maxZ, textBoxes.length, addTextBox, pushHistory, select])
 
   const handleToggleVisibility = useCallback(
@@ -178,32 +189,22 @@ export default function TextPanel() {
 
   const patch = useCallback(
     (field: string, value: unknown) => {
-      if (activeTarget === 'title') {
-        updateTitleText({ [field]: value })
-      } else if (activeTarget === 'slogan') {
-        updateSloganText({ [field]: value })
-      } else if (selectedTextBox) {
-        updateTextBox(selectedTextBox.id, { [field]: value })
-      }
+      if (!selectedTextBox) return
+      updateTextBox(selectedTextBox.id, { [field]: value })
       pushHistoryDebounced(`Text ${field}`)
     },
-    [activeTarget, selectedTextBox, updateTitleText, updateSloganText, updateTextBox, pushHistoryDebounced]
+    [selectedTextBox, updateTextBox, pushHistoryDebounced]
   )
 
   const patchNested = useCallback(
     (field: 'gradient' | 'glow' | 'shadow', subField: string, value: unknown) => {
+      if (!selectedTextBox) return
       const current = activeStyle[field]
       const updated = { ...current, [subField]: value }
-      if (activeTarget === 'title') {
-        updateTitleText({ [field]: updated })
-      } else if (activeTarget === 'slogan') {
-        updateSloganText({ [field]: updated })
-      } else if (selectedTextBox) {
-        updateTextBox(selectedTextBox.id, { [field]: updated })
-      }
+      updateTextBox(selectedTextBox.id, { [field]: updated })
       pushHistoryDebounced(`Text ${field}.${subField}`)
     },
-    [activeTarget, activeStyle, selectedTextBox, updateTitleText, updateSloganText, updateTextBox, pushHistoryDebounced]
+    [selectedTextBox, activeStyle, updateTextBox, pushHistoryDebounced]
   )
 
   const enableGradient = useCallback(() => {
@@ -230,12 +231,6 @@ export default function TextPanel() {
     patch('shadow', { ...s, enabled: !was })
   }, [activeStyle.shadow, patch])
 
-  const targetButtons: { id: Target; label: string }[] = [
-    { id: 'title', label: 'Title' },
-    { id: 'slogan', label: 'Slogan' },
-    ...(selectedTextBox ? [{ id: null, label: 'Text' } as const] : [])
-  ]
-
   const ALIGN_ICONS = {
     left: AlignLeft,
     center: AlignCenter,
@@ -244,24 +239,6 @@ export default function TextPanel() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Edit Target</h3>
-        <div className="flex gap-1">
-          {targetButtons.map((btn) => (
-            <button
-              key={btn.label}
-              onClick={() => setActiveTarget(btn.id)}
-              className={clsx(
-                "flex-1 px-2 py-1.5 text-xs rounded-lg transition-all duration-150",
-                activeTarget === btn.id ? bg.selected : bg.button
-              )}
-            >
-              {btn.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Add Text */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -281,7 +258,7 @@ export default function TextPanel() {
             {textBoxes.map((tb) => (
               <div
                 key={tb.id}
-                onClick={() => { if (renamingId !== tb.id) { select(tb.id); setActiveTarget(null) } }}
+                onClick={() => { if (renamingId !== tb.id) select(tb.id) }}
                 className={clsx("group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all duration-150", selectedTextBox?.id === tb.id ? 'bg-indigo-500/10 border border-indigo-500/20' : clsx('bg.hover', 'border border-transparent'))}
               >
                 {renamingId === tb.id ? (
@@ -339,6 +316,8 @@ export default function TextPanel() {
         )}
       </div>
 
+      {selectedTextBox ? (
+        <>
       <div>
         <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>Font</h3>
         <select
@@ -425,6 +404,11 @@ export default function TextPanel() {
             />
             <span className={clsx("text-[10px] w-8 text-right", text.tertiary)}>{(activeStyle.lineHeight ?? 1.2).toFixed(1)}</span>
           </div>
+          <ToggleSwitch
+            label="Wrap text"
+            checked={activeStyle.wrap ?? true}
+            onChange={(v) => patch('wrap', v)}
+          />
           <div className="flex items-center gap-2">
             <span className={clsx("text-[10px] w-10 shrink-0", text.secondary)}>Letters</span>
             <input
@@ -634,6 +618,10 @@ export default function TextPanel() {
           </div>
         )}
       </div>
+        </>
+      ) : (
+        <p className={clsx("text-[11px]", text.muted)}>Select a text box to edit its style.</p>
+      )}
     </div>
   )
 }

@@ -13,7 +13,7 @@ interface ToolButtonProps {
 }
 
 export default function ToolButton({ tool, label, active, disabled, onClick }: ToolButtonProps) {
-  const { isLight, clsx, bg, text } = useTheme()
+  const { clsx, accent, bg, text } = useTheme()
   const Icon = getToolIcon(tool.id)
   const displayLabel = label ?? tool.label
 
@@ -36,11 +36,7 @@ export default function ToolButton({ tool, label, active, disabled, onClick }: T
       )}
     >
       {active && (
-        <div
-          className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-5 rounded-full ${
-            isLight ? 'bg-indigo-600' : 'bg-indigo-500'
-          }`}
-        />
+        <div className={clsx("absolute bottom-0 left-1/2 -translate-x-1/2 h-[3px] w-5 rounded-full", accent.fill)} />
       )}
       <Icon size={16} strokeWidth={active ? 2 : 1.5} />
       <span className="text-[9px] font-medium leading-none truncate max-w-full px-0.5">{displayLabel}</span>
@@ -48,7 +44,7 @@ export default function ToolButton({ tool, label, active, disabled, onClick }: T
         <span
           className={clsx(
             "absolute top-0.5 right-1 text-[8px] font-semibold leading-none",
-            active ? (isLight ? 'text-indigo-700' : 'text-indigo-300') : text.muted
+            active ? accent.text : text.muted
           )}
         >
           {tool.shortcut.toUpperCase()}

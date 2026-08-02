@@ -4,7 +4,7 @@ import type { FastOverlayHost } from '../services/stroke-host'
 
 export type ResizeHandleName = 'nw' | 'ne' | 'sw' | 'se'
 
-export type ToolGroup = 'select' | 'brush' | 'eraser' | 'mask'
+export type ToolGroup = 'select' | 'brush' | 'eraser' | 'focus' | 'mask'
 
 export type ToolCapability = 'moveable' | 'resizable' | 'editable' | 'paintable' | 'maskable'
 
@@ -92,6 +92,8 @@ export interface DocumentActions {
   selectDirect: (id: string) => void
   getElementBounds: (id: string) => ElementBounds | null
   updateElement: (id: string, patch: ElementPatch) => void
+  /** Nest an element into a container (containerId = target) or release it (null). */
+  setElementContainer: (id: string, containerId: string | null) => void
   pushHistory: (label: string) => void
   uploadScreenImage: (id: string) => void
 }

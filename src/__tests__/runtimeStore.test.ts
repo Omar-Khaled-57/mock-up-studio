@@ -28,11 +28,14 @@ function seedTransientState() {
   rt.setStrokeDirty(true)
   rt.setTemporaryTransform({ elementId: 'dev-1', kind: 'device', deltaX: 5, deltaY: 5 })
   rt.setSnapGuides({ verticalGuides: [50], horizontalGuides: [60] })
+  rt.setContainerDropTarget('dev-1')
   rt.setMaskPreview({ targetId: 'dev-1', shape: 'rectangle', points: [] })
   rt.setMaskShape('ellipse')
   rt.setMaskMode('unmask')
   rt.setEditing({ id: 'tb-1', mode: 'text' })
   rt.setBrush({ size: 40, hardness: 0.8, color: '#ff0000' })
+  rt.openExportModal()
+  rt.toggleToolbarTools()
 }
 
 describe('initial state', () => {
@@ -50,11 +53,14 @@ describe('initial state', () => {
     expect(rt.temporaryTransform).toBeNull()
     expect(rt.focusGroupId).toBeNull()
     expect(rt.snapGuides).toEqual({ verticalGuides: [], horizontalGuides: [] })
+    expect(rt.containerDropTarget).toBeNull()
     expect(rt.maskPreview).toBeNull()
     expect(rt.maskShape).toBe('rectangle')
     expect(rt.maskMode).toBe('mask')
     expect(rt.editing).toBeNull()
     expect(rt.brush).toEqual(DEFAULT_BRUSH_OPTIONS)
+    expect(rt.exportModalOpen).toBe(false)
+    expect(rt.toolbarToolsVisible).toBe(true)
   })
 })
 
@@ -68,6 +74,15 @@ describe('setBrush', () => {
 
     useRuntimeStore.getState().setBrush({ hardness: 0.25, color: '#00ff00' })
     expect(useRuntimeStore.getState().brush).toEqual({ size: 64, hardness: 0.25, color: '#00ff00' })
+  })
+})
+
+describe('setContainerDropTarget', () => {
+  it('tracks the live nest target and clears on a null write', () => {
+    useRuntimeStore.getState().setContainerDropTarget('dev-1')
+    expect(useRuntimeStore.getState().containerDropTarget).toBe('dev-1')
+    useRuntimeStore.getState().setContainerDropTarget(null)
+    expect(useRuntimeStore.getState().containerDropTarget).toBeNull()
   })
 })
 
@@ -86,6 +101,7 @@ describe('resetRuntime', () => {
     expect(rt.strokeDirty).toBe(false)
     expect(rt.temporaryTransform).toBeNull()
     expect(rt.snapGuides).toEqual({ verticalGuides: [], horizontalGuides: [] })
+    expect(rt.containerDropTarget).toBeNull()
     expect(rt.maskPreview).toBeNull()
     expect(rt.editing).toBeNull()
 
@@ -95,6 +111,8 @@ describe('resetRuntime', () => {
     expect(rt.brush).toEqual({ size: 40, hardness: 0.8, color: '#ff0000' })
     expect(rt.maskShape).toBe('ellipse')
     expect(rt.maskMode).toBe('unmask')
+    expect(rt.exportModalOpen).toBe(true)
+    expect(rt.toolbarToolsVisible).toBe(false)
   })
 
   it('all reset restores the default tool and clears focus and temporary stack', () => {
@@ -111,6 +129,8 @@ describe('resetRuntime', () => {
     expect(rt.brush).toEqual(DEFAULT_BRUSH_OPTIONS)
     expect(rt.maskShape).toBe('rectangle')
     expect(rt.maskMode).toBe('mask')
+    expect(rt.exportModalOpen).toBe(false)
+    expect(rt.toolbarToolsVisible).toBe(true)
   })
 
   it('default scope is transient', () => {
