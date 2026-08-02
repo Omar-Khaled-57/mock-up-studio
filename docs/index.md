@@ -1,6 +1,6 @@
 # Mockup Studio — Architecture Documentation
 
-> **Version:** 0.3.0 · **Last updated:** August 2026
+> Version 0.3.0 · Released August 2, 2026
 >
 > Comprehensive technical reference for the Mockup Studio desktop application — an Electron + React + TypeScript device mockup scene builder.
 
@@ -40,7 +40,7 @@
 | UI framework | React 19 + TypeScript |
 | Styling | Tailwind CSS 3.4 |
 | State management | Zustand (14 slices merged into a single store + separate runtime store) |
-| Testing | vitest + jsdom (949 tests across 59 files) |
+| Testing | vitest + jsdom (980 tests across 64 files) |
 | Packaging | electron-builder (Windows NSIS/portable, macOS DMG, Linux AppImage) |
 | Auto-update | electron-updater via GitHub Releases |
 

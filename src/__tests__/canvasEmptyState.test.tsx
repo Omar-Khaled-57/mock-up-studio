@@ -49,9 +49,9 @@ describe('CanvasEmptyState (unit)', () => {
     expect(useStore.getState().sidebarTab).toBe('devices')
   })
 
-  it('browse template presets still routes to the canvas tab', () => {
+  it('Choose your Canvas still routes to the canvas tab', () => {
     render(<CanvasEmptyState />)
-    fireEvent.click(screen.getByRole('button', { name: 'Browse template presets' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose your Canvas' }))
     expect(useStore.getState().sidebarTab).toBe('canvas')
     expect(useRuntimeStore.getState().canvasEmptyStateDismissed).toBe(true)
   })

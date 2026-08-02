@@ -98,10 +98,10 @@ export default function CanvasEmptyState() {
 
         <button
           onClick={() => go('canvas')}
-          className={clsx("mt-3 inline-flex items-center gap-1.5 text-xs pointer-events-auto transition-colors", text.secondary, "hover:" + accent.text)}
+          className={clsx("mt-3 w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-medium rounded-lg pointer-events-auto transition-colors", bg.button, "hover:" + accent.text)}
         >
           <Palette size={12} strokeWidth={1.75} />
-          Browse template presets
+          Choose your Canvas
         </button>
 
         <div className={clsx("mt-6 inline-flex items-center gap-2 text-[10px]", text.muted)}>

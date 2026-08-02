@@ -159,6 +159,88 @@ describe('destructive tools', () => {
     expect(useStore.getState().undoStack.length).toBe(1)
   })
 
+  it('an eraser stroke on a shape without a backgroundImage rasterizes first then erases', async () => {
+    const shape = makeShape({ id: 'shp-1', x: 200, y: 200, width: 120, height: 120, backgroundImage: null })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], shapes: [shape] }] })
+
+    const manager = createToolManager(toolRegistry)
+    manager.setActiveTool('eraser')
+
+    await strokeTo(manager, 'eraser', [{ x: 210, y: 210 }, { x: 250, y: 230 }])
+
+    expect(rasterizeMock).toHaveBeenCalledTimes(1)
+    expect(rasterizeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'shp-1', width: 120, height: 120, backgroundImage: null })
+    )
+
+    // applyDestructiveStroke received the rasterized bitmap as src
+    const lastCall = applyMock.mock.calls[applyMock.mock.calls.length - 1]
+    expect(lastCall[0].src).toBe('data:image/png;base64,rasterized-shape')
+
+    // The result is committed as the shape's backgroundImage
+    const scene = useStore.getState().scenes[0]
+    expect(scene.shapes[0].backgroundImage).toMatch(/^data:image\/png;base64,stroke-/)
+    expect(useStore.getState().undoStack.length).toBe(1)
+  })
+
+  it('a magic-eraser stroke on a shape without a backgroundImage rasterizes first', async () => {
+    const shape = makeShape({ id: 'shp-1', x: 200, y: 200, width: 120, height: 120 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], shapes: [shape] }] })
+
+    const manager = createToolManager(toolRegistry)
+    manager.setActiveTool('magic-eraser')
+
+    await strokeTo(manager, 'magic-eraser', [{ x: 210, y: 210 }])
+
+    expect(rasterizeMock).toHaveBeenCalledTimes(1)
+    const lastCall = applyMock.mock.calls[applyMock.mock.calls.length - 1]
+    expect(lastCall[0].src).toBe('data:image/png;base64,rasterized-shape')
+    expect(lastCall[1]).toBe('magic-eraser')
+
+    const scene = useStore.getState().scenes[0]
+    expect(scene.shapes[0].backgroundImage).toMatch(/^data:image\/png;base64,stroke-/)
+  })
+
+  it('a second eraser stroke on a rasterized shape reads the existing bitmap (no re-rasterize)', async () => {
+    const shape = makeShape({ id: 'shp-1', x: 200, y: 200, width: 120, height: 120, backgroundImage: null })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], shapes: [shape] }] })
+
+    const manager = createToolManager(toolRegistry)
+    manager.setActiveTool('eraser')
+
+    await strokeTo(manager, 'eraser', [{ x: 210, y: 210 }])
+    expect(rasterizeMock).toHaveBeenCalledTimes(1)
+    const firstResult = useStore.getState().scenes[0].shapes[0].backgroundImage
+
+    // Second stroke — backgroundImage is now set, so no rasterization needed
+    await strokeTo(manager, 'eraser', [{ x: 250, y: 230 }])
+    expect(rasterizeMock).toHaveBeenCalledTimes(1)
+
+    const scene = useStore.getState().scenes[0]
+    expect(scene.shapes[0].backgroundImage).toMatch(/^data:image\/png;base64,stroke-/)
+    expect(scene.shapes[0].backgroundImage).not.toBe(firstResult)
+
+    // Second applyDestructiveStroke received the first stroke's result as src
+    const secondCall = applyMock.mock.calls[applyMock.mock.calls.length - 1]
+    expect(secondCall[0].src).toBe(firstResult)
+  })
+
+  it('erasing a shape without a backgroundImage creates a single undo entry', async () => {
+    const shape = makeShape({ id: 'shp-1', x: 200, y: 200, width: 120, height: 120 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], shapes: [shape] }] })
+
+    const manager = createToolManager(toolRegistry)
+    manager.setActiveTool('eraser')
+
+    await strokeTo(manager, 'eraser', [{ x: 210, y: 210 }])
+
+    expect(useStore.getState().undoStack.length).toBe(1)
+
+    // Undo restores the shape to its pre-rasterize state (backgroundImage: null)
+    useStore.getState().undo()
+    expect(useStore.getState().scenes[0].shapes[0].backgroundImage).toBeNull()
+  })
+
   it('undo restores the pre-stroke src once per stroke', async () => {
     const img = makeImage({ id: 'img-1', x: 150, y: 150, width: 300, height: 200, src: 'data:image/png;base64,orig' })
     useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], images: [img] }] })

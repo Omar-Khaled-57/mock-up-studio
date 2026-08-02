@@ -34,12 +34,13 @@ export default function LayersPanel() {
   const setActiveSceneIndex = useStore((s) => s.setActiveSceneIndex)
   const selectedIds = useStore((s) => s.selectedIds)
   const select = useStore((s) => s.select)
+  const selectMultiple = useStore((s) => s.selectMultiple)
+  const deleteSelected = useStore((s) => s.deleteSelected)
 
   const updateDevice = useStore((s) => s.updateDevice)
   const updateTextBox = useStore((s) => s.updateTextBox)
   const updateImage = useStore((s) => s.updateImage)
   const updateShape = useStore((s) => s.updateShape)
-  const deleteSelected = useStore((s) => s.deleteSelected)
   const duplicateSelected = useStore((s) => s.duplicateSelected)
   const bringToFront = useStore((s) => s.bringToFront)
   const sendToBack = useStore((s) => s.sendToBack)
@@ -62,16 +63,17 @@ export default function LayersPanel() {
   const [renameValue, setRenameValue] = useState('')
   const [dragId, setDragId] = useState<string | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null)
   const clickTimestamps = useMemo(() => new Map<string, number[]>(), [])
 
   const makeLayerEntry = (kind: ElementKind, id: string, name: string, visible: boolean, locked: boolean, zIndex: number, groupId: string | null): LayerEntry => ({
     id, kind, name, visible, locked, zIndex, groupId
   })
 
-  const { groupEntries, focusRoot } = useMemo(() => {
-    const groups: GroupEntry[] = []
+  const { groupEntries, groupsById, focusRoot } = useMemo(() => {
+    const allGroups: Record<string, GroupEntry> = {}
     for (const g of scene.groups) {
-      groups.push({ id: g.id, name: g.name, children: [], parentGroupId: g.parentGroupId ?? null })
+      allGroups[g.id] = { id: g.id, name: g.name, children: [], parentGroupId: g.parentGroupId ?? null }
     }
 
     const allEntries: { zIndex: number; entry: LayerEntry }[] = [
@@ -84,26 +86,22 @@ export default function LayersPanel() {
     const orphanEntries: LayerEntry[] = []
 
     for (const { entry } of allEntries) {
-      if (entry.groupId) {
-        const parent = groups.find((g) => g.id === entry.groupId)
-        if (parent) {
-          parent.children.push(entry)
-        } else {
-          orphanEntries.push(entry)
-        }
+      if (entry.groupId && allGroups[entry.groupId]) {
+        allGroups[entry.groupId].children.push(entry)
       } else {
         orphanEntries.push(entry)
       }
     }
 
-    // Add sub-groups to parent groups
-    for (const g of groups) {
-      if (g.parentGroupId) {
-        const parent = groups.find((p) => p.id === g.parentGroupId)
-        if (parent) {
-          parent.children.push({ id: g.id, kind: 'subgroup', name: g.name })
-        }
+    for (const g of scene.groups) {
+      if (g.parentGroupId && allGroups[g.parentGroupId]) {
+        allGroups[g.parentGroupId].children.push({ id: g.id, kind: 'subgroup', name: g.name })
       }
+    }
+
+    const groupsByIdMap = new Map<string, GroupEntry>()
+    for (const g of scene.groups) {
+      groupsByIdMap.set(g.id, allGroups[g.id])
     }
 
     const flatOrphans: GroupEntry[] = orphanEntries.map((e) => ({
@@ -113,8 +111,8 @@ export default function LayersPanel() {
       parentGroupId: null
     }))
 
-    const result = groups.filter((g) => !g.parentGroupId)
-    for (const g of groups) {
+    const result = Object.values(allGroups).filter((g) => !g.parentGroupId)
+    for (const g of Object.values(allGroups)) {
       if (g.parentGroupId) continue
       if (g.children.length === 0) continue
       if (!result.some((r) => r.id === g.id)) result.push(g)
@@ -123,20 +121,33 @@ export default function LayersPanel() {
 
     let focusRoot: GroupEntry | null = null
     if (focusGroupId) {
-      const entry = groups.find((g) => g.id === focusGroupId)
+      const entry = groupsByIdMap.get(focusGroupId)
       if (entry) focusRoot = { ...entry, parentGroupId: null }
     }
 
     return {
       groupEntries: result.filter((g) => g.children.length > 0),
+      groupsById: groupsByIdMap,
       focusRoot
     }
   }, [scene.devices, scene.textBoxes, scene.images, scene.shapes, scene.groups, focusGroupId])
 
   const totalCount = useMemo(() => {
+    let count = 0
     const list = focusRoot ? [focusRoot] : groupEntries
-    return list.reduce((sum, g) => sum + g.children.length, 0)
-  }, [groupEntries, focusRoot])
+    const walk = (group: GroupEntry) => {
+      for (const child of group.children) {
+        if ('kind' in child && child.kind === 'subgroup') {
+          const sub = groupsById.get(child.id)
+          if (sub) walk(sub)
+        } else {
+          count++
+        }
+      }
+    }
+    for (const g of list) walk(g)
+    return count
+  }, [groupEntries, groupsById, focusRoot])
 
   const toggleVisibility = useCallback(
     (kind: ElementKind, id: string) => {
@@ -206,15 +217,63 @@ export default function LayersPanel() {
     setRenamingId(null)
   }, [renamingId, renameValue, groupEntries, scene.groups, renameGroup, pushHistory, updateDevice, updateTextBox, updateImage, updateShape])
 
+  // Flattens all layerable items in render order (for Shift+click range selection).
+  const flattenLayerItems = useMemo(() => {
+    const list: { id: string; kind: ElementKind }[] = []
+    const listToFocus = focusRoot ? [focusRoot] : groupEntries
+    const walk = (group: GroupEntry) => {
+      for (const child of group.children) {
+        if ('kind' in child && child.kind === 'subgroup') {
+          const sub = groupsById.get(child.id)
+          if (sub) walk(sub)
+        } else {
+          list.push({ id: (child as LayerEntry).id, kind: (child as LayerEntry).kind })
+        }
+      }
+    }
+    for (const g of listToFocus) walk(g)
+    return list
+  }, [groupEntries, groupsById, focusRoot])
+
   const handleLayerClick = useCallback(
     (e: React.MouseEvent, entry: LayerEntry) => {
-      if (e.ctrlKey || e.metaKey) {
+      if (e.shiftKey && lastClickedId) {
+        const ids = flattenLayerItems.map((i) => i.id)
+        const fromIdx = ids.indexOf(lastClickedId)
+        const toIdx = ids.indexOf(entry.id)
+        if (fromIdx >= 0 && toIdx >= 0) {
+          const start = Math.min(fromIdx, toIdx)
+          const end = Math.max(fromIdx, toIdx)
+          const range = ids.slice(start, end + 1)
+          if (e.ctrlKey || e.metaKey) {
+            const combined = [...new Set([...selectedIds, ...range])]
+            selectMultiple(combined)
+          } else {
+            selectMultiple(range)
+          }
+        }
+        e.preventDefault()
+      } else if (e.ctrlKey || e.metaKey) {
         select(entry.id, true)
+        e.preventDefault()
       } else {
         select(entry.id)
       }
+      setLastClickedId(entry.id)
     },
-    [select]
+    [select, selectMultiple, selectedIds, lastClickedId, flattenLayerItems]
+  )
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Delete' && selectedIds.length > 0) {
+        e.preventDefault()
+        pushHistory('Delete')
+        deleteSelected(selectedIds)
+        clearSelection()
+      }
+    },
+    [selectedIds, deleteSelected, pushHistory, clearSelection]
   )
 
   const toggleExpand = useCallback((groupId: string) => {
@@ -371,10 +430,10 @@ export default function LayersPanel() {
             onClick={(e) => e.stopPropagation()}
           />
         ) : (
-          <span
-            className={clsx("flex-1 truncate min-w-0 cursor-pointer", text.primary)}
-            onClick={(e) => { e.stopPropagation(); handleTripleClick() }}
-          >
+            <span
+              className={clsx("flex-1 truncate min-w-0 cursor-pointer", text.primary)}
+              onClick={() => handleTripleClick()}
+            >
             {entry.name}
           </span>
         )}
@@ -405,8 +464,29 @@ export default function LayersPanel() {
       return renderEntry(group.children[0] as LayerEntry, 0)
     }
 
-    const allChildSelected = group.children.every((c) => selectedIds.includes(c.id))
-    const someChildSelected = group.children.some((c) => selectedIds.includes(c.id))
+    const childElementIds: string[] = []
+    group.children.forEach((c) => {
+      if ('kind' in c && c.kind === 'subgroup') {
+        const sub = groupsById.get(c.id)
+        if (sub) {
+          const walk = (g: GroupEntry) => {
+            for (const child of g.children) {
+              if ('kind' in child && child.kind === 'subgroup') {
+                const s = groupsById.get(child.id)
+                if (s) walk(s)
+              } else {
+                childElementIds.push((child as LayerEntry).id)
+              }
+            }
+          }
+          walk(sub)
+        }
+      } else {
+        childElementIds.push((c as LayerEntry).id)
+      }
+    })
+    const allChildSelected = childElementIds.length > 0 && childElementIds.every((id) => selectedIds.includes(id))
+    const someChildSelected = childElementIds.some((id) => selectedIds.includes(id))
 
     const handleTripleClickGroup = () => {
       const now = Date.now()
@@ -456,7 +536,7 @@ export default function LayersPanel() {
           ) : (
             <span
               className={clsx("flex-1 truncate min-w-0 font-semibold", text.primary)}
-              onClick={(e) => { e.stopPropagation(); handleTripleClickGroup() }}
+              onClick={() => handleTripleClickGroup()}
             >
               {group.name}
             </span>
@@ -470,7 +550,7 @@ export default function LayersPanel() {
           <div className={clsx("ml-2 border-l-2 pl-1", border.secondary)}>
             {group.children.map((child) => {
               if ('kind' in child && child.kind === 'subgroup') {
-                const subGroup = groupEntries.find((ge) => ge.id === child.id)
+                const subGroup = groupsById.get(child.id)
                 if (subGroup) return renderGroup(subGroup)
                 return null
               }
@@ -483,7 +563,11 @@ export default function LayersPanel() {
   }
 
   return (
-    <div>
+    <div
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      className={clsx("flex flex-col h-full", bg.panel)}
+    >
       <div className={clsx("flex items-center justify-between gap-2 mb-3 px-1", text.secondary)}>
         <button
           onClick={() => setActiveSceneIndex(Math.max(0, activeSceneIndex - 1))}

@@ -612,31 +612,43 @@ export default function PropertiesPanel() {
         open={sectionOpen(`${kind}:transform`, true)}
         onToggle={onToggleSection(`${kind}:transform`)}
       >
-        <div className="grid grid-cols-2 gap-1.5">
-          <NumberInput ariaLabel="X position" value={Math.round(x)} onChange={patchX} />
-          <NumberInput ariaLabel="Y position" value={Math.round(y)} onChange={patchY} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <span className={clsx("block text-[10px] mb-1", text.secondary)}>X Position</span>
+            <NumberInput ariaLabel="X position" value={Math.round(x)} onChange={patchX} />
+          </div>
+          <div>
+            <span className={clsx("block text-[10px] mb-1", text.secondary)}>Y Position</span>
+            <NumberInput ariaLabel="Y position" value={Math.round(y)} onChange={patchY} />
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="flex-1 min-w-0">
-            <NumberInput ariaLabel="Width" value={Math.round(width)} onChange={patchW} />
+        <div>
+          <div className="flex justify-between mb-1">
+            <span className={clsx("text-[10px]", text.secondary)}>Width</span>
+            <span className={clsx("text-[10px]", text.secondary)}>Height</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <NumberInput ariaLabel="Height" value={Math.round(height)} onChange={patchH} />
+          <div className="flex items-center gap-1.5">
+            <div className="flex-1 min-w-0">
+              <NumberInput ariaLabel="Width" value={Math.round(width)} onChange={patchW} />
+            </div>
+            {kind !== 'textbox' && (
+              <button
+                onClick={toggleAspectLock}
+                aria-label={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+                aria-pressed={aspectLocked}
+                title={aspectLocked ? 'Aspect ratio locked' : 'Lock aspect ratio'}
+                className={clsx(
+                  "w-7 h-7 flex items-center justify-center rounded transition-colors shrink-0",
+                  aspectLocked ? bg.selected : text.muted
+                )}
+              >
+                {aspectLocked ? <Lock size={ICON.compact} /> : <Unlock size={ICON.compact} />}
+              </button>
+            )}
+            <div className="flex-1 min-w-0">
+              <NumberInput ariaLabel="Height" value={Math.round(height)} onChange={patchH} />
+            </div>
           </div>
-          {kind !== 'textbox' && (
-            <button
-              onClick={toggleAspectLock}
-              aria-label={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
-              aria-pressed={aspectLocked}
-              title={aspectLocked ? 'Aspect ratio locked' : 'Lock aspect ratio'}
-              className={clsx(
-                "w-7 h-7 flex items-center justify-center rounded transition-colors shrink-0",
-                aspectLocked ? bg.selected : text.muted
-              )}
-            >
-              {aspectLocked ? <Lock size={ICON.compact} /> : <Unlock size={ICON.compact} />}
-            </button>
-          )}
         </div>
         {kind !== 'textbox' && (
           <SliderInput label="Rotation" value={rotation} min={-180} max={180} unit="°" onChange={patchRotation} />

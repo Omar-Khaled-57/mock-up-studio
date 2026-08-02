@@ -14,6 +14,7 @@ export interface SelectionSlice {
   selectionMode: 'single' | 'multi'
   select: (id: string, multi?: boolean, filter?: FocusFilter) => void
   selectDirect: (id: string) => void
+  selectMultiple: (ids: string[]) => void
   deselect: (id: string) => void
   clearSelection: () => void
   selectAll: (filter?: FocusFilter) => void
@@ -100,6 +101,9 @@ export const createSelectionSlice: StateCreator<StoreState, [], [], SelectionSli
 
   selectDirect: (id) =>
     set({ selectedIds: [id], selectionMode: 'single' }),
+
+  selectMultiple: (ids) =>
+    set({ selectedIds: ids, selectionMode: ids.length > 1 ? 'multi' : 'single' }),
 
   deselect: (id) =>
     set((state) => ({

@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { rasterizeShapeBitmap } from '../renderer/services/shape-rasterizer'
-import { createRasterSurface, canvasToDataUrl } from '../renderer/services/rasterizer'
 import { makeShape } from './helpers'
 
 class FakePath2D {
@@ -179,7 +178,8 @@ describe('shape-rasterizer', () => {
       const shape = makeShape({ id: 'shp-1', kind: 'star', width: 100, height: 100 })
       await rasterizeShapeBitmap(shape)
 
-      expect(FakePath2D.instances[0].pathData).toContain('M 50 0')  // star starts at top
+      // Star path starts with a comma-separated coordinate (50,0)
+      expect(FakePath2D.instances[0].pathData).toMatch(/^M 50,0 /)
     })
 
     it('rasterizes a circle shape with an arc path', async () => {
