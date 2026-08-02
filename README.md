@@ -10,30 +10,72 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 
 ## Features
 
+### Core Editing
 - **7 Device Types** — Monitor, Laptop, iPad, Phone, Watch, Browser, Terminal
-- **Drag & Resize** — 60fps pointer-event-based dragging with direct DOM mutation
-- **Smart Snapping** — Snap to element edges, canvas center, grid, and guides
-- **Text Editing** — Inline editing with gradient, glow, shadow, and multiple font weights
-- **Image Overlays** — Upload, position, and style images with effects (opacity, blur, glow, shadow, blend modes, flip)
-- **Shape System** — 11 SVG shape kinds with fill, gradient, shadow, glow, and background image
-- **Background Presets** — 7 built-in backgrounds (Aurora, Neon Grid, Blue Cyber, etc.)
-- **Themes Panel** — Solid, gradient, and preset background controls; 17 color theme presets
-- **Multi-Scene** — Multiple scenes per project with tab navigation, drag-to-reorder, pinning
-- **Version History** — Auto-snapshots every 5 minutes with manual save/restore
-- **Layer Management** — Z-order reordering, visibility toggle, lock, inline rename, drag reorder, groups
-- **Alignment Tools** — Align selected elements (left, center, right, top, middle, bottom)
-- **Dark / Light UI** — Toggle between dark and light interface themes
-- **Export Engine** — PNG, JPEG, WebP at 1x–4x scale with solid/transparent/custom backgrounds
-- **Multi-Scene Export** — Export all scenes as a ZIP archive with one click
-- **Project Files** — `.mockup` ZIP format with JSON manifest + embedded assets
-- **Auto-Save Recovery** — Crash recovery with periodic snapshots
-- **File Association** — Double-click `.mockup` files to open them directly
-- **Unsaved Changes Guard** — Prompts before closing with unsaved work
-- **Keyboard Shortcuts** — Full shortcut suite with reference modal (Ctrl+/)
+- **Drag & Resize** — 60fps pointer-event-based dragging with direct DOM mutation, Shift-proportional scaling
+- **Tool System** — Bottom toolbar with Select, Brush, Eraser, Focus, and Mask tool groups; single-key shortcuts (V/H/M/X/B/E/G)
+- **Smart Snapping** — Snap to element edges, canvas center, grid, and guides; independent smart-guide and grid-snap toggles
+- **Text Editing** — Inline editing with inline editor (gradient, glow, shadow, stroke, letter/word spacing, text-transform, line height)
+- **Image Overlays** — Upload, position, and style images; opacity, border-radius, blend modes (13), flip X/Y, blur, glow, shadow, per-element effects
+
+### Shape System
+- **13 SVG shape kinds** — Rectangle, circle, triangle, hexagon, diamond, parallelogram, trapezoid, cross, plus, heart, shield, arrow-right, star
+- Shape fill, opacity, rotation, blur, blend mode, corner radius
+- Shape background image (SVG pattern fill)
+- Shape-specific thickness controls (cross, plus, arrow)
+
+### Masking
+- **First-class masks** — reusable clip geometry on any element or the whole canvas
+- **Mask / Unmask modes** — draw to hide (punch) or draw to restore (reveal)
+- Additive masking (stacked strokes) with subtractive unmask via polygon boolean difference
+- Mask brush, rectangle, and ellipse shapes
+- Frozen mask snapshots (opt-in whole-scene capture)
+- Transparent canvas with black + blue checkerboard visualization
+
+### Image Editing Tools
+- **Paint Brush** — freehand strokes committed as per-stroke raster layers
+- **Blur Brush** — brush and region tools (rect, ellipse, line) for selective blur
+- **Eraser** — destination-out erase to transparent
+- **Magic Eraser** — tolerance-based flood-fill erase
+- **Per-element effects** — 9 non-destructive adjustments (brightness, contrast, exposure, saturation, hue, gamma, temperature, tint, blur)
+
+### Selection & Layers
+- **Focus mode** — group-scoped editing with dimming scrim and highlight ring
+- **Container clips** — grouped elements render clipped to their container's shape
+- **Drag-to-nest** — drag elements onto containers to parent them; empty-canvas drop un-nests
+- **Aspect ratio lock** — per-element toggle, preserves shape without holding Shift
+- **Multi-scene** — Multiple scenes per project with tab navigation, drag-to-reorder, pinning
+- **Layer management** — Z-order reordering, visibility/lock toggles, inline rename, groups, nested groups
+- **Alignment & distribution** — 6-direction align, 4-direction distribute (space and center)
+- **Copy / Paste Style** — transfer appearance properties between same-kind elements
+
+### Canvas & Viewport
+- **Canvas chrome bar** — scene tabs, zoom controls (in/out/reset/fit), View menu
+- **Canvas rotation** — Rotate 90° button
+- **Rulers** — zoom/pan-aware tick marks, drag to create guides
+- **Interactive guides** — drag to reposition, right-click to delete
+- **Grid** — configurable size, color, opacity, snap
+- **Transparent canvas** — toggle in Themes panel; real alpha in exports
+
+### Backgrounds & Themes
+- **7 built-in backgrounds** — Aurora, Neon Grid, Blue Cyber, QPreset, Qless, Storybox 3, Dark Solid
+- **Background editor** — Solid, gradient (linear/radial), image, and preset types
+- **17 color theme presets** — instant one-click scene color schemes
+- **Dark / Light UI** — interface theme toggle (canvas stays dark)
+
+### Export & Projects
+- **Export modal** — PNG, JPEG, WebP at 1x–4x scale with solid/transparent/custom backgrounds
+- **Multi-scene export** — Export all scenes as a ZIP archive
+- **Project files** — `.mockup` ZIP format with JSON manifest + embedded assets
+- **Version history** — Auto-snapshots every 5 minutes (pinned scenes only)
+- **Auto-save recovery** — Crash recovery with periodic snapshots
+- **File association** — Double-click `.mockup` files to open them directly
+- **Unsaved changes guard** — Prompts before closing with unsaved work
+- **Auto-update** — GitHub Releases integration (production builds)
+- **Keyboard shortcuts** — Full shortcut suite with reference modal (Ctrl+/)
 - **Watermark** — Optional text watermark excluded from exports
-- **Color Extraction** — Extract dominant colors from device screens
-- **Layout Templates** — Pre-composed layouts for quick scene setup
-- **Auto-Update** — GitHub Releases integration (production builds)
+- **Color extraction** — Extract dominant colors from device screens
+- **Layout templates** — Pre-composed layouts for quick scene setup
 
 ## Tech Stack
 
@@ -41,9 +83,9 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 |-------|-----------|
 | Desktop Shell | Electron 33 |
 | Bundler | electron-vite 2 (Vite 5) |
-| UI Framework | React 18 + TypeScript 5.6 |
+| UI Framework | React 19 + TypeScript 5.6 |
 | Styling | Tailwind CSS 3.4 |
-| State Management | Zustand 5 (10 slices) |
+| State Management | Zustand 5 (14 slices + runtime store) |
 | Export | modern-screenshot 4 |
 | Archive | JSZip 3 |
 | Icons | Lucide React |
@@ -111,20 +153,41 @@ src/
   preload/
     index.ts               contextBridge API
   shared/
-    types.ts               Core interfaces (Scene, Device, TextBox, etc.)
+    types.ts               Core interfaces (Scene, Device, TextBox, Shape, Mask, etc.)
   renderer/
-    App.tsx                Root layout, keyboard shortcuts, close guard, file association
-    store/                 Zustand (11 slices merged)
-    hooks/                 useDrag, useResize, useSnapping, useKeyboardShortcuts, useDebouncedHistory, useTheme
-    lib/                   constants, device-utils, export-engine, color-extraction, project-serialization
+    App.tsx                Root layout, dirty tracking, menu IPC, file association
+    store/                 Zustand document store (14 merged slices + dirty tracking)
+    runtime/               Zustand runtime store (transient editor state, reset hooks)
+    tools/                 Tool system: manager, registry, types, tool implementations
+      tools/               Select, Hand, Marquee, Focus, Paint, Blur, Eraser, Magic Eraser, Delete, Mask
+    services/              Pure logic: rasterizer, transform, stroke, polygon-clip,
+                            mask-diff, mask-brush, mask-visualization, mask-snapshot,
+                            hit-test, snapping, geometry, capabilities, focus,
+                            container-clip, container-drop, preview, viewport,
+                            shape-geometry, selection-chrome
+    hooks/                 useDebouncedHistory, useKeyboardShortcuts, useTheme
+    lib/                   constants, device-utils, export-engine, effects,
+                            project-serialization, file-upload, color-extraction,
+                            brush-presets, element-factories, id, color-utils, icons
+    elements/              ElementFacade (presentational wrapper, mask application)
     components/
-      canvas/              Viewport, Scene renderer, Grid, Guides, WatermarkOverlay
-      devices/             DeviceFrame, Monitor, Laptop, Phone, iPad, Watch, Browser, Terminal
-      text/                InlineEditor, TitleBlock, TextBox
+      canvas/              Canvas, Scene, ToolEventSurface, OverlayRenderer,
+                            StrokeSurface, PreviewSurface, Ruler, Grid, Guides,
+                            FocusDim, CanvasChromeBar, CanvasEmptyState
+      devices/             DeviceFrame, ScreenContainer + shell components
+      text/                InlineEditor, TextBox, RenameOverlay
       images/              ImageOverlay
-      backgrounds/         7 background presets + Solid/Gradient
-      sidebar/             Sidebar, 11 panels, SceneTabs, ExportDialog, LayoutTemplates
-      shared/              ResizeHandles, ContextMenu, ShortcutsModal, ErrorBoundary
+      shapes/              ShapeRenderer
+      backgrounds/         7 preset backgrounds + Solid/Gradient/BackgroundRenderer
+      sidebar/             Sidebar, devices/images/text/shapes/themes/grid/layers/version-history/watermark panels, SceneTabs, ExportDialog, LayoutTemplates
+      toolbar/             BottomToolbar, ToolButton, ToolOptionsPanel, icons
+      primitives/          Button, IconButton, Modal, Menu, NumberInput, SliderInput,
+                            SegmentedControl, AccordionSection, Badge, Kbd,
+                            Field, Tooltip, ChromeStrip, ResponsiveButtonGroup
+      masks/               MaskSnapshotLayer
+      effects/             EffectsEditor
+      shared/              ErrorBoundary, ResizeHandles, ShortcutsModal,
+                            GradientEditor, ShadowEditor, GlowEditor, UserGuide, Checkerboard
       splash/              SplashScreen
 ```
 
@@ -132,29 +195,41 @@ src/
 
 ### State Management
 
-The Zustand store is composed of 11 slices merged into a single state object:
+Mockup Studio uses **two separate Zustand stores**:
+
+| Store | Description |
+|-------|-------------|
+| **Document store** (`store/`) | All persisted state. Composed of 14 merged slices: project, scene, selection, history, viewport, UI, export, clipboard, version-history, watermark, shape, mask, effects, dirty-tracking. |
+| **Runtime store** (`runtime/store.ts`) | Transient editor state (active tool, hover, marquee, brush settings, focus, previews, snap guides, editing). Never serialized. Importable by document slices via `resetRuntime`, but never the reverse. |
 
 | Slice | Responsibility |
 |-------|---------------|
 | `projectSlice` | File path, dirty state, save/open/new |
-| `sceneSlice` | Scene CRUD, z-order, grid/guides, `safeScene()` |
-| `shapeSlice` | Shape CRUD (independent from sceneSlice) |
-| `selectionSlice` | Multi-select, select-all, alignment |
-| `historySlice` | Undo/redo (JSON snapshots, 500 max) |
+| `sceneSlice` | Scene CRUD, z-order, grid/guides/masks/groups, `safeScene()` |
+| `selectionSlice` | Multi-select, select-all, alignment, distribution, focus filter |
+| `historySlice` | Undo/redo (JSON string snapshots, 500 max) |
 | `viewportSlice` | Zoom, pan, fit-to-window |
-| `uiSlice` | Sidebar tab, theme, splash state |
-| `exportSlice` | Export format, scale, quality |
-| `clipboardSlice` | Internal copy/cut/paste |
-| `versionHistorySlice` | Auto-snapshots (5min interval, 50 max) |
+| `uiSlice` | Sidebar tab, theme, splash state, rulers |
+| `exportSlice` | Export format, scale, quality, background, scope |
+| `clipboardSlice` | Internal copy/cut/paste, copy-paste style |
+| `versionHistorySlice` | Auto-snapshots (5min interval, 50 max, pinned scenes only) |
 | `watermarkSlice` | Watermark text and visibility |
+| `shapeSlice` | Shape CRUD (independent from sceneSlice) |
+| `maskSlice` | Mask CRUD, reverse, clear-all, refresh snapshot |
+| `effectsSlice` | Per-element image effects (brightness, contrast, blur, etc.) |
 
 ### Key Patterns
 
-- **Drag performance**: Direct DOM mutation during drag, store commit on pointerup
-- **Resize**: Window-level pointermove/pointerup listeners (not pointer capture)
-- **History**: JSON serialization snapshots with debounced push for continuous inputs
+- **Two-store separation**: document store (serialized) vs runtime store (transient, reset-aware)
+- **Dirty tracking**: `attachDirtyTracking` sets `dirty` when the `scenes` array reference changes; `withDirtySuppressed` for programmatic loads
+- **Tool Manager pattern**: centralized dispatch; elements are pure presentational facades with zero pointer handlers
+- **Live DOM mutation**: Drag/resize mutate DOM styles directly (60fps), commit to store only on pointer-up
+- **History contract**: `pushHistory(label)` called BEFORE every mutation; max 500 entries
 - **Scene safety**: `safeScene()` selector prevents out-of-bounds access everywhere
-- **Theme**: CSS variables on `body.light-theme` class; canvas/devices stay dark always
+- **Export boundary**: `[data-scene-export]` node isolates exportable content from transient editor chrome
+- **Focus scoping**: group/element-scoped editing gates all tool interactions via `focusEditable`
+- **Runtime reset**: `resetRuntime('transient')` (undo/redo, scene switch) vs `'all'` (project load/new)
+- **Keyboard shortcuts**: V (Select), H (Hand), M (Marquee), X (Focus), B (Brush), E (Eraser), G (Mask), Space (temp Hand), Ctrl+E (Export), Ctrl+/(Shortcuts), Ctrl+Z/Y (Undo/Redo)
 - **Close guard**: IPC-based unsaved-changes prompt with 3s safety timeout
 - **File association**: Handles macOS `open-file`, Windows/Linux `second-instance`, and `process.argv`
 
@@ -169,7 +244,7 @@ assets/                Device screens, images, thumbnails (base64 in manifest)
 
 ## Testing
 
-231 tests across 14 files covering all store slices, utility functions, export logic, shape system, and device interactions.
+949 tests across 59 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
 
 ## License
 

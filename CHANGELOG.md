@@ -5,7 +5,118 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-07-31
+## [0.3.0] - 2026-08-02
+
+A major release overhauling the tool system, adding the complete mask engine, brush tools, visual feedback layer, and a v0.3.0 redesign foundation. The editor moves from inline element handlers to a centralized Tool Manager pattern, introduces first-class masking with polygon boolean clipping, and adds paint/eraser/blur/focus tools. The UI gets a bottom toolbar, contextual Properties panel, canvas chrome bar, and export modal.
+
+### Tool System
+
+- **Bottom toolbar** with grouped tool faces (Select, Brush, Eraser, Focus, Mask) and variant flyouts
+- **Tool shortcuts** — single-key activation: V (Select), H (Hand), M (Marquee), X (Focus), B (Brush group), E (Eraser group), G (Mask), Space (temporary Hand)
+- **Tool Manager pattern** — centralized dispatch via `ToolEventSurface` pointer dispatcher; tools are stateless descriptors receiving an `InteractionContext`
+- **Tool-independent resize** — corner-handle resizing works with any tool active (Select tool's gate stack is reused)
+- **Tool options** — inline options panel beneath the toolbar (paint: Color + Size + Hardness; mask: shape/mode buttons)
+- **Reachability gating** — only tools with `onPointerDown` are shortcut-reachable; stubs stay disabled
+- **Keyboard Shortcuts reference modal** (Ctrl+/)
+
+### Masking System
+
+- **First-class masks** — `Scene.masks[]` with reusable clip geometry in the target element's local coordinate frame
+- **Mask tool (G)** with brush, rectangle, and ellipse shapes
+- **Mask / Unmask modes** — draw to hide (inverted punch) or draw to restore (reveal)
+- **Additive masking** — every mask-mode stroke adds a fresh mask, stacking by clip-path intersection
+- **Subtractive unmask** — polygon boolean difference engine (Martinez-style) removes masked content in the data model
+- **Frozen mask snapshots** — opt-in whole-scene capture glued to the target, rotating with it (Refresh action)
+- **Background/canvas masks** — sentinel `__background__` target clips the whole scene, including later-added content
+- **Reveal-mask recovery** — an unmask stroke on a whole-canvas reveal removes it entirely
+- **Transparency checkerboard** — 64×64 black + blue squares for mask and transparent-canvas visualization
+
+### Image Editing Tools
+
+- **Paint Brush tool** — freehand strokes committed as per-stroke `Paint N` raster layers, composited via the rasterizer
+- **Blur Brush tool** — destructive blur on existing element bitmaps
+- **Eraser tool** — `destination-out` erase to transparent
+- **Magic Eraser** — tolerance-based flood-fill erase
+- **Delete tool** — single-click element deletion
+- **Per-element image effects** — 9 non-destructive effects (brightness, contrast, exposure, saturation, hue, gamma, temperature, tint, blur)
+- **Image enhancements** — opacity, border-radius, blend modes (13), flip X/Y, CSS blur, glow, shadow
+- **`objectFit: 'fill'`** — images always fill their box for WYSIWYG aspect-ratio lock
+
+### Selection & Editing Improvements
+
+- **Focus mode (X)** — group-scoped editing with a dimming scrim and highlight ring; dimmed content rejects all interactions
+- **Container clips** — grouped elements render clipped to their container's shape outline at render time
+- **Drag-to-nest** — drag one element onto another to make it a child (clipped to parent); empty-canvas drop un-nests
+- **Aspect ratio lock** — per-element toggle in the Transform row; locked elements resize proportionally without Shift
+- **Alignment tools** — 6-direction align and 4-direction distribute (space-horizontal/vertical, center-horizontal/vertical)
+- **Copy / Paste Style** — transfer appearance-only properties between same-kind elements
+
+### Canvas & Viewport
+
+- **Canvas chrome bar** — scene tabs, zoom controls (in/out/reset/fit), View menu (rulers, grid, smart guides, snap)
+- **Canvas empty state** — first-run overlay with quick-add actions (device, text, image, template presets)
+- **Canvas rotation** — Rotate 90° button swaps width/height through `applySize`
+- **Transparent canvas** — toggle in the Themes panel; scene background renderer returns `null`, editor shows checkerboard, exports carry real alpha
+- **Grid opacity** — slider control in the Grid panel
+- **Rulers** — zoom/pan-aware tick marks with drag-to-create-guide
+- **Interactive guides** — drag to reposition, right-click to delete
+
+### UI/UX Redesign
+
+- **Contextual Properties panel** — three states: empty (quick actions), multi-selection (align/distribute/copy-paste style), single element (sectioned: Transform, Content, Appearance, Effects, Mask, Advanced)
+- **Sectioned sidebar rail** — Design, Content, Organize, View, History groups
+- **Sectioned layout** — Properties sections are collapsible with persistent per-session open/closed state
+- **Dark / light UI theme** — sidebar and panels adapt; canvas stays dark in both
+- **Theme token system** — semantic `bg.*`, `text.*`, `border.*` tokens replace hardcoded colors
+- **Component primitives** — 14 shared components (Button, Modal, Menu, NumberInput, SliderInput, etc.)
+
+### Performance
+
+- **60fps live manipulation** — drag/resize mutate DOM styles directly, committing to the store only on pointer-up
+- **Imperative canvas previews** — StrokeSurface (brush strokes) and PreviewSurface (ghost/blur indicators) render via direct canvas APIs, no React re-renders per frame
+- **Serialized stroke commits** — module-level promise chains ensure overlapping brush/eraser strokes commit in document order
+
+### Internal Improvements
+
+- **Two-store architecture** — Document store (serialized/snapshotted) separated from Runtime store (transient, reset-aware)
+- **14 merged Zustand slices** (was 10) — shape, mask, effects, and container-drop slices added
+- **Dirty tracking** — `attachDirtyTracking` detects scene reference changes; `withDirtySuppressed` for programmatic loads
+- **Full reset hooks** — `registerFullResetHook` fires registered callbacks on project load/new
+- **Gesture interrupt** — `onInterrupt` lifecycle on every tool; Escape/blur/reset clears all pending state
+
+### Refactoring
+
+- **Element facades** — DeviceFrame, TextBox, ImageOverlay, ShapeRenderer are now pure presentational components with zero pointer handlers; the Select tool owns all interactions
+- **Hero text refactor** — title/slogan promoted from `Scene.titleText`/`sloganText` to first-class `textBoxes[]` with `stylePreset`
+- **Shared services** — `buildTextStyle`/`resolveThemeColors` extracted to `lib/device-utils.ts`; `getShapePath` to `services/shape-geometry.ts` (shared by renderer + container clip)
+- **Preview architecture** — data-driven `PreviewState` system with `drawPreview` as the single geometry→canvas mapper
+
+### Fixed
+
+- **Image aspect-ratio break** — `<img>` rendered with `objectFit: 'contain'`, causing letterboxing when the box aspect diverged from the source; now `objectFit: 'fill'`
+- **Mask tool polarity flipped** — drawing a mask no longer checkerboards the whole element; the drawn region is masked out
+- **Resize aspect-lock broken** — `ctx.modifiers.shift` was always false; now tracked via keyboard events
+- **Ctrl/Shift+click multi-select lost** — restored group-aware selection via `select(id, multi)`
+- **Locked elements editable via double-click** — added `hit.locked` guard before edit/upload branches
+- **RenameOverlay double-commit on Enter** — Enter triggers commit → unmount → blur → commit again; now guarded with `doneRef`
+- **LayersPanel JSX syntax errors** — ternary false branches missing closing tokens
+- **LayersPanel duplicate visibility button** — lock button was replaced with second visibility button
+
+### Removed
+
+- **TitleBlock component** — heroes now render through the standard TextBox facade
+- **Inline element pointer handlers** — drag/resize/snap handlers removed from DeviceFrame, TextBox, ImageOverlay, ShapeRenderer, ResizeHandles (all interactions now go through the Tool Manager)
+
+### Quality
+
+- 949 tests / 59 files passing (was 136 / 12)
+- ESLint zero errors / zero warnings
+- TypeScript strict mode clean
+- Production build clean (pre-existing dynamic-import warnings only)
+
+---
+
+## [0.2.8] - 2026-07-31
 
 ### Fixed
 - **Unsaved-changes guard now catches scene edits** — editing the canvas (move/resize/brush/mask/effects, etc.) marks the project dirty, so closing/new/open no longer silently discards changes (critical data-loss fix)
