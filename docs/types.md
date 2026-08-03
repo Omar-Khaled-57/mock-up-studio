@@ -277,7 +277,7 @@ interface Shape {
 }
 ```
 
-**ShapeKind** (13 variants): `rectangle`, `circle`, `triangle`, `hexagon`, `diamond`, `parallelogram`, `trapezoid`, `cross`, `plus`, `heart`, `shield`, `arrow-right`, `star`.
+**ShapeKind** (13 variants): `rectangle`, `circle`, `ellipse`, `triangle`, `star`, `hexagon`, `diamond`, `parallelogram`, `trapezoid`, `cross`, `plus`, `heart`, `arrow-right`.
 
 **Star angles:** `[outerPointAngle, innerPointAngle]` in degrees (default `[27.5, 68.5]`).
 

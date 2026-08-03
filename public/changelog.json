@@ -2,7 +2,7 @@
   "versions": [
     {
       "version": "0.3.0",
-      "date": "2026-08-02",
+      "date": "2026-08-04",
       "title": "Tool System & Masking Engine",
       "origin": "Major release overhauling the tool system with a centralized Tool Manager, adding the complete mask engine with polygon boolean clipping, paint/eraser/blur/focus tools, a visual feedback overlay, and the foundation of the v0.3.0 UI redesign (bottom toolbar, contextual Properties panel, canvas chrome bar, export modal).",
       "sections": [
@@ -25,7 +25,9 @@
             "Additive masking: strokes stack by clip-path intersection",
             "Subtractive unmask via Martinez-style polygon boolean difference",
             "Frozen mask snapshots: opt-in whole-scene capture glued to the target",
-            "Background/canvas masks with transparent checkerboard visualization"
+            "Background/canvas masks with transparent checkerboard visualization",
+            "Scene-level canvas masks: clip the whole scene, including content added later",
+            "Export mask punch: deterministic evenodd raster punch (foreignObject capture drops clip-paths)"
           ]
         },
         {
@@ -44,11 +46,20 @@
           "heading": "Selection & Editing",
           "items": [
             "Focus mode (X): group-scoped editing with dimming scrim and highlight ring",
+            "Element focus: works on every element kind; new elements auto-parent into the focused container with its clip lifted",
             "Container clips: grouped elements clip to container shape at render time",
             "Drag-to-nest: drag elements onto containers to parent them",
             "Aspect ratio lock: per-element toggle, preserves shape without Shift",
             "Alignment tools: 6-direction align + 4-direction distribute",
             "Copy/Paste Style: transfer appearance between same-kind elements"
+          ]
+        },
+        {
+          "heading": "Shapes",
+          "items": [
+            "Gradient shape fills: solid + linear/radial/conic, identical on canvas, exports, and raster",
+            "Cross containers clip children to the exact union outline (no box fallback)",
+            "WYSIWYG resize: shapes track live resize bounds, never letterbox mid-gesture"
           ]
         },
         {
@@ -82,8 +93,35 @@
         {
           "heading": "Quality",
           "items": [
-            "949 tests passing across 59 files",
+            "1074 tests passing across 72 files",
             "Lint, typecheck, and production build clean"
+          ]
+        }
+      ]
+    },
+    {
+      "version": "0.2.8",
+      "date": "2026-07-31",
+      "title": "Dirty Tracking, Gesture Lifecycle & Export Correctness",
+      "origin": "Hardening release. Scene edits now mark the project dirty so unsaved work is never silently lost, in-flight gestures are cancelled on Escape/blur/reset so nothing commits against a later scene, and exports no longer leak user guides or ignore background overrides.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Editing the canvas (move/resize/brush/mask/effects) now marks the project dirty — closing, new, or open no longer silently discards changes",
+            "User guides no longer leak into exported images",
+            "Export background overrides (solid color / transparent) now actually apply",
+            "Resize commits only on pointer-up (like drag), so a cancelled resize leaves the document untouched",
+            "Escape / window blur / full reset cancel in-flight gestures (no stranded session commits against a later scene)",
+            "Window blur no longer leaves the app stuck in a temporary Hand tool",
+            "Removed an unvalidated save-image IPC channel (security fix)"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "618 tests / 39 files passing; lint, typecheck, and production build clean",
+            "NSIS + portable packaging verified"
           ]
         }
       ]
@@ -170,7 +208,7 @@
         {
           "heading": "Shape System",
           "items": [
-            "11 SVG shape kinds with drag, resize, and z-order",
+            "12 SVG shape kinds with drag, resize, and z-order",
             "Shape fill, opacity, rotation, blur, blend mode",
             "Shape background image upload as SVG pattern fill",
             "Dedicated Shapes panel and layers integration"

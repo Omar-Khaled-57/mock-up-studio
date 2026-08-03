@@ -16,10 +16,10 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Tool System** — Bottom toolbar with Select, Brush, Eraser, Focus, and Mask tool groups; single-key shortcuts (V/H/M/X/B/E/G)
 - **Smart Snapping** — Snap to element edges, canvas center, grid, and guides; independent smart-guide and grid-snap toggles
 - **Text Editing** — Inline editing with inline editor (gradient, glow, shadow, stroke, letter/word spacing, text-transform, line height)
-- **Image Overlays** — Upload, position, and style images; opacity, border-radius, blend modes (13), flip X/Y, blur, glow, shadow, per-element effects
+- **Image Overlays** — Upload, position, and style images; opacity, border-radius, blend modes (12), flip X/Y, blur, glow, shadow, per-element effects
 
 ### Shape System
-- **13 SVG shape kinds** — Rectangle, circle, triangle, hexagon, diamond, parallelogram, trapezoid, cross, plus, heart, shield, arrow-right, star
+- **13 SVG shape kinds** — Rectangle, circle, ellipse, triangle, star, hexagon, diamond, parallelogram, trapezoid, cross, plus, heart, arrow-right
 - Shape fill, opacity, rotation, blur, blend mode, corner radius
 - Shape background image (SVG pattern fill)
 - Shape-specific thickness controls (cross, plus, arrow)
@@ -83,9 +83,9 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 |-------|-----------|
 | Desktop Shell | Electron 33 |
 | Bundler | electron-vite 2 (Vite 5) |
-| UI Framework | React 19 + TypeScript 5.6 |
+| UI Framework | React 18 + TypeScript 5.6 |
 | Styling | Tailwind CSS 3.4 |
-| State Management | Zustand 5 (14 slices + runtime store) |
+| State Management | Zustand 5 (13 slices + runtime store) |
 | Export | modern-screenshot 4 |
 | Archive | JSZip 3 |
 | Icons | Lucide React |
@@ -142,53 +142,31 @@ npm run typecheck
 
 ## Project Structure
 
+The canonical, up-to-date source tree lives in **[`docs/folder-structure.md`](./docs/folder-structure.md)** — a complete `src/` walkthrough with per-directory descriptions and repository conventions. A high-level summary:
+
 ```
 src/
-  main/                    Electron main process
-    index.ts               Window creation, lifecycle, file association, close guard
-    menu.ts                Native Electron menu
-    ipc-handlers.ts        IPC handlers (save, open, recovery)
-    file-system.ts         Recovery, recent projects, ZIP I/O
-    auto-updater.ts        GitHub Releases auto-update (6h interval)
-  preload/
-    index.ts               contextBridge API
-  shared/
-    types.ts               Core interfaces (Scene, Device, TextBox, Shape, Mask, etc.)
+  main/            Electron main process (window, menu, IPC, file I/O, auto-update)
+  preload/         contextBridge API (sandbox-compatible CJS build)
+  shared/          types.ts — core interfaces shared across processes
+  guide/           In-app User Guide content
   renderer/
-    App.tsx                Root layout, dirty tracking, menu IPC, file association
-    store/                 Zustand document store (14 merged slices + dirty tracking)
-    runtime/               Zustand runtime store (transient editor state, reset hooks)
-    tools/                 Tool system: manager, registry, types, tool implementations
-      tools/               Select, Hand, Marquee, Focus, Paint, Blur, Eraser, Magic Eraser, Delete, Mask
-    services/              Pure logic: rasterizer, transform, stroke, polygon-clip,
-                            mask-diff, mask-brush, mask-visualization, mask-snapshot,
-                            hit-test, snapping, geometry, capabilities, focus,
-                            container-clip, container-drop, preview, viewport,
-                            shape-geometry, selection-chrome
-    hooks/                 useDebouncedHistory, useKeyboardShortcuts, useTheme
-    lib/                   constants, device-utils, export-engine, effects,
-                            project-serialization, file-upload, color-extraction,
-                            brush-presets, element-factories, id, color-utils, icons
-    elements/              ElementFacade (presentational wrapper, mask application)
-    components/
-      canvas/              Canvas, Scene, ToolEventSurface, OverlayRenderer,
-                            StrokeSurface, PreviewSurface, Ruler, Grid, Guides,
-                            FocusDim, CanvasChromeBar, CanvasEmptyState
-      devices/             DeviceFrame, ScreenContainer + shell components
-      text/                InlineEditor, TextBox, RenameOverlay
-      images/              ImageOverlay
-      shapes/              ShapeRenderer
-      backgrounds/         7 preset backgrounds + Solid/Gradient/BackgroundRenderer
-      sidebar/             Sidebar, devices/images/text/shapes/themes/grid/layers/version-history/watermark panels, SceneTabs, ExportDialog, LayoutTemplates
-      toolbar/             BottomToolbar, ToolButton, ToolOptionsPanel, icons
-      primitives/          Button, IconButton, Modal, Menu, NumberInput, SliderInput,
-                            SegmentedControl, AccordionSection, Badge, Kbd,
-                            Field, Tooltip, ChromeStrip, ResponsiveButtonGroup
-      masks/               MaskSnapshotLayer
-      effects/             EffectsEditor
-      shared/              ErrorBoundary, ResizeHandles, ShortcutsModal,
-                            GradientEditor, ShadowEditor, GlowEditor, UserGuide, Checkerboard
-      splash/              SplashScreen
+    App.tsx        Root layout, dirty tracking, menu IPC, file association
+    store/         Zustand document store (13 merged slices)
+    runtime/       Zustand runtime store (transient editor state)
+    tools/         Tool system: manager, registry, types, tool implementations
+    services/      Pure logic: rasterizer, transform, stroke, polygon-clip,
+                   mask system, hit-test, snapping, geometry, preview, viewport
+    hooks/         useDebouncedHistory, useKeyboardShortcuts, useTheme, ...
+    lib/           constants, device-utils, export-engine, effects,
+                   project-serialization, brush-presets, element-factories, ...
+    elements/      ElementFacade (presentational wrapper, mask application)
+    components/    canvas, devices, text, images, shapes, backgrounds,
+                   effects, masks, primitives, sidebar, shared, splash, toolbar
+  __tests__/       Vitest + Testing Library suites (72 test files)
+docs/              Architecture documentation (see docs/index.md)
+public/            Icons + in-app changelog.json
+release/           electron-builder output
 ```
 
 ## Architecture
@@ -199,7 +177,7 @@ Mockup Studio uses **two separate Zustand stores**:
 
 | Store | Description |
 |-------|-------------|
-| **Document store** (`store/`) | All persisted state. Composed of 14 merged slices: project, scene, selection, history, viewport, UI, export, clipboard, version-history, watermark, shape, mask, effects, dirty-tracking. |
+| **Document store** (`store/`) | All persisted state. Composed of 13 merged slices: project, scene, selection, history, viewport, UI, export, clipboard, version-history, watermark, shape, mask, effects. |
 | **Runtime store** (`runtime/store.ts`) | Transient editor state (active tool, hover, marquee, brush settings, focus, previews, snap guides, editing). Never serialized. Importable by document slices via `resetRuntime`, but never the reverse. |
 
 | Slice | Responsibility |
@@ -244,7 +222,7 @@ assets/                Device screens, images, thumbnails (base64 in manifest)
 
 ## Testing
 
-949 tests across 59 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
+1074 tests across 72 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
 
 ## License
 

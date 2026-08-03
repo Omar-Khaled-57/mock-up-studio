@@ -5,9 +5,9 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - 2026-08-02
+## [0.3.0] - 2026-08-04
 
-A major release overhauling the tool system, adding the complete mask engine, brush tools, visual feedback layer, and a v0.3.0 redesign foundation. The editor moves from inline element handlers to a centralized Tool Manager pattern, introduces first-class masking with polygon boolean clipping, and adds paint/eraser/blur/focus tools. The UI gets a bottom toolbar, contextual Properties panel, canvas chrome bar, and export modal.
+A major release overhauling the tool system, adding the complete mask engine, brush tools, visual feedback layer, and the v0.3.0 redesign foundation. The editor moves from inline element handlers to a centralized Tool Manager pattern, introduces first-class masking with polygon boolean clipping, and adds paint/eraser/blur/focus tools. The UI gets a bottom toolbar, contextual Properties panel, canvas chrome bar, and export modal.
 
 ### Tool System
 
@@ -29,6 +29,8 @@ A major release overhauling the tool system, adding the complete mask engine, br
 - **Frozen mask snapshots** — opt-in whole-scene capture glued to the target, rotating with it (Refresh action)
 - **Background/canvas masks** — sentinel `__background__` target clips the whole scene, including later-added content
 - **Reveal-mask recovery** — an unmask stroke on a whole-canvas reveal removes it entirely
+- **Scene-level canvas masks** — background masks clip the whole scene (background + grid + all elements), so content added after a mask is clipped too
+- **Export mask punch** — the export engine reproduces mask holes deterministically on the raster (canvas `destination-out` + `evenodd`), since foreignObject capture silently drops evenodd clip-paths; scene backgrounds composite through the punched hole
 - **Transparency checkerboard** — 64×64 black + blue squares for mask and transparent-canvas visualization
 
 ### Image Editing Tools
@@ -39,12 +41,19 @@ A major release overhauling the tool system, adding the complete mask engine, br
 - **Magic Eraser** — tolerance-based flood-fill erase
 - **Delete tool** — single-click element deletion
 - **Per-element image effects** — 9 non-destructive effects (brightness, contrast, exposure, saturation, hue, gamma, temperature, tint, blur)
-- **Image enhancements** — opacity, border-radius, blend modes (13), flip X/Y, CSS blur, glow, shadow
+- **Image enhancements** — opacity, border-radius, blend modes (12), flip X/Y, CSS blur, glow, shadow
 - **`objectFit: 'fill'`** — images always fill their box for WYSIWYG aspect-ratio lock
+
+### Shapes
+
+- **Gradient shape fills** — reusable fill control with solid + linear / radial / conic gradients; renders identically on canvas, in exports, and in the rasterizer
+- **Cross containers** — cross (`✕`) shapes clip their children to the exact union outline (12-gon), no box fallback
+- **WYSIWYG resize** — the shape render tracks live resize bounds via the shared ghost source, so shapes never letterbox during a gesture
 
 ### Selection & Editing Improvements
 
 - **Focus mode (X)** — group-scoped editing with a dimming scrim and highlight ring; dimmed content rejects all interactions
+- **Element focus** — focus works on every element kind (devices, text boxes, images, shapes); new elements auto-parent into the focused container, and the container's clip lifts while focused so children stay fully editable
 - **Container clips** — grouped elements render clipped to their container's shape outline at render time
 - **Drag-to-nest** — drag one element onto another to make it a child (clipped to parent); empty-canvas drop un-nests
 - **Aspect ratio lock** — per-element toggle in the Transform row; locked elements resize proportionally without Shift
@@ -79,7 +88,7 @@ A major release overhauling the tool system, adding the complete mask engine, br
 ### Internal Improvements
 
 - **Two-store architecture** — Document store (serialized/snapshotted) separated from Runtime store (transient, reset-aware)
-- **14 merged Zustand slices** (was 10) — shape, mask, effects, and container-drop slices added
+- **13 merged Zustand slices** (was 10) — shape, mask, and effects slices added
 - **Dirty tracking** — `attachDirtyTracking` detects scene reference changes; `withDirtySuppressed` for programmatic loads
 - **Full reset hooks** — `registerFullResetHook` fires registered callbacks on project load/new
 - **Gesture interrupt** — `onInterrupt` lifecycle on every tool; Escape/blur/reset clears all pending state
@@ -101,6 +110,9 @@ A major release overhauling the tool system, adding the complete mask engine, br
 - **RenameOverlay double-commit on Enter** — Enter triggers commit → unmount → blur → commit again; now guarded with `doneRef`
 - **LayersPanel JSX syntax errors** — ternary false branches missing closing tokens
 - **LayersPanel duplicate visibility button** — lock button was replaced with second visibility button
+- **Mask clip rendering** — multi-contour `polygon(… evenodd)` is corrupted by Chromium's contour joining (and trailing `evenodd` was rejected outright); all mask and focus-dim clips now emit opposite-wound `path()` subpaths, matching real-browser pixel probes
+- **Export masks** — evenodd clip-paths were dropped by foreignObject capture; masks now punch the exported raster deterministically so exports match the editor
+- **Calligraphy → Pen** — the brush preset is labelled Pen (button identity) while the options strip keeps the "Calligraphy" heading
 
 ### Removed
 
@@ -109,7 +121,7 @@ A major release overhauling the tool system, adding the complete mask engine, br
 
 ### Quality
 
-- 949 tests / 59 files passing (was 136 / 12)
+- 1074 tests / 72 files passing (was 136 / 12)
 - ESLint zero errors / zero warnings
 - TypeScript strict mode clean
 - Production build clean (pre-existing dynamic-import warnings only)
@@ -177,7 +189,7 @@ A major release overhauling the tool system, adding the complete mask engine, br
 ### Added
 
 #### Shape System
-- 11 SVG shape kinds: rectangle, circle, triangle, hexagon, diamond, parallelogram, trapezoid, cross, plus, heart, shield, arrow-right
+- 12 SVG shape kinds: rectangle, circle, triangle, hexagon, diamond, parallelogram, trapezoid, cross, plus, heart, shield, arrow-right
 - Shape CRUD with dedicated slice, panel, and z-order support
 - Shape fill color, opacity, rotation, blur, blend mode
 - Shape background image upload (rendered as SVG pattern fill)

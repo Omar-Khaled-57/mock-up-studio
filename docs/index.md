@@ -17,6 +17,7 @@
 | [Tools](./tools.md) | Tool manager, select/hand/marquee/focus/mask/brush tool taxonomy and behavior |
 | [State Management](./state.md) | Zustand store (13 slices), history, serialization, clipboard, runtime store |
 | [Components](./components.md) | Component hierarchy, element facades, overlay renderer, canvas subsystems |
+| [Folder Structure](./folder-structure.md) | Canonical, up-to-date source tree for the whole repository |
 | [Core Types](./types.md) | Type definitions for Scene, Device, TextBox, ImageOverlay, Shape, Mask, Background, etc. |
 
 ### Existing Specialized Documents
@@ -37,10 +38,10 @@
 |---|---|
 | Desktop shell | Electron (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`) |
 | Bundler | electron-vite (requires Vite 5) |
-| UI framework | React 19 + TypeScript |
+| UI framework | React 18 + TypeScript |
 | Styling | Tailwind CSS 3.4 |
 | State management | Zustand (13 slices merged into a single store + separate runtime store) |
-| Testing | vitest + jsdom (980 tests across 64 files) |
+| Testing | vitest + jsdom (1074 tests across 72 files) |
 | Packaging | electron-builder (Windows NSIS/portable, macOS DMG, Linux AppImage) |
 | Auto-update | electron-updater via GitHub Releases |
 
