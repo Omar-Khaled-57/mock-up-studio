@@ -4,7 +4,9 @@ import { safeScene } from '../../store/sceneSlice'
 import { useTheme } from '../../hooks/useTheme'
 import { ICON } from '../../lib/icons'
 import { createDefaultShape } from '../../store/shapeSlice'
+import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
 import type { ShapeKind } from '@shared/types'
+import ShapeColorControl from '../shapes/ShapeColorControl'
 import { Eye, EyeOff, Lock, Unlock, Trash2, Copy, Image as ImageIcon } from 'lucide-react'
 
 function TrapezoidIcon() {
@@ -49,6 +51,7 @@ export default function ShapesPanel() {
   const removeShape = useStore((s) => s.removeShape)
   const duplicateSelected = useStore((s) => s.duplicateSelected)
   const pushHistory = useStore((s) => s.pushHistory)
+  const pushHistoryDebounced = useDebouncedHistory()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingShapeRef = useRef<string | null>(null)
 
@@ -277,6 +280,22 @@ export default function ShapesPanel() {
           </div>
         )}
       </div>
+
+      {/* Selected shape fill */}
+      {selectedShape && (
+        <div>
+          <h3 className={clsx("text-xs font-semibold uppercase tracking-wider mb-2", text.secondary)}>
+            Selected Shape Fill
+          </h3>
+          <ShapeColorControl
+            shape={selectedShape}
+            onChange={(patch) => {
+              updateShape(selectedShape.id, patch)
+              pushHistoryDebounced('Shape fill')
+            }}
+          />
+        </div>
+      )}
     </div>
   )
 }

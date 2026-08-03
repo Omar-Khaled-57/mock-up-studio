@@ -88,11 +88,11 @@ describe('refreshMaskSnapshot', () => {
   it('re-captures into an existing mask with one history entry; undo restores', async () => {
     useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [makeDevice({ id: 'dev-1', x: 0, y: 0, width: 100, height: 100 })] }] })
     const state = useStore.getState()
-    state.addMask({ id: 'm1', targetId: 'dev-1', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, points: [], inverted: true })
+    state.addMask({ id: 'm1', name: 'Mask 1', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, inverted: true, zIndex: 0, visible: true, locked: false })
     expect(useStore.getState().undoStack.length).toBe(0)
 
     await useStore.getState().refreshMaskSnapshot('m1')
-    expect(captureMaskSnapshot).toHaveBeenCalledWith({ x: 0, y: 0, width: 100, height: 100 })
+    expect(captureMaskSnapshot).toHaveBeenCalledWith({ x: 0, y: 0, width: 50, height: 50 })
     expect(maskOf()[0].snapshot).toEqual(SNAPSHOT)
     expect(useStore.getState().undoStack.length).toBe(1)
 
@@ -104,7 +104,7 @@ describe('refreshMaskSnapshot', () => {
     vi.mocked(captureMaskSnapshot).mockResolvedValue(null)
     useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [makeDevice({ id: 'dev-1', x: 0, y: 0, width: 100, height: 100 })] }] })
     const state = useStore.getState()
-    state.addMask({ id: 'm1', targetId: 'dev-1', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, points: [], inverted: true })
+    state.addMask({ id: 'm1', name: 'Mask 1', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, inverted: true, zIndex: 0, visible: true, locked: false })
 
     await useStore.getState().refreshMaskSnapshot('m1')
     expect(maskOf()[0].snapshot).toBeUndefined()
@@ -116,11 +116,11 @@ describe('refreshMaskSnapshot', () => {
     expect(useStore.getState().undoStack.length).toBe(0)
   })
 
-  it('refreshing the background sentinel captures the canvas box', async () => {
+  it('refreshing a full-canvas mask captures the canvas box', async () => {
+    const canvas = useStore.getState().scenes[0].canvas
     useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [], textBoxes: [] }] })
     const state = useStore.getState()
-    state.addMask({ id: 'mbg', targetId: '__background__', shape: 'rectangle', x: 0, y: 0, width: 50, height: 50, points: [], inverted: true })
-    const canvas = useStore.getState().scenes[0].canvas
+    state.addMask({ id: 'mbg', name: 'Mask 1', shape: 'rectangle', x: 0, y: 0, width: canvas.width, height: canvas.height, inverted: true, zIndex: 0, visible: true, locked: false })
 
     await useStore.getState().refreshMaskSnapshot('mbg')
     expect(captureMaskSnapshot).toHaveBeenCalledWith({ x: 0, y: 0, width: canvas.width, height: canvas.height })

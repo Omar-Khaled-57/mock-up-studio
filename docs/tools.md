@@ -526,34 +526,32 @@ Blur region previews use `buildBlurRegionPreview` (white fill, hatch, glow) via 
 
 ### Pointer-Down
 
-1. Hit required (or targets background sentinel if empty canvas).
-2. `getCapabilities(hit.kind).maskable` gate + `hit.locked` reject.
-3. **Focus gate**: `isInFocusScope` check — out-of-scope → `clearSelection()` + return.
-4. `selectDirect(hit.id)` — selects the target so the PropertiesPanel shows its mask controls.
-5. Builds `PendingMask { pointerId, targetId, shape, inverted, element, anchor, last, points, radius }`.
-6. `ctx.claimPointer()`.
-7. `beginInteraction({ kind: 'mask' })`.
-8. Pushes preview (`buildMaskPreview`).
+1. No hit required — masks are scene-wide. An empty-canvas press still starts a mask (like painting on the canvas).
+2. Focus-gated via the runtime `maskPreview`; no element selection happens (masks have no target).
+3. Builds `PendingMask { pointerId, shape, inverted, anchor, last, points, radius }` with **scene-space** geometry.
+4. `ctx.claimPointer()`.
+5. `beginInteraction({ kind: 'mask' })`.
+6. Pushes preview (`buildMaskPreview`).
 
 ### Pointer-Move
 
 - Updates `pm.last`.
 - For brush: appends to `pm.points` (with `BRUSH_MIN_DISTANCE_SQ = 2.25` spatial simplification).
-- Pushes preview (`previewToMaskVisual` → `rt.setPreview`).
+- Pushes preview (`previewToMaskVisual(preview, canvasWidth, canvasHeight)` → `rt.setPreview`).
 
 ### Pointer-Up
 
 1. If brush: appends pointer-up point if it's at least `BRUSH_MIN_DISTANCE_SQ` from last.
 2. Sub-3px drag check (`MIN_DRAG_DISTANCE_SQ = 9`): skip commit → clear preview + interaction (no history entry).
-3. **Convert to local coords**: `toLocalPoint(pm.element, ZERO_ORIGIN, point)` for all stroke points.
+3. **Geometry is already scene-space** — no local-frame conversion (`toLocalPoint` is not used by masks).
 4. Build the stroke ring based on shape:
-   - brush → `buildMaskStrokePolygon(localPoints, radius)`
-   - ellipse → `ellipseRing(localPoints[0], localPoints[1] as corner)`
-   - rect → `rectRing(localPoints[0], localPoints[1] as corner)`
+   - brush → `buildMaskStrokePolygon(points, radius)`
+   - ellipse → `ellipseRing(points[0], points[1] as corner)`
+   - rect → `rectRing(points[0], points[1] as corner)`
 5. **Commit branch**:
-   - **Mask mode (inverted)**: `commitLiveMask` → `pushHistory('Add mask')` + `addMask({ ...mask, inverted: true })`. Additive — a fresh mask for each stroke.
-   - **Unmask mode (non-inverted)**: `resolveUnmaskCommit(scene.masks.filter(m => m.targetId === pm.targetId), stroke, element.width, element.height)` → if non-null: `pushHistory('Unmask')` + `replaceTargetMasks(targetId, commit)`.
-6. `emitGhost(null)` equivalent — `rt.setMaskPreview(null)`.
+   - **Mask mode (inverted)**: `commitLiveMask` → `pushHistory('Add mask')` + `addMask({ ...mask, inverted: true, zIndex: nextMaskZIndex(scene) })`. Additive — a fresh mask for each stroke.
+   - **Unmask mode (non-inverted)**: `resolveUnmaskCommit(scene.masks, stroke, canvasWidth, canvasHeight)` → if non-null: `pushHistory('Unmask')` + `replaceMasks(commit)`. Masks are scene layers — no target filter.
+6. `rt.setMaskPreview(null)`.
 7. `endInteraction()`.
 
 ### Pointer-Cancel / Interrupt
@@ -562,7 +560,7 @@ Clears `pm` (pending mask), ends interaction, clears mask preview (`rt.setMaskPr
 
 ### Mask Options Panel
 
-The `ToolOptionsPanel` renders Shape buttons (Rect / Ellipse / Freehand / Brush) when the active tool is `mask`, wired to `rt.maskShape` / `rt.setMaskShape`. Also a Mode toggle (Mask / Unmask).
+The `ToolOptionsPanel` renders Shape buttons (Rect / Ellipse / Freehand / Brush) wired to `rt.maskShape` / `rt.setMaskShape`, a Mode toggle (Mask / Unmask), a brush-radius slider (`rt.brush.size`), and a "Clear masks" danger button (`clearAllMasks`). The mask/editor UI lives in the dedicated **Masks panel** (`sidebarTab === 'masks'`, see `docs/mask-engine.md` §13.2).
 
 ---
 

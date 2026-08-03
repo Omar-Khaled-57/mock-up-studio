@@ -18,6 +18,8 @@ interface GradientMock {
   y0: number
   x1: number
   y1: number
+  r0?: number
+  r1?: number
   stops: [number, string][]
 }
 
@@ -32,6 +34,9 @@ class FakeCtx {
   gradients: GradientMock[] = []
   translateCalls: [number, number][] = []
   rotateCalls: number[] = []
+  scaleCalls: [number, number][] = []
+  beginPathCalls = 0
+  pathCalls = 0
 
   constructor() {
     FakeCtx.instances.push(this)
@@ -59,8 +64,32 @@ class FakeCtx {
   rotate(a: number): void {
     this.rotateCalls.push(a)
   }
+  scale(x: number, y: number): void {
+    this.scaleCalls.push([x, y])
+  }
+  beginPath(): void {
+    this.beginPathCalls++
+  }
+  moveTo(): void {
+    this.pathCalls++
+  }
+  lineTo(): void {
+    this.pathCalls++
+  }
+  closePath(): void {
+    this.pathCalls++
+  }
   createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient {
     const grad: GradientMock = { x0, y0, x1, y1, stops: [] }
+    this.gradients.push(grad)
+    return {
+      addColorStop: (offset: number, color: string) => {
+        grad.stops.push([offset, color])
+      }
+    } as unknown as CanvasGradient
+  }
+  createRadialGradient(x0: number, y0: number, r0: number, x1: number, y1: number, r1: number): CanvasGradient {
+    const grad: GradientMock = { x0, y0, x1, y1, r0, r1, stops: [] }
     this.gradients.push(grad)
     return {
       addColorStop: (offset: number, color: string) => {
@@ -187,6 +216,64 @@ describe('shape-rasterizer', () => {
       await rasterizeShapeBitmap(shape)
 
       expect(FakePath2D.instances[0].pathData).toContain('A 50 50')
+    })
+
+    it('rasterizes a radial circle gradient with a canvas radial gradient', async () => {
+      const shape = makeShape({
+        id: 'shp-1',
+        width: 100,
+        height: 80,
+        color: '#000000',
+        gradient: { enabled: true, colors: ['#ff0000', '#00ff00', '#0000ff'], angle: 0, type: 'radial', radialShape: 'circle' }
+      })
+      await rasterizeShapeBitmap(shape)
+
+      const ctx = FakeOffscreenCanvas.instances[0]
+      expect(ctx.gradients).toHaveLength(1)
+      const grad = ctx.gradients[0]
+      expect(grad.r0).toBe(0)
+      // circle → farthest corner radius
+      expect(grad.r1).toBeCloseTo(Math.sqrt(50 * 50 + 40 * 40))
+      expect(grad.stops).toEqual([[0, '#ff0000'], [0.5, '#00ff00'], [1, '#0000ff']])
+      expect(ctx.scaleCalls).toHaveLength(0)
+      expect(ctx.rotateCalls).toHaveLength(0)
+      expect(ctx.fillRects).toBe(1)
+    })
+
+    it('rasterizes a radial ellipse gradient with a y-scale squash', async () => {
+      const shape = makeShape({
+        id: 'shp-1',
+        width: 100,
+        height: 80,
+        color: '#000000',
+        gradient: { enabled: true, colors: ['#ff0000', '#0000ff'], angle: 0, type: 'radial', radialShape: 'ellipse' }
+      })
+      await rasterizeShapeBitmap(shape)
+
+      const ctx = FakeOffscreenCanvas.instances[0]
+      expect(ctx.scaleCalls).toEqual([[1, 80 / 100]])
+      // ellipse → x half-width
+      expect(ctx.gradients[0].r1).toBeCloseTo(50)
+      expect(ctx.rotateCalls).toHaveLength(0)
+    })
+
+    it('rasterizes a conic gradient as 128 angular wedges without a canvas gradient', async () => {
+      const shape = makeShape({
+        id: 'shp-1',
+        width: 100,
+        height: 80,
+        color: '#000000',
+        gradient: { enabled: true, colors: ['#ff0000', '#0000ff'], angle: 45, type: 'conic', radialShape: 'circle' }
+      })
+      await rasterizeShapeBitmap(shape)
+
+      const ctx = FakeOffscreenCanvas.instances[0]
+      expect(ctx.gradients).toHaveLength(0)
+      expect(ctx.fillRects).toBe(128)
+      expect(ctx.beginPathCalls).toBe(128)
+      // each wedge contributes moveTo + 2 lineTo + closePath
+      expect(ctx.pathCalls).toBe(128 * 4)
+      expect(ctx.rotateCalls).toHaveLength(0)
     })
 
     it('uses shape color for non-gradient shapes', async () => {

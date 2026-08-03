@@ -116,11 +116,27 @@ function ShapeRenderer({ shape }: Props) {
   }, [shape.shadow, shape.glow])
 
   let fill = shape.color
+  const grad = shape.gradient
+  const gradType = (grad?.type ?? 'linear') as 'linear' | 'radial' | 'conic'
+  const radialShape = grad?.radialShape ?? 'circle'
+  const gradEnabled = !!grad?.enabled && (grad?.colors.length ?? 0) >= 2
+  // The cross renders as two parallelogram arms (CrossPaths) and the conic
+  // overlay is a clipped foreignObject that only makes sense for a single
+  // closed path — a cross falls back to an angle-based linear gradient.
+  const effGradType = gradEnabled && gradType === 'conic' && shape.kind === 'cross' ? 'linear' : gradType
   if (shape.backgroundImage) {
     fill = `url(#img-${shape.id})`
-  } else if (shape.gradient?.enabled && shape.gradient.colors.length >= 2) {
+  } else if (gradEnabled && effGradType !== 'conic') {
     fill = `url(#gradient-${shape.id})`
+  } else if (gradEnabled) {
+    fill = grad!.colors[0]
   }
+
+  const gradStops = (() => {
+    if (!gradEnabled) return ''
+    const n = grad!.colors.length - 1
+    return grad!.colors.map((color, i) => `${color} ${(i / n) * 100}%`).join(', ')
+  })()
 
   return (
     <ElementFacade
@@ -152,13 +168,25 @@ function ShapeRenderer({ shape }: Props) {
               {svgFilterDef}
             </filter>
           )}
-          {shape.gradient?.enabled && shape.gradient.colors.length >= 2 && (
+          {gradEnabled && effGradType === 'linear' && (
             <linearGradient id={`gradient-${shape.id}`} x1="0%" y1="0%" x2="0%" y2="100%"
-              gradientTransform={`rotate(${shape.gradient.angle}, 0.5, 0.5)`}>
-              {shape.gradient.colors.map((color, i) => (
-                <stop key={i} offset={`${(i / (shape.gradient!.colors.length - 1)) * 100}%`} stopColor={color} />
+              gradientTransform={`rotate(${grad!.angle ?? 135}, 0.5, 0.5)`}>
+              {grad!.colors.map((color, i) => (
+                <stop key={i} offset={`${(i / (grad!.colors.length - 1)) * 100}%`} stopColor={color} />
               ))}
             </linearGradient>
+          )}
+          {gradEnabled && effGradType === 'radial' && (
+            <radialGradient id={`gradient-${shape.id}`} cx="50%" cy="50%" r={radialShape === 'ellipse' ? '50%' : '70.71%'}>
+              {grad!.colors.map((color, i) => (
+                <stop key={i} offset={`${(i / (grad!.colors.length - 1)) * 100}%`} stopColor={color} />
+              ))}
+            </radialGradient>
+          )}
+          {gradEnabled && effGradType === 'conic' && (
+            <clipPath id={`shape-clip-${shape.id}`}>
+              <path d={path} />
+            </clipPath>
           )}
           {shape.backgroundImage && (
             <pattern id={`img-${shape.id}`} width="1" height="1" patternUnits="objectBoundingBox">
@@ -168,6 +196,16 @@ function ShapeRenderer({ shape }: Props) {
         </defs>
         <g filter={svgFilterId ? `url(#${svgFilterId})` : undefined}>
           {shape.kind === 'cross' ? <CrossPaths w={w} h={h} thickness={shape.crossThickness ?? 0.3} fill={fill} /> : <path d={path} fill={fill} />}
+          {gradEnabled && effGradType === 'conic' && (
+            <g clipPath={`url(#shape-clip-${shape.id})`}>
+              <foreignObject x={0} y={0} width={w} height={h}>
+                <div
+                  {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as React.HTMLAttributes<HTMLDivElement> & { xmlns?: string })}
+                  style={{ width: '100%', height: '100%', background: `conic-gradient(from ${grad!.angle ?? 0}deg, ${gradStops})` }}
+                />
+              </foreignObject>
+            </g>
+          )}
         </g>
       </svg>
 

@@ -10,10 +10,8 @@ import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { createDefaultScene } from '../renderer/store/sceneSlice'
 import Scene from '../renderer/components/canvas/Scene'
-import ElementFacade from '../renderer/elements/ElementFacade'
 import { buildContainerClip } from '../renderer/services/container-clip'
-import { buildMaskClipPath } from '../renderer/services/mask-visualization'
-import type { Mask, Scene as SceneType } from '@shared/types'
+import type { Scene as SceneType } from '@shared/types'
 
 class ResizeObserverStub {
   observe() {}
@@ -35,172 +33,38 @@ function wrapperFor(id: string): HTMLElement | null {
 }
 
 describe('buildContainerClip', () => {
-  it('rect containers get no shape clip (overflow handles it) and pass masks through', () => {
-    const mask: Mask = { id: 'm1', targetId: 'dev-1', shape: 'rectangle', x: 10, y: 20, width: 100, height: 50, points: [], inverted: false }
-    const clip = buildContainerClip({ kind: 'device', width: 600, height: 400, masks: [mask] })
+  it('rect containers get no shape clip (overflow handles it)', () => {
+    const clip = buildContainerClip({ kind: 'device', width: 600, height: 400 })
     expect(clip.shapeClip).toBeNull()
-    expect(clip.masks).toEqual([mask])
   })
 
   it('shape containers clip to the exact SVG outline', () => {
-    const clip = buildContainerClip({ kind: 'shape', width: 120, height: 80, shapeKind: 'rectangle', cornerRadius: 0, masks: [] })
+    const clip = buildContainerClip({ kind: 'shape', width: 120, height: 80, shapeKind: 'rectangle', cornerRadius: 0 })
     expect(clip.shapeClip).toMatch(/^path\('M 0 0 L 120 0 L 120 80 L 0 80 Z'\)$/)
   })
 
   it('shape clip uses the same path source as ShapeRenderer (circle)', () => {
-    const clip = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'circle', masks: [] })
+    const clip = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'circle' })
     expect(clip.shapeClip).toMatch(/^path\('M 0 50 A 50 50 0 1 1 100 50 A 50 50 0 1 1 0 50 Z'\)$/)
   })
 
   it('cross shapes clip to their exact ✕ union outline (no box fallback)', () => {
-    const clip = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.3, masks: [] })
+    const clip = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.3 })
     expect(clip.shapeClip).toMatch(/^path\('M .* Z'\)$/)
     expect(clip.shapeClip).not.toMatch(/^path\('M 0 0 L 100 0 L 100 100 L 0 100 Z'\)$/)
     expect(clip.shapeClip!.match(/-?\d+\.?\d* -?\d+\.?\d*/g)).toHaveLength(12)
   })
 
   it('plus/arrow/cross thickness feed the outline', () => {
-    const plus = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'plus', plusThickness: 0.5, masks: [] })
+    const plus = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'plus', plusThickness: 0.5 })
     expect(plus.shapeClip).not.toBeNull()
-    const arrow = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'arrow-right', arrowThickness: 0.7, masks: [] })
+    const arrow = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'arrow-right', arrowThickness: 0.7 })
     expect(arrow.shapeClip).not.toBeNull()
-    const crossThin = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.2, masks: [] })
-    const crossThick = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.5, masks: [] })
+    const crossThin = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.2 })
+    const crossThick = buildContainerClip({ kind: 'shape', width: 100, height: 100, shapeKind: 'cross', crossThickness: 0.5 })
     expect(crossThin.shapeClip).not.toBeNull()
     expect(crossThick.shapeClip).not.toBeNull()
     expect(crossThin.shapeClip).not.toBe(crossThick.shapeClip)
-  })
-})
-
-describe('ElementFacade multi-mask', () => {
-  beforeEach(() => {
-    resetStore()
-    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
-  })
-
-  afterEach(() => {
-    cleanup()
-    vi.unstubAllGlobals()
-  })
-
-  it('a single mask clips the element box with no nested layer (unchanged path)', () => {
-    const scene = emptyScene()
-    scene.devices = [makeDevice({ id: 'dev-c', x: 100, y: 100, width: 600, height: 400 })]
-    const mask: Mask = { id: 'm1', targetId: 'dev-c', shape: 'rectangle', x: 10, y: 20, width: 100, height: 50, points: [], inverted: false }
-    scene.masks = [mask]
-    setScene(scene)
-
-    render(
-      <ElementFacade id="dev-c" kind="device" locked={false} style={{ position: 'absolute', left: 100, top: 100, width: 600, height: 400 }}>
-        <div>content</div>
-      </ElementFacade>
-    )
-    const box = document.querySelector('[data-element-id="dev-c"]') as HTMLElement
-    expect(box.style.clipPath).toBe(buildMaskClipPath(mask, 600, 400))
-    expect(document.querySelectorAll('[data-element-mask-clip]')).toHaveLength(0)
-  })
-
-  it('multiple masks intersect via nested clip layers', () => {
-    const scene = emptyScene()
-    scene.devices = [makeDevice({ id: 'dev-c', x: 100, y: 100, width: 600, height: 400 })]
-    const m1: Mask = { id: 'm1', targetId: 'dev-c', shape: 'rectangle', x: 0, y: 0, width: 300, height: 400, points: [], inverted: false }
-    const m2: Mask = { id: 'm2', targetId: 'dev-c', shape: 'ellipse', x: 150, y: 100, width: 300, height: 200, points: [], inverted: false }
-    const m3: Mask = { id: 'm3', targetId: 'dev-c', shape: 'rectangle', x: 100, y: 100, width: 100, height: 100, points: [], inverted: false }
-    scene.masks = [m1, m2, m3]
-    setScene(scene)
-
-    render(
-      <ElementFacade id="dev-c" kind="device" locked={false} style={{ position: 'absolute', left: 100, top: 100, width: 600, height: 400 }}>
-        <div>content</div>
-      </ElementFacade>
-    )
-    const box = document.querySelector('[data-element-id="dev-c"]') as HTMLElement
-    expect(box.style.clipPath).toBe(buildMaskClipPath(m1, 600, 400))
-    const layers = Array.from(document.querySelectorAll('[data-element-mask-clip]')) as HTMLElement[]
-    expect(layers).toHaveLength(2)
-    expect(layers[0].style.clipPath).toBe(buildMaskClipPath(m2, 600, 400))
-    expect(layers[1].style.clipPath).toBe(buildMaskClipPath(m3, 600, 400))
-    expect(box.textContent).toContain('content')
-  })
-
-  it('a frozen masks[0] leaves the root unclipped and paints the snapshot sibling', () => {
-    const scene = emptyScene()
-    scene.devices = [makeDevice({ id: 'dev-c', x: 100, y: 100, width: 600, height: 400 })]
-    const frozen: Mask = {
-      id: 'm1',
-      targetId: 'dev-c',
-      shape: 'rectangle',
-      x: 10,
-      y: 10,
-      width: 100,
-      height: 50,
-      points: [],
-      inverted: true,
-      snapshot: {
-        dataUrl: 'data:image/png;base64,AA==',
-        width: 600,
-        height: 400,
-        sourceBounds: { x: 100, y: 100, width: 600, height: 400 },
-        capturedAt: 1
-      }
-    }
-    scene.masks = [frozen]
-    setScene(scene)
-
-    render(
-      <ElementFacade id="dev-c" kind="device" locked={false} style={{ position: 'absolute', left: 100, top: 100, width: 600, height: 400 }}>
-        <div>content</div>
-      </ElementFacade>
-    )
-    const box = document.querySelector('[data-element-id="dev-c"]') as HTMLElement
-    expect(box.style.clipPath).toBe('')
-    const snapshot = document.querySelector('[data-mask-snapshot]') as HTMLElement
-    expect(snapshot).not.toBeNull()
-    expect(snapshot.closest('[data-element-id="dev-c"]')).toBe(box)
-    const img = document.querySelector('[data-mask-snapshot-img]') as HTMLElement
-    expect(img.style.left).toBe('0px')
-    expect(img.style.top).toBe('0px')
-    expect(img.style.width).toBe('600px')
-    expect(img.style.height).toBe('400px')
-    expect(box.textContent).toContain('content')
-  })
-
-  it('a frozen extra mask clips live content to its visible region and paints the snapshot over its hidden region', () => {
-    const scene = emptyScene()
-    scene.devices = [makeDevice({ id: 'dev-c', x: 100, y: 100, width: 600, height: 400 })]
-    const m1: Mask = { id: 'm1', targetId: 'dev-c', shape: 'rectangle', x: 0, y: 0, width: 300, height: 400, points: [], inverted: false }
-    const frozen: Mask = {
-      id: 'm2',
-      targetId: 'dev-c',
-      shape: 'ellipse',
-      x: 150,
-      y: 100,
-      width: 300,
-      height: 200,
-      points: [],
-      inverted: false,
-      snapshot: {
-        dataUrl: 'data:image/png;base64,AA==',
-        width: 300,
-        height: 200,
-        sourceBounds: { x: 100, y: 100, width: 300, height: 200 },
-        capturedAt: 2
-      }
-    }
-    scene.masks = [m1, frozen]
-    setScene(scene)
-
-    render(
-      <ElementFacade id="dev-c" kind="device" locked={false} style={{ position: 'absolute', left: 100, top: 100, width: 600, height: 400 }}>
-        <div>content</div>
-      </ElementFacade>
-    )
-    const box = document.querySelector('[data-element-id="dev-c"]') as HTMLElement
-    expect(box.style.clipPath).toBe(buildMaskClipPath(m1, 600, 400))
-    const layers = Array.from(document.querySelectorAll('[data-element-mask-clip]:not([data-mask-snapshot])')) as HTMLElement[]
-    expect(layers).toHaveLength(1)
-    expect(layers[0].style.clipPath).toBe(buildMaskClipPath(frozen, 600, 400))
-    expect(document.querySelectorAll('[data-mask-snapshot]')).toHaveLength(1)
   })
 })
 
@@ -264,44 +128,6 @@ describe('Scene container clipping', () => {
     expect(wrapper!.style.clipPath).toMatch(/ Z'\)$/)
     expect(wrapper!.style.clipPath).not.toMatch(/^path\('M 0 0 L 120 0 L 120 120 L 0 120 Z'\)$/)
     expect(wrapper!.querySelector('[data-element-id="img-child"]')).not.toBeNull()
-  })
-
-  it('container masks are intersected as a nested clip layer', () => {
-    const scene = emptyScene()
-    const container = makeDevice({ id: 'dev-c', name: 'Container', x: 100, y: 100, width: 600, height: 400, zIndex: 5 })
-    scene.devices = [container]
-    scene.textBoxes = [makeTextBox({ id: 'tb-child', content: 'Child', x: 120, y: 120, zIndex: 1, containerId: 'dev-c' })]
-    const mask: Mask = { id: 'm1', targetId: 'dev-c', shape: 'rectangle', x: 10, y: 20, width: 100, height: 50, points: [], inverted: false }
-    scene.masks = [mask]
-    setScene(scene)
-
-    const { container: root } = render(<Scene />)
-    const wrapper = wrapperFor('dev-c')
-    expect(wrapper).not.toBeNull()
-    const maskLayer = wrapper!.querySelector('[data-container-mask-clip]') as HTMLElement | null
-    expect(maskLayer).not.toBeNull()
-    expect(maskLayer!.style.clipPath).toBe(buildMaskClipPath(mask, 600, 400))
-    expect(maskLayer!.contains(root.querySelector('[data-element-id="tb-child"]'))).toBe(true)
-  })
-
-  it('container masks intersect through every nested layer', () => {
-    const scene = emptyScene()
-    const container = makeDevice({ id: 'dev-c', name: 'Container', x: 100, y: 100, width: 600, height: 400, zIndex: 5 })
-    scene.devices = [container]
-    scene.textBoxes = [makeTextBox({ id: 'tb-child', content: 'Child', x: 120, y: 120, zIndex: 1, containerId: 'dev-c' })]
-    const m1: Mask = { id: 'm1', targetId: 'dev-c', shape: 'rectangle', x: 0, y: 0, width: 300, height: 400, points: [], inverted: false }
-    const m2: Mask = { id: 'm2', targetId: 'dev-c', shape: 'rectangle', x: 150, y: 100, width: 200, height: 200, points: [], inverted: false }
-    scene.masks = [m1, m2]
-    setScene(scene)
-
-    const { container: root } = render(<Scene />)
-    const wrapper = wrapperFor('dev-c')
-    expect(wrapper).not.toBeNull()
-    const layers = Array.from(wrapper!.querySelectorAll('[data-container-mask-clip]')) as HTMLElement[]
-    expect(layers).toHaveLength(2)
-    expect(layers[0].style.clipPath).toBe(buildMaskClipPath(m1, 600, 400))
-    expect(layers[1].style.clipPath).toBe(buildMaskClipPath(m2, 600, 400))
-    expect(layers[1].contains(root.querySelector('[data-element-id="tb-child"]'))).toBe(true)
   })
 
   it('focusing the container skips its clip so children render fully editable', () => {

@@ -15,12 +15,12 @@ export interface WatermarkSlice {
   setWatermark: (patch: Partial<WatermarkSettings>) => void
 }
 
-const DEFAULT_WATERMARK: WatermarkSettings = {
-  enabled: false,
+export const DEFAULT_WATERMARK: WatermarkSettings = {
+  enabled: true,
   text: 'Mockup Studio',
-  fontSize: 14,
+  fontSize: 34,
   color: '#ffffff',
-  opacity: 30,
+  opacity: 60,
   position: 'bottom-right'
 }
 

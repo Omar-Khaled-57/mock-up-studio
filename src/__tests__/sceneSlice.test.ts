@@ -280,6 +280,19 @@ describe('deleteSelected', () => {
     useStore.getState().deleteSelected(['del-sel'])
     expect(useStore.getState().selectedIds).toHaveLength(0)
   })
+
+  it('deleting elements leaves scene masks untouched', () => {
+    const dev = makeDevice({ id: 'del-mask-dev' })
+    const other = makeDevice({ id: 'del-mask-other' })
+    useStore.getState().addDevice(dev)
+    useStore.getState().addDevice(other)
+    useStore.getState().addMask({ id: 'm1', name: 'Mask 1', shape: 'rectangle', x: 0, y: 0, width: 100, height: 100, inverted: true, zIndex: 0, visible: true, locked: false })
+    useStore.getState().addMask({ id: 'm2', name: 'Mask 2', shape: 'rectangle', x: 0, y: 0, width: 100, height: 100, inverted: true, zIndex: 1, visible: true, locked: false })
+    useStore.getState().deleteSelected(['del-mask-dev'])
+    const scene = safeScene(useStore.getState())
+    expect(scene.masks.find((m) => m.id === 'm1')).toBeDefined()
+    expect(scene.masks.find((m) => m.id === 'm2')).toBeDefined()
+  })
 })
 
 // ---------- duplicateSelected ----------
@@ -311,6 +324,38 @@ describe('duplicateSelected', () => {
     useStore.getState().addDevice(dev)
     const newIds = useStore.getState().duplicateSelected(['dup-sel'])
     expect(useStore.getState().selectedIds).toEqual(newIds)
+  })
+
+  it('duplicating an element leaves scene masks untouched', () => {
+    const dev = makeDevice({ id: 'dup-mask-dev', x: 10, y: 20 })
+    useStore.getState().addDevice(dev)
+    useStore.getState().addMask({
+      id: 'm1',
+      name: 'Mask 1',
+      shape: 'brush',
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 60,
+      points: [{ x: 0, y: 0 }],
+      inverted: true,
+      zIndex: 0,
+      visible: true,
+      locked: false,
+      holes: [{ x: 2, y: 2 }].map(() => [{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 3 }, { x: 2, y: 3 }]),
+      snapshot: { dataUrl: 'data:image/png;base64,AAA', width: 50, height: 60, sourceBounds: { x: 0, y: 0, width: 50, height: 60 }, capturedAt: 99 }
+    })
+    const newIds = useStore.getState().duplicateSelected(['dup-mask-dev'])
+    const scene = safeScene(useStore.getState())
+    expect(newIds).toHaveLength(1)
+    expect(scene.masks).toHaveLength(1)
+    const mask = scene.masks[0]
+    expect(mask.id).toBe('m1')
+    expect(mask.inverted).toBe(true)
+    expect(mask.width).toBe(50)
+    expect(mask.points).toEqual([{ x: 0, y: 0 }])
+    expect(mask.holes).toEqual([[{ x: 2, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 3 }, { x: 2, y: 3 }]])
+    expect(mask.snapshot?.dataUrl).toBe('data:image/png;base64,AAA')
   })
 })
 

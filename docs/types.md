@@ -33,15 +33,16 @@ All element kinds share core fields: `id`, `name`, `visible`, `locked`, `x/y/wid
 interface Project {
   id: string              // UUID
   name: string            // User-facing project name
-  createdAt: string       // ISO timestamp
-  updatedAt: string       // ISO timestamp
+  createdAt: number       // Date.now() — no string/ISO variant
+  updatedAt: number       // Date.now()
   scenes: Scene[]         // Multi-scene: every tab/document is a Scene
   activeSceneIndex: number
-  filePath?: string       // OS path after save (absent for new/untitled)
+  // NOTE: Project has NO filePath — the OS save path is a separate
+  // projectSlice store field, not part of this type.
 }
 ```
 
-**Multi-scene:** The app supports multiple scenes (tabs). Each is fully independent (its own canvas, elements, masks). `activeSceneIndex` selects the current one. Pinned scenes are included in multi-scene export; unpinned are excluded.
+**Multi-scene:** The app supports multiple scenes (tabs). Each is fully independent (its own canvas, elements, masks). `activeSceneIndex` selects the current one. `pinned` is NOT an export filter — every scene is exported; `pinned` only marks delete-protection + a pinned tab in SceneTabs.
 
 ---
 
@@ -51,7 +52,7 @@ interface Project {
 interface Scene {
   id: string
   name: string
-  pinned: boolean           // User wants version history + multi-scene export
+  pinned: boolean           // Delete-protection + pinned tab (NOT export-filtered)
   canvas: CanvasSettings
   background: Background
   devices: Device[]
@@ -218,7 +219,7 @@ interface ImageOverlay {
   rotation: number          // degrees
   opacity: number          // 0-1
   borderRadius: number
-  blendMode: BlendMode     // 13 CSS blend modes (default 'normal')
+  blendMode: BlendMode     // 12 CSS blend modes (default 'normal')
   flipX: boolean
   flipY: boolean
   blur: number             // CSS blur radius
@@ -234,7 +235,7 @@ interface ImageOverlay {
 }
 ```
 
-**BlendMode:** All 13 CSS composite modes: `source-over`, `source-in`, `source-out`, `source-atop`, `destination-over`, `destination-in`, `destination-out`, `destination-atop`, `lighter`, `copy`, `xor`, `multiply`, `screen`, `overlay`, `darken`, ` lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`, `difference`, `exclusion`, `hue`, `saturation`, `color`, `luminosity`.
+**BlendMode:** Exactly 12 CSS blend modes (the `BlendMode` union in `types.ts` — not canvas composite modes): `normal`, `multiply`, `screen`, `overlay`, `darken`, `lighten`, `color-dodge`, `color-burn`, `hard-light`, `soft-light`, `difference`, `exclusion`.
 
 **Paint layers:** `ImageOverlay` entries whose `name` starts with `'Paint '` are paint layers (created by the Paint Brush tool). `isPaintLayer` checks the name prefix — these are filtered out of the ImagesPanel and get friendly sequential names.
 
@@ -291,32 +292,50 @@ interface Shape {
 ```typescript
 interface Mask {
   id: string
-  targetId: string         // References the element being masked (or '__background__')
-  shape: MaskShape         // 'rectangle' | 'ellipse' | 'brush'
-  x: number                // Element-local coordinates (rotated frame)
+  name: string              // User-facing (e.g. "Mask 1", renamed in the panel)
+  shape: MaskShape          // 'rectangle' | 'ellipse' | 'brush'
+  x: number                 // Scene-space bounding box (canvas units)
   y: number
   width: number
   height: number
-  points?: MaskPoint[]     // Brush-freeform polygon vertices (local)
-  inverted: boolean        // true = punch (drawn region transparent)
-  holes?: MaskPoint[][]    // Restored regions carved out (from subtractive unmask)
-  snapshot?: MaskSnapshot  // Frozen whole-scene capture
+  points: MaskPoint[]       // Brush-freeform polygon vertices (scene-space)
+  inverted: boolean         // true = punch (drawn region transparent)
+  zIndex: number            // Z-order layer — the mask preserves content at/below it
+  visible: boolean
+  locked: boolean
+  holes?: MaskPoint[][]     // Restored regions carved out (from subtractive unmask)
+  snapshot?: MaskSnapshot   // Frozen whole-scene capture
 }
 ```
 
-**targetId:** References elements by ID. Elements never know their masks — masks are queried by `targetId` in the renderer and overlay. The `BACKGROUND_MASK_TARGET_ID = '__background__'` sentinel targets the whole canvas.
+**Scene layer, no target:** Masks are independent layers — like devices/images/text
+boxes/shapes — with a `name`, a `zIndex`, and `visible`/`locked`. A mask has NO
+`targetId` and no element coupling: `x/y/width/height/points` are SCENE-space
+(canvas) coordinates, so the clip aligns with the canvas at render time and
+clips whatever content stacks above it.
 
-**Local coordinate frame:** `x/y/width/height/points` are in the target element's local frame (origin 0,0, unrotated). This is critical: the mask clip rotates with the element because the facade applies `transform: rotate(...)` on the same root. The renderer builds the clip-path in local coords and applies it via the facade's rotation.
+**Z-awareness:** A mask **preserves everything at or below its `zIndex`**
+(content beneath the mask — the scene background and anything drawn before it —
+shows through its region) **and punches out only content above it**. The
+renderer partitions the scene into z-bands and folds masks descending into
+clip wrappers (Scene.tsx); the export rebuilds the same per-band semantics on
+the raster.
 
 **Inverted polarity:**
-- `inverted: true` → punch: the drawn region becomes transparent (checkerboard shows).
-- `inverted: false` → reveal: the drawn region stays visible, rest is checkerboarded.
+- `inverted: true` → punch: the drawn region becomes transparent.
+- `inverted: false` → reveal: the drawn region stays visible, rest is transparent.
 
-**Additive masking:** Every `mask`-mode stroke adds a fresh mask (`addMask`), so strokes stack by clip-path intersection. No replace-in-place after the first stroke.
+**Additive masking:** Every `mask`-mode stroke adds a fresh mask (`addMask`),
+so strokes stack by z-order + clip-path intersection. No replace-in-place after
+the first stroke.
 
-**Subtractive unmask:** `unmask` mode uses `resolveUnmaskCommit` → `differenceRegion` (polygon boolean) to compute the residual masks. Residuals are always inverted brush masks.
+**Subtractive unmask:** `unmask` mode uses `resolveUnmaskCommit` →
+`differenceRegion` (polygon boolean) to compute the residual masks. Residuals
+are always inverted brush masks.
 
-**Holes:** Carved-out restored regions from subtractive unmask strokes. Rendered as nested evenodd contours in the CSS clip-path (`polygon(outer, hole1, hole2, ..., evenodd)`).
+**Holes:** Carved-out restored regions from subtractive unmask strokes. Rendered
+as nested evenodd contours in the CSS clip-path
+(`polygon(outer, hole1, hole2, ..., evenodd)`).
 
 ---
 
@@ -325,28 +344,38 @@ interface Mask {
 ```typescript
 interface MaskSnapshot {
   dataUrl: string         // PNG data URL of the captured scene
-  width: number           // Capture dimensions (scene canvas size)
+  width: number           // Snapshot pixels (sourceBounds × scale)
   height: number
-  sourceBounds: {        // Target element's scene-space bounds at capture
+  sourceBounds: {         // The mask's scene-space bounds at capture
     x: number, y: number, width: number, height: number
   }
-  capturedAt: number      // ISO timestamp
+  capturedAt: number      // Date.now()
 }
 ```
 
-**Frozen masks:** When a mask has a `snapshot`, it renders the captured scene pixels (via `MaskSnapshotLayer`) instead of the live checkerboard. The snapshot is cropped to the target's scene-space bounds at capture time. Refresh via the PropertiesPanel's "Refresh" button calls `refreshMaskSnapshot`.
+**Frozen masks:** When a mask has a `snapshot`, it renders the captured scene
+pixels (via `MaskSnapshotLayer`) instead of a live clip — the masked region
+shows exactly what the canvas looked like at capture time. Refresh via the
+MasksPanel's Freeze/Refresh action calls `refreshMaskSnapshot`; capture at
+creation is reverted (it was pixel-identical to the live canvas and invisible).
 
-**Asset serialization:** The `dataUrl` is walked by `project-serialization.ts`'s asset extractor — it's saved as `asset://img-N.png` in the ZIP and restored on load.
+**Asset serialization:** The `dataUrl` is walked by `project-serialization.ts`'s
+asset extractor — it's saved as `asset://img-N.png` in the ZIP and restored on
+load.
 
 ---
 
 ## MaskPoint
 
 ```typescript
-type MaskPoint = [number, number]  // [x, y] tuple — compact storage
+interface MaskPoint {
+  x: number
+  y: number
+}
 ```
 
-Used in `Mask.points` (brush-freeform vertices), `Mask.holes` (restored region rings), and serialization. Stored as tuples (not objects) for compactness.
+Used in `Mask.points` (brush-freeform vertices) and `Mask.holes` (restored
+region rings), always in scene coordinates.
 
 ---
 
@@ -495,13 +524,10 @@ Used by the canvas presets panel, export engine (canvas dimensions), and the emp
 
 ```typescript
 type BlendMode =
-  | 'source-over' | 'source-in' | 'source-out' | 'source-atop'
-  | 'destination-over' | 'destination-in' | 'destination-out' | 'destination-atop'
-  | 'lighter' | 'copy' | 'xor'
+  | 'normal'
   | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten'
   | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light'
   | 'difference' | 'exclusion'
-  | 'hue' | 'saturation' | 'color' | 'luminosity'
 ```
 
 Applied to `ImageOverlay` via CSS `mix-blend-mode` on the `<img>` element.
@@ -568,7 +594,7 @@ All `Serialized*` interfaces are structurally identical to their live counterpar
 - Legacy single-object `shadow`/`glow` → array format.
 - Legacy `objectFit: 'stretch'` → CSS `object-fit: fill`.
 
-**Asset references:** Data URLs in `screenImage`, `src`, `backgroundImage`, `image.src`, `mask.snapshot.dataUrl` are replaced with `asset://<filename>` references during serialization and restored on deserialization. The `asset://` → data URL conversion uses the binary buffers stored in the ZIP's `assets/` directory.
+**Asset references:** Data URLs in `screenImage`, `images[].src`, `background.image.src`, `mask.snapshot.dataUrl` are replaced with `asset://<filename>` references during serialization and restored on deserialization. Note: `Shape.backgroundImage` is **NOT** asset-walked — it stays a data URL inline in the manifest. The `asset://` → data URL conversion uses the binary buffers stored in the ZIP's `assets/` directory.
 
 ---
 
@@ -581,7 +607,7 @@ interface BrushOptions {
   size: number              // px (default 24, range 1-120)
   hardness: number          // 0-1 (default 0.6, affects blur radius / erase softness / tolerance)
   color: string             // Hex color (default '#6366f1')
-  shape: 'round' | 'square' | 'soft' | 'pixel'  // (default 'round')
+  shape: 'round' | 'square'   // BrushShape (default 'round')
   opacity: number           // 0-1 (default 1)
 }
 ```
@@ -592,7 +618,7 @@ interface BrushOptions {
 interface InteractionDescriptor {
   toolId: string
   pointerId: number
-  kind: 'move' | 'resize' | 'pan' | 'marquee' | 'paint' | 'mask' | 'blur' | 'unmask'
+  kind: string              // e.g. 'move' | 'resize' | 'pan' | 'marquee' | 'paint' | 'mask' | 'blur' | 'eraser' — plain string, not a union
   startedAt: number         // performance.now()
 }
 ```
@@ -601,14 +627,16 @@ interface InteractionDescriptor {
 
 ```typescript
 interface MaskPreviewState {
-  element: ElementGeometry  // scene-space geometry of the mask target
   shape: MaskPreviewShape   // 'rectangle' | 'ellipse' | 'brush'
+  points: { x: number; y: number }[]  // scene-space stroke geometry (corners or polyline)
   inverted: boolean         // mask/unmask polarity
   radius?: number           // brush radius (brush mode only)
 }
 ```
 
-**Purpose:** Live mask stroke visualization for the `MaskOverlay` renderer.
+**Purpose:** Live mask stroke visualization for the `MaskRenderer` overlay. Masks
+are scene-wide, so the preview carries **scene-space** geometry only — no target
+element (there is none).
 
 ```typescript
 interface PreviewState {

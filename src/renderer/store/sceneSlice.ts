@@ -188,7 +188,11 @@ function patchZIndex(
   return { ...scene, images: scene.images.map((i) => (i.id === id ? { ...i, zIndex: newZ } : i)) }
 }
 
-/** Removes an element by id from the appropriate typed array. */
+/**
+ * Removes an element by id from the appropriate typed array. Masks are
+ * independent scene layers (never tied to an element), so deleting an element
+ * does not touch `Scene.masks`.
+ */
 function removeById(scene: Scene, kind: ElementKind, id: string): Scene {
   if (kind === 'device') return { ...scene, devices: scene.devices.filter((d) => d.id !== id) }
   if (kind === 'textbox') return { ...scene, textBoxes: scene.textBoxes.filter((t) => t.id !== id) }
@@ -465,7 +469,8 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
   /**
    * Deep-clones selected elements with offset positions (+30px) and new IDs.
    * Duplicates are placed on top (maxZ + 1) and automatically selected.
-   * Returns the IDs of the newly created clones.
+   * Masks are independent scene layers, so duplicating an element does not
+   * duplicate any masks. Returns the IDs of the newly created clones.
    */
   duplicateSelected: (ids) => {
     const state = get()
@@ -513,7 +518,13 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     }
 
     const scenes = [...state.scenes]
-    scenes[state.activeSceneIndex] = { ...scene, devices: newDevices, textBoxes: newTextBoxes, images: newImages, shapes: newShapes }
+    scenes[state.activeSceneIndex] = {
+      ...scene,
+      devices: newDevices,
+      textBoxes: newTextBoxes,
+      images: newImages,
+      shapes: newShapes
+    }
     set({ scenes, selectedIds: newIds })
     return newIds
   },

@@ -3,35 +3,38 @@
  *
  * The Mask tool's unmask mode must ERASE previously applied masks (restore
  * content) by exactly subtracting the drawn stroke from each existing mask's
- * masked-out region. A reveal clip can never do that — `(element ∖ A) ∩ R`
- * only hides more — so the subtraction happens in the data model with real
- * polygon boolean difference (`polygon-clip.differenceRegion`).
+ * masked-out region. A reveal clip can never do that — `(scene ∖ A) ∩ R` only
+ * hides more — so the subtraction happens in the data model with real polygon
+ * boolean difference (`polygon-clip.differenceRegion`).
  *
- * Every mask is interpreted through its masked-out ("hidden") region:
+ * Every mask is interpreted through its masked-out ("hidden") region, in
+ * SCENE-space coordinates:
  *   - inverted (punch):      hidden = shape ∖ holes
- *   - non-inverted (reveal): hidden = element box ∖ shape ∖ holes
+ *   - non-inverted (reveal): hidden = canvas box ∖ shape ∖ holes
  *
- * An unmask stroke is a simple ring in the target's local coordinate frame.
- * For each mask on the target we compute `hidden ∖ stroke`:
+ * An unmask stroke is a simple ring in scene coordinates. Each scene mask whose
+ * hidden region the stroke touches is carved:
  *   - masks the stroke never touches are left untouched (a no-op stroke
  *     changes nothing and pushes no history entry),
  *   - fully-erased masks are removed,
  *   - everything else is replaced by one `brush`-shape mask per residual
- *     connected region (outer + holes). Residual masks are always inverted
- *     because they directly encode the residual hidden region.
+ *     connected region (outer + holes). Residuals are always inverted (they
+ *     directly encode the residual hidden region), stay free scene layers, and
+ *     inherit the source mask's layer fields (`name`/`zIndex`/`visible`/`locked`).
  *
- * A reveal (non-inverted) mask is a subtractive dead end: its hidden region is
- * the whole element box, so a stroke anywhere on the target (on its kept shape
- * OR in the hidden frame) can only leave the entire box hidden. Reveals are
- * only produced by PropertiesPanel Add Mask/Reverse or legacy builds, so ANY
- * unmask stroke on a reveal's target removes it entirely — the in-app recovery
- * path for stale whole-canvas checkerboards.
+ * A stroke over a reveal (non-inverted) mask removes the reveal entirely —
+ * kept shape or hidden frame. The reveal's hidden region is the whole canvas
+ * box, so every carve there is a dead end (it can only leave the whole canvas
+ * hidden again); drawing anywhere on the target signals the reveal is unwanted
+ * (the recovery path for stale whole-canvas checkerboards).
  *
- * A residual whose outer ring still spans the whole element box is the other
+ * A residual whose outer ring still spans the whole canvas box is the
  * degenerate "unmask restored only interior holes" state — the mask hides the
- * entire box again after the carve. Such box-covering residuals are dropped
+ * entire canvas again after the carve. Such box-covering residuals are dropped
  * (the mask is removed) so an unmask stroke clears a whole-canvas punch rather
  * than leaving it masked.
+ *
+ * Invisible or locked masks are never carved (left untouched).
  */
 
 import { Mask } from '@shared/types'
@@ -160,10 +163,12 @@ function regionEqual(a: Region, b: Region): boolean {
 
 /**
  * Encodes one residual connected region as an inverted brush mask. The residual
- * keeps its source mask's frozen `snapshot` (a carve into a frozen mask must
- * keep showing the frozen content — geometry alone is rewritten).
+ * stays a free scene layer and inherits its source mask's layer fields
+ * (`name`/`zIndex`/`visible`/`locked`) and frozen `snapshot` (a carve into a
+ * frozen mask must keep showing the frozen content — geometry alone is
+ * rewritten).
  */
-function regionToMask(targetId: string, region: Region, source?: Mask): Mask {
+function regionToMask(source: Mask, region: Region): Mask {
   const points = region.outer.map((p) => ({ x: round2(p.x), y: round2(p.y) }))
   const box = boundsOf(points)
   const holes = region.holes
@@ -171,48 +176,58 @@ function regionToMask(targetId: string, region: Region, source?: Mask): Mask {
     .map((h) => h.map((p) => ({ x: round2(p.x), y: round2(p.y) })))
   const mask: Mask = {
     id: generateId(),
-    targetId,
+    name: source.name,
     shape: 'brush',
     x: round2(box.x),
     y: round2(box.y),
     width: round2(box.width),
     height: round2(box.height),
     points,
-    inverted: true
+    inverted: true,
+    zIndex: source.zIndex,
+    visible: source.visible,
+    locked: source.locked
   }
   if (holes.length > 0) mask.holes = holes
-  if (source?.snapshot) mask.snapshot = source.snapshot
+  if (source.snapshot) mask.snapshot = source.snapshot
   return mask
 }
 
 /**
- * Resolves a subtractive unmask stroke against the target's existing masks.
- * Returns the target's new mask list, or `null` when the stroke erased nothing
- * (no mask on the target overlaps the stroke — a no-op, so no history entry).
+ * Resolves a subtractive unmask stroke against the scene's masks. Returns the
+ * scene's new mask list, or `null` when the stroke erased nothing (no visible,
+ * unlocked mask's hidden region overlaps the stroke — a no-op, so no history
+ * entry).
+ *
+ * Invisible or locked masks are never carved (left untouched, by reference).
  *
  * Reveal (non-inverted) masks are removed entirely when the stroke touches the
- * target at all: their hidden region is the whole element box, so any stroke
- * inside it is a dead-end carve that signals the reveal is unwanted (the
- * whole-canvas checkerboard dead end). Box-covering residuals are dropped the
- * same way — a carve that only cut interior holes must clear the mask, not
- * leave the whole box hidden again.
+ * canvas at all: their hidden region is the whole canvas box, so any stroke is
+ * a dead-end carve that signals the reveal is unwanted (the whole-canvas
+ * checkerboard dead end). Box-covering residuals are dropped the same way — a
+ * carve that only cut interior holes must clear the mask, not leave the whole
+ * canvas hidden again.
  */
 export function resolveUnmaskCommit(
-  targetMasks: Mask[],
+  masks: Mask[],
   stroke: Ring,
   width: number,
   height: number
 ): Mask[] | null {
   const result: Mask[] = []
   let changed = false
-  const targetBox: Region = { outer: rectRing(0, 0, width, height), holes: [] }
-  for (const mask of targetMasks) {
+  const canvasBox: Region = { outer: rectRing(0, 0, width, height), holes: [] }
+  for (const mask of masks) {
+    if (!mask.visible || mask.locked) {
+      result.push(mask)
+      continue
+    }
     // Reveal masks hide the frame around a kept shape; their hidden region is
-    // the whole element box, so an unmask stroke anywhere on the target (kept
+    // the whole canvas box, so an unmask stroke anywhere on the target (kept
     // shape or hidden frame) is inside the hidden complement and can only leave
-    // the entire box hidden. Drawing there means the mask is unwanted — remove
-    // it entirely (the whole-canvas checkerboard recovery path).
-    if (!mask.inverted && regionTouchesClip(targetBox, stroke)) {
+    // the entire canvas hidden. Drawing there means the mask is unwanted —
+    // remove it entirely (the whole-canvas checkerboard recovery path).
+    if (!mask.inverted && regionTouchesClip(canvasBox, stroke)) {
       changed = true
       continue
     }
@@ -236,7 +251,7 @@ export function resolveUnmaskCommit(
       result.push(mask)
       continue
     }
-    // A residual whose outer ring is still the whole element box hides
+    // A residual whose outer ring is still the whole canvas box hides
     // everything again — the "unmask restored only interior holes" state. The
     // stroke is a clear gesture, so drop it (remove the mask entirely) instead
     // of committing a box-covering brush that keeps the canvas checkerboarded.
@@ -246,7 +261,7 @@ export function resolveUnmaskCommit(
       continue
     }
     changed = true
-    for (const r of meaningful) result.push(regionToMask(mask.targetId, r, mask))
+    for (const r of meaningful) result.push(regionToMask(mask, r))
   }
   return changed ? result : null
 }

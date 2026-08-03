@@ -39,9 +39,9 @@ Inside the Canvas viewport div (transformed):
 Canvas viewport div (transform: translate/zoom)
 ├── Ruler.tsx (top) + Ruler.tsx (left)
 ├── Scene.tsx [data-scene-export]
-│   ├── Background masks wrapper
-│   │   ├── [data-scene-background] → BackgroundRenderer
-│   │   ├── Grid.tsx
+│   ├── [data-scene-background] → BackgroundRenderer (band 0, never clipped)
+│   ├── Grid.tsx
+│   ├── [data-scene-band] grouping divs (z-band partition)
 │   │   ├── ElementFacade → DeviceFrame
 │   │   │   └── ScreenContainer
 │   │   ├── ElementFacade → TextBox
@@ -49,11 +49,13 @@ Canvas viewport div (transform: translate/zoom)
 │   │   │   └── RenameOverlay
 │   │   ├── ElementFacade → ImageOverlay
 │   │   ├── ElementFacade → ShapeRenderer
-│   │   ├── Container clip wrappers (nested)
-│   │   ├── Guides.tsx (persistent, interactive)
-│   │   ├── WatermarkOverlay
-│   │   └── ContextMenu (runtime)
-│   └── ToolEventSurface.tsx (pointer dispatcher)
+│   │   └── Container clip wrappers (nested)
+│   ├── [data-scene-mask-clip] wrappers (z-aware masks fold descending)
+│   │   └── MaskSnapshotLayer siblings (frozen masks)
+│   ├── Guides.tsx (persistent, interactive)
+│   │   (watermark is export-only — injected by export-engine)
+│   └── ContextMenu (runtime)
+└── ToolEventSurface.tsx (pointer dispatcher)
 ├── OverlayRenderer.tsx (transient editor chrome)
 │   ├── Transparent checker
 │   ├── FocusDim
@@ -97,7 +99,7 @@ Canvas viewport div (transform: translate/zoom)
 
 ### `Scene.tsx`
 
-**Role:** The core renderer. Produces z-sorted elements, container clips, scene-level background masks, guides, watermark, and context menu. Everything inside `[data-scene-export]`.
+**Role:** The core renderer. Produces z-sorted elements, container clips, z-aware scene-mask banding, guides, watermark, and context menu. Everything inside `[data-scene-export]`.
 
 **Key architecture:**
 
@@ -140,27 +142,39 @@ function buildSortedEntries(scene): RenderNode[] {
 
 When `focusElementId === container.id`, the container's clip wrapper is **skipped** — children render inline unclipped. This is the "lift the clip" behavior of focus mode.
 
-#### Multi-Mask Intersection
+#### Z-Aware Scene Masks
 
-For containers and elements with multiple masks, nested `data-*-mask-clip` div wrappers (outer→inner) apply each mask's `clipPath` via evenodd compositing. Frozen masks get a sibling `MaskSnapshotLayer` (unclipped snapshot overlay).
-
-#### Scene-Level Background Masks
+Masks are independent scene layers (scene-space geometry, their own `zIndex`).
+A mask **preserves** everything at or below its z-index and **punches out** only
+content above it. The scene is partitioned into z-bands (band 0 = background +
+everything at/below the lowest mask z; band i = `(mask[i-1].z, mask[i].z]`;
+top band = above the highest mask):
 
 ```typescript
-const bgMasks = scene.masks.filter(m => m.targetId === BACKGROUND_MASK_TARGET_ID)
-if (bgMasks.length > 0):
-  <div data-scene-mask-clip>  // wrapped around bg + grid + all elements
-    {bgMasks.map(mask => (
-      <div data-scene-mask-for={mask.id} style={{ clipPath: buildMaskClipPath(mask, canvasW, canvasH) }}>
-        {content}
-      </div>
-    ))}
-  </div>
-else:
-  {content}  // no wrapper
+const liveMasks = visibleMasks.filter(m => !m.snapshot)   // sorted by zIndex
+const bandForZ = z => liveMasks.findIndex(m => z <= m.zIndex) ?? liveMasks.length
+
+bandContent[bandForZ(-1)] = <div data-scene-background>…</div>   // never clipped
+bandContent[bandForZ(1)]  = <Grid …/>
+nodes.forEach(node => bandContent[bandForZ(nodeZ)].push(renderNode(node)))
+
+// inert per-band grouping divs (capturable by the export engine):
+<div data-scene-band={b} style={{ position: 'absolute', inset: 0 }}>…</div>
+
+// live masks fold DESCENDING: lowest mask outermost, highest innermost —
+// clip m(i) wraps band i+1 + every higher mask, so each mask clips exactly
+// the content above it.
 ```
 
-The `[data-scene-background]` wrapper lives INSIDE the mask wrapper (so it's the masked background). For non-`'scene'` exports, the engine strips `[data-scene-background]` nodes — but the scene-mask wrapper persists.
+Each mask wrapper is `<div data-scene-mask-clip="true" data-scene-mask-for={mask.id}
+style={{ position:'absolute', inset:0, overflow:'hidden', zIndex: mask.zIndex,
+pointerEvents:'none', clipPath: buildMaskClipPath(mask, canvasW, canvasH) }}>`.
+Frozen masks (a `snapshot`) skip banding entirely and emit a `MaskSnapshotLayer`
+sibling instead.
+
+The `[data-scene-background]` wrapper lives in band 0 (always unclipped). For
+non-`'scene'` exports, the engine strips `[data-scene-background]` nodes — but
+the band wrappers persist so element holes stay correct.
 
 #### Guides (Persistent)
 
@@ -181,7 +195,7 @@ Guides have full pointer handlers (drag-to-move via `setPointerCapture`, right-c
 
 #### Watermark + Context Menu
 
-`WatermarkOverlay` renders the watermark (if enabled). Context menu renders from `runtime.contextMenu` (set by Select tool's `onContextMenu`).
+`WatermarkOverlay` was removed in favor of export-only watermarking: the watermark never renders in the editor, and `export-engine` injects it into the export clone when enabled (style built by `lib/watermark.ts`). Context menu renders from `runtime.contextMenu` (set by Select tool's `onContextMenu`).
 
 ### `ToolEventSurface.tsx`
 
@@ -203,7 +217,7 @@ Guides have full pointer handlers (drag-to-move via `setPointerCapture`, right-c
 1. `[data-transparent-checker]` — when `background.transparent` is true.
 2. `<FocusDim />` — scrim + highlight ring for focus mode.
 3. `<Guides />` — transient snap guides (from `runtime.snapGuides`, `data-snap-guide`).
-4. `<MaskOverlay />` — transparency checkerboard + mask outlines + edit chrome.
+4. `<MaskOverlay />` — committed mask outlines + live stroke checkerboard preview (editor chrome; never inside the export node).
 5. Selection chrome (single = rotation-aware wrapper; multi = union border).
 6. Container drop ring (during drag-to-nest).
 7. Marquee (during marquee drag).
@@ -256,14 +270,12 @@ Guides have full pointer handlers (drag-to-move via `setPointerCapture`, right-c
 
 ### `ElementFacade.tsx`
 
-**Role:** Universal positioned wrapper for every scene element. Provides the hit surface (`data-element-id`, `data-element-kind`, `data-element-locked`) and applies element-specific masks.
+**Role:** Universal positioned wrapper for every scene element. Provides the hit surface (`data-element-id`, `data-element-kind`, `data-element-locked`). Masks are NOT applied here — masks are independent scene layers clipped at the Scene level (scene-space clip wrappers over all content), never per-element clips.
 
 **Props:** `{ id: string, kind: SceneElementKind, locked: boolean, style: React.CSSProperties, children: React.ReactNode }`
 
 **Key decisions:**
 - **Zero pointer handlers** — the Tool Manager owns all interactions via DOM fallback (`[data-element-id]`) or hit-test.
-- **Mask application:** `masks[0]` clips the root via `buildMaskClipPath`. Frozen masks (with `snapshot`) leave the root UNCLIPPED and render a `MaskSnapshotLayer` sibling instead.
-- Multi-mask: masks `i >= 1` wrap as nested `inset-0 overflow-hidden` divs with their own `clipPath`.
 - **Rotation:** `transform: rotate(rotation deg)` with `transformOrigin: 'center'` on the root.
 - **Lock cursor:** `cursor: locked ? 'default' : 'move'`.
 
@@ -384,9 +396,8 @@ Guides have full pointer handlers (drag-to-move via `setPointerCapture`, right-c
 
 | Component | Role |
 |---|---|
-| `MaskOverlay.tsx` | Checkerboard transparency visualization + mask outlines + edit mode chrome (scrim, badge, preview). |
-| `MaskRenderer.tsx` | Deprecated — merged into MaskOverlay. |
-| `MaskSnapshotLayer.tsx` | Renders a frozen mask's captured scene image (positioned at sourceBounds, unclipped). |
+| `MaskRenderer.tsx` | The `MaskOverlay` — checkerboard transparency visualization + mask outlines + live stroke preview (editor chrome; never inside the export node). |
+| `MaskSnapshotLayer.tsx` | Renders a frozen mask's captured scene image (scene-wide inset-0, positioned at sourceBounds, emits `data-scene-mask-snapshot`). |
 
 ### ResponsiveButtonGroup
 
@@ -416,14 +427,15 @@ React Subscriptions Trigger
   ├─ PropertiesPanel subscribes to          ← re-renders panel state
   │   selectedIds, multi, focus
   ├─ Sidebar subscribes to activeScene     ← updates lists/tabs
+  ├─ MasksPanel subscribes to scene.masks  ← mask list manager
   └─ LayersPanel subscribes to              ← updates layer tree
       scene.devices/textBoxes/images/shapes/groups
   ↓
 DOM Updates
   ├─ Scene.tsx → renders ElementFacade(s)
-  │   ElementFacade applies masks via
-  │   buildMaskClipPath (local frame)
   │   └─ Element component (Device/TextBox/Image/Shape)
+  ├─ Scene.tsx → z-band wrappers + [data-scene-mask-clip]
+  │   wrappers (buildMaskClipPath in scene coords)
   └─ OverlayRenderer → renders chrome
       Selection chrome reads
       resolveLiveGhost for live bounds

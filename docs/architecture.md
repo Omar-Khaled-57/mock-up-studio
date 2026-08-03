@@ -16,11 +16,11 @@ The Electron main process manages the application lifecycle, native menus, file 
 | `file-system.ts` | ZIP I/O for `.mockup` files, recovery snapshots, recent projects persistence |
 | `auto-updater.ts` | Auto-update via GitHub Releases (production only, 6h check interval) |
 
-**Security:** The renderer has **no Node.js access**. All file I/O is mediated by the main process through `ipcRenderer.invoke` calls exposed via the context bridge (`window.electronAPI`).
+**Security:** The renderer has **no Node.js access**. All file I/O is mediated by the main process through `ipcRenderer.invoke` calls exposed via the context bridge (`window.api`).
 
 ### 2. Preload (`src/preload/`)
 
-A CJS-compiled context bridge that exposes `window.electronAPI` with typed methods:
+A CJS-compiled context bridge that exposes `window.api` with typed methods:
 - `saveProject`, `saveProjectAs`, `openProject`, `openProjectByPath`
 - `saveImageDialog`
 - `getRecentProjects`, `writeRecovery`/`readRecovery`/`deleteRecovery`
@@ -46,17 +46,19 @@ The canvas is a **layered, export-safe, data-driven system**. All canvas compone
 │  Ruler.tsx (top + left, viewport space)                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  Scene.tsx  ─── [data-scene-export] (EXPORT NODE)              │
-│  ├── Background masks wrapper (scene-level cutouts)             │
-│  │   ├── [data-scene-background] → BackgroundRenderer          │
-│  │   ├── Grid.tsx (z-index: 1)                                 │
+│  ├── [data-scene-background] → BackgroundRenderer (band 0)    │
+│  ├── Grid.tsx (z-index: 1)                                     │
+│  ├── [data-scene-band] grouping divs (z-band partition)        │
 │  │   └── Z-sorted elements:                                    │
 │  │     DeviceFacade → DeviceFrame → ScreenContainer            │
 │  │     TextBoxFacade → InlineEditor / RenameOverlay            │
 │  │     ImageOverlay (with effects, blend, flip, blur)          │
 │  │     ShapeRenderer (SVG, gradient, background image)         │
-│  │     └─ Container clip wrappers (nested, with mask inter.)  │
+│  │     └─ Container clip wrappers (nested)                    │
+│  ├── [data-scene-mask-clip] wrappers (z-aware, fold descending)│
+│  │   └── MaskSnapshotLayer siblings (frozen masks)             │
 │  ├── Guides.tsx (persistent, data-guide, interactive drag)    │
-│  ├── WatermarkOverlay                                          │
+│  │   (watermark is export-only — injected by export-engine)     │
 │  └── Context menu (from runtime store)                         │
 ├─────────────────────────────────────────────────────────────────┤
 │  ToolEventSurface.tsx (pointer dispatcher, viewport space)    │
@@ -65,7 +67,7 @@ The canvas is a **layered, export-safe, data-driven system**. All canvas compone
 │  ├── Transparent checker ([data-transparent-checker])         │
 │  ├── FocusDim (scrim + highlight ring)                        │
 │  ├── Guides (snap, data-snap-guide, export-clean)             │
-│  ├── MaskOverlay (checkerboard + outlines + focus scrim)      │
+│  ├── MaskRenderer (mask outlines + live stroke preview)       │
 │  ├── Selection chrome (resize handles, rotation-aware)        │
 │  ├── Container drop ring (live nest target)                    │
 │  ├── Marquee (transient selection rect)                        │
@@ -92,17 +94,17 @@ Two completely separate Zustand stores:
 
 ### Document Store (`src/renderer/store/index.ts`)
 
-Composed of 14 slices, all serialized/snapshotted by history:
+Composed of 13 slices, all serialized/snapshotted by history:
 
 | Slice | File | Responsibility |
 |---|---|---|
-| `ProjectSlice` | `projectSlice.ts` | Project metadata, file path, dirty flag, active scene index |
-| `SceneSlice` | `sceneSlice.ts` | All scenes, device/textBox/image/shape CRUD, z-order, grouping, guides, grid, masks |
+| `ProjectSlice` | `projectSlice.ts` | Project metadata, file path, dirty flag (activeSceneIndex lives in SceneSlice) |
+| `SceneSlice` | `sceneSlice.ts` | All scenes, activeSceneIndex, device/textBox/image/shape CRUD, z-order, grouping, guides, grid, masks |
 | `SelectionSlice` | `selectionSlice.ts` | selectedIds, group-aware selection, align, distribute |
 | `HistorySlice` | `historySlice.ts` | undoStack/redoStack (JSON string snapshots, max 500), undo/redo |
 | `ViewportSlice` | `viewportSlice.ts` | zoom, pan, fitToWindow, canvas size |
-| `UiSlice` | `uiSlice.ts` | sidebarTab, showRulers, showSidebar, showGrid, theme, splash |
-| `ExportSlice` | `exportSlice.ts` | format, scale, quality, background, scope |
+| `UiSlice` | `uiSlice.ts` | sidebarTab, sidebarCollapsed, propertiesPanelOpen, showRulers, showSmartGuides, theme, showSplash, sidebarPanelWidth, propertiesPanelWidth, downloadProgress (no `showSidebar`/`showGrid`) |
+| `ExportSlice` | `exportSlice.ts` | format, scale, quality, background, background color (no `scope` field) |
 | `ClipboardSlice` | `clipboardSlice.ts` | clipboard entries, copy/cut/paste, copiedStyle |
 | `VersionHistorySlice` | `versionHistorySlice.ts` | Auto-snapshots, restore/delete snapshots |
 | `WatermarkSlice` | `watermarkSlice.ts` | watermark text, font, opacity, position |
@@ -123,11 +125,11 @@ A **separate** Zustand store. Transient state — **never serialized or snapshot
 | **Tool** | `activeToolId`, `temporaryToolStack` | transient: kept / all: default `select` |
 | **Interaction** | `pointerScenePos`, `pointerInCanvas`, `activeInteraction` | transient: cleared |
 | **Selection chrome** | `hoveredElement`, `marqueeRect` | transient: cleared |
-| **Brush** | `strokeBuffer`, `strokeDirty`, `brush: BrushOptions` | transient: cleared / brush: kept (all: reset to defaults) |
+| **Brush** | `strokeBuffer`, `strokeDirty`, `brush: BrushOptions` | strokeBuffer + strokeDirty: transient: cleared / brush: kept on transient, reset to defaults on 'all' |
 | **Focus** | `focusGroupId`, `focusElementId` | transient: kept / all: cleared |
 | **Previews** | `preview: PreviewState`, `maskPreview`, `maskShape`, `maskMode` | transient: cleared / maskShape/mode: kept (all: reset) |
 | **Editing** | `editing` (text/rename/upload) | transient: cleared |
-| **Chrome** | `snapGuides`, `containerDropTarget`, `canvasEmptyStateDismissed` | transient: cleared (containerDropTarget, canvasEmptyStateDismissed) / kept (canvasEmptyStateDismissed on 'all') |
+| **Chrome** | `snapGuides`, `containerDropTarget`, `canvasEmptyStateDismissed` | snapGuides + containerDropTarget: transient: cleared / canvasEmptyStateDismissed: kept on transient, cleared on 'all' |
 | **UI** | `propertiesSections`, `exportModalOpen`, `toolbarToolsVisible` | transient: kept / all: reset |
 
 **Reset contract:**
@@ -223,7 +225,12 @@ The canonical coordinate system. `scene.canvas.width` × `scene.canvas.height`. 
 Screen pixels. The viewport container (`Canvas.tsx`) measures its size via `ResizeObserver` and applies `transform: translate(panX, panY) scale(zoom)`. Pan/zoom translate scene coordinates to viewport coordinates.
 
 ### Element-Local Coordinates
-Each element's mask geometry is stored in its own local frame (origin 0,0, dimensions = element width/height, unrotated). The mask clip rotates with the element because the facade applies `transform: rotate(...)` on the same root. Conversion: `toLocalPoint(element, origin, scenePoint)` inverse-rotates around the element center then subtracts the element origin + bitmap offset.
+Used by the bitmap-target machinery for destructive tools (see Canvas-Bitmap
+Coordinates): conversion via `toLocalPoint(element, origin, scenePoint)`
+inverse-rotates around the element center then subtracts the element origin +
+bitmap offset. Masks are NOT stored in element-local frames — masks are
+independent scene layers with scene-space geometry (see `docs/mask-engine.md`),
+so a mask clips whatever content stacks above it by z-order.
 
 ### Canvas-Bitmap Coordinates
 For destructive tools (blur/eraser), the bitmap (device screenshot, shape background image, image src) has its own pixel grid. A device's screen region is inset from the element box per device type (monitor bezel is 4% top / 3% bottom, etc.). Conversion: scene point → element-local → screen-region-relative → bitmap pixel.
@@ -245,7 +252,7 @@ For destructive tools (blur/eraser), the bitmap (device screenshot, shape backgr
 
 2. **Elements are pure facades** — no pointer handlers on `ElementFacade`, `DeviceFrame`, `TextBox`, `ImageOverlay`, or `ShapeRenderer`. All interactions go through the Tool Manager via `ToolEventSurface`.
 
-3. **`pushHistory` before mutation** — universally enforced across all 14 slices and the PropertiesPanel.
+3. **`pushHistory` before mutation** — universally enforced across all 13 slices and the PropertiesPanel.
 
 4. **Runtime store never imports document store** — breaks the circular dependency. Document slices import `resetRuntime`.
 

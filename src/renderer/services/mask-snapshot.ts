@@ -4,7 +4,7 @@
  * A frozen mask embeds an immutable freeze stamp of the whole scene, captured
  * at the moment the mask was created (or last refreshed). The stamp is a PNG
  * data URL produced by rendering `[data-scene-export]` offscreen and cropping
- * it to the target element's scene-space bounding box, so the masked region
+ * it to the mask's own scene-space box, so the masked region
  * shows exactly what the canvas looked like at capture time — including other
  * layers, z-order, and the scene background. Later edits to layers, z-order or
  * new content can never leak into a frozen mask; only an explicit refresh
@@ -82,7 +82,7 @@ export async function captureMaskSnapshot(bounds: SnapshotBounds): Promise<MaskS
     const height = Math.round(bounds.height * MASK_SNAPSHOT_SCALE)
     if (width <= 0 || height <= 0) return null
 
-    // Crop the full-scene capture to the element's bounding box.
+    // Crop the full-scene capture to the requested scene-space bounds.
     const out = document.createElement('canvas')
     out.width = width
     out.height = height

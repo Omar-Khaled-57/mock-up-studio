@@ -16,6 +16,8 @@ import ColorInput from '../shared/ColorInput'
 import ShadowEditor from '../shared/ShadowEditor'
 import GlowEditor from '../shared/GlowEditor'
 import EffectsEditor from '../effects/EffectsEditor'
+import ShapeColorControl from '../shapes/ShapeColorControl'
+import { useDebouncedHistory } from '../../hooks/useDebouncedHistory'
 import {
   Monitor, Type, Image as ImageIcon, Shapes, Eye, EyeOff, Lock, Unlock, Scan, Plus, Users,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical, AlignStartHorizontal, AlignCenterHorizontal, AlignEndHorizontal,
@@ -155,6 +157,7 @@ export default function PropertiesPanel() {
   const propertiesPanelWidth = useStore((s) => s.propertiesPanelWidth)
   const propertiesSections = useRuntimeStore((s) => s.propertiesSections)
   const { clsx, bg, text, border, shadow } = useTheme()
+  const pushHistoryDebounced = useDebouncedHistory()
 
   const scene = useStore(safeScene)
 
@@ -188,11 +191,6 @@ export default function PropertiesPanel() {
     }
     return { count: selectedIds.length, kinds: [...kinds], groupIds: [...groupIds] }
   }, [selectedIds, scene.devices, scene.textBoxes, scene.images, scene.shapes])
-
-  const masks = useMemo(
-    () => scene.masks.filter((m) => m.targetId === (selected?.data.id ?? '')),
-    [scene.masks, selected]
-  )
 
   const sectionOpen = (key: string, defaultOpen: boolean) => propertiesSections[key] ?? defaultOpen
   const onToggleSection = (key: string) => (open: boolean) => useRuntimeStore.getState().setPropertiesSectionOpen(key, open)
@@ -343,36 +341,6 @@ export default function PropertiesPanel() {
     const state = useStore.getState()
     state.pushHistory(src ? 'Set shape background' : 'Remove shape background')
     state.updateShape(id, { backgroundImage: src })
-  }
-
-  const addMask = () => {
-    if (!selected) return
-    const state = useStore.getState()
-    state.pushHistory('Mask element')
-    state.maskElement(selected.data.id, { width: selected.data.width, height: selected.data.height })
-  }
-
-  const reverseMask = (maskId: string) => {
-    const state = useStore.getState()
-    state.pushHistory('Reverse mask')
-    state.reverseMask(maskId)
-  }
-
-  const removeMask = (maskId: string) => {
-    const state = useStore.getState()
-    state.pushHistory('Remove mask')
-    state.removeMask(maskId)
-  }
-
-  const refreshMask = (maskId: string) => {
-    void useStore.getState().refreshMaskSnapshot(maskId)
-  }
-
-  const clearMasks = () => {
-    if (!selected) return
-    const state = useStore.getState()
-    state.pushHistory('Clear masks')
-    state.removeMaskFromElement(selected.data.id)
   }
 
   const handleBringForward = (id: string) => {
@@ -808,6 +776,16 @@ export default function PropertiesPanel() {
                 <Button size="sm" onClick={() => pickImageFile((src) => setShapeBackground(data.id, src))} className="w-full">Upload Image</Button>
               )}
             </div>
+            <div>
+              <span className={clsx("block text-[11px] mb-1", text.secondary)}>Fill</span>
+              <ShapeColorControl
+                shape={data as Shape}
+                onChange={(patch) => {
+                  useStore.getState().updateShape(data.id, patch)
+                  pushHistoryDebounced('Shape fill')
+                }}
+              />
+            </div>
           </>
         )}
       </AccordionSection>
@@ -937,43 +915,6 @@ export default function PropertiesPanel() {
           />
         </AccordionSection>
       )}
-
-      {/* Mask */}
-      <AccordionSection
-        title="Mask"
-        data-section="mask"
-        valueDot={masks.length > 0}
-        open={sectionOpen(`${kind}:mask`, masks.length > 0)}
-        onToggle={onToggleSection(`${kind}:mask`)}
-      >
-        {masks.length === 0 ? (
-          <Button size="sm" onClick={addMask} className="w-full">Add Mask</Button>
-        ) : (
-          <div className="space-y-2">
-            {masks.map((m) => (
-              <div key={m.id} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={clsx("text-[11px] capitalize", text.secondary)}>
-                    {m.shape}
-                    {m.inverted ? ' · inverted' : ''}
-                  </span>
-                  <span className={clsx("text-[10px]", text.muted)}>G tool to add</span>
-                </div>
-                  <ResponsiveButtonGroup gap="sm" minChildWidth="72px">
-                    <Button size="sm" onClick={() => reverseMask(m.id)}>Reverse</Button>
-                    <Button size="sm" onClick={() => refreshMask(m.id)}>
-                      {m.snapshot ? 'Refresh' : 'Freeze'}
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => removeMask(m.id)}>Remove</Button>
-                  </ResponsiveButtonGroup>
-              </div>
-            ))}
-            <Button size="sm" variant="danger" onClick={clearMasks} className="w-full">
-              Clear all masks
-            </Button>
-          </div>
-        )}
-      </AccordionSection>
 
       {/* Advanced */}
       <AccordionSection

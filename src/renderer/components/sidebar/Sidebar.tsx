@@ -2,11 +2,12 @@ import { type ElementType } from 'react'
 import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import type { SidebarTab } from '../../store/uiSlice'
-import { Proportions, Palette, Monitor, Image, Type, Hexagon, Layers, Grid3X3, Clock, Sun, Moon } from 'lucide-react'
+import { Proportions, Palette, Monitor, Image, Type, Hexagon, Scan, Layers, Grid3X3, Clock, Sun, Moon } from 'lucide-react'
 import ImagesPanel from './ImagesPanel'
 import DevicesPanel from './DevicesPanel'
 import TextPanel from './TextPanel'
 import ShapesPanel from './ShapesPanel'
+import MasksPanel from './MasksPanel'
 import CanvasPresetsPanel from './CanvasPresetsPanel'
 import BackgroundPanel from './BackgroundPanel'
 import LayersPanel from './LayersPanel'
@@ -38,7 +39,8 @@ const SECTIONS: SectionDef[] = [
       { id: 'devices', label: 'Devices', icon: Monitor },
       { id: 'images', label: 'Images', icon: Image },
       { id: 'text', label: 'Text', icon: Type },
-      { id: 'shapes', label: 'Shapes', icon: Hexagon }
+      { id: 'shapes', label: 'Shapes', icon: Hexagon },
+      { id: 'masks', label: 'Masks', icon: Scan }
     ]
   },
   {
@@ -125,6 +127,7 @@ export default function Sidebar() {
           {sidebarTab === 'text' && <TextPanel />}
           {sidebarTab === 'images' && <ImagesPanel />}
           {sidebarTab === 'shapes' && <ShapesPanel />}
+          {sidebarTab === 'masks' && <MasksPanel />}
           {sidebarTab === 'grid' && <GridPanel />}
           {sidebarTab === 'history' && <VersionHistoryPanel />}
         </div>

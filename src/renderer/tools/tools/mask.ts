@@ -1,40 +1,22 @@
 import { Tool, InteractionContext } from '../types'
-import { Scene } from '@shared/types'
-import { getCapabilities } from '../../services/capabilities'
-import { isInFocusScope } from '../../services/focus'
-import { ElementGeometry, resolveElementGeometry, toLocalPoint } from '../../services/bitmap-targets'
-import { boundsOf, buildMaskStrokePolygon } from '../../services/mask-brush'
 import { ellipseRing, rectRing, resolveUnmaskCommit } from '../../services/mask-diff'
-import { BACKGROUND_MASK_TARGET_ID } from '../../services/mask-visualization'
-import { HitTestResult } from '../../services/hit-test'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
 import { safeScene } from '../../store/sceneSlice'
+import { nextMaskZIndex } from '../../store/maskSlice'
 import { RuntimeSlice } from '../../runtime/runtimeSlice'
 import { generateId } from '../../lib/id'
-
-const ZERO_ORIGIN = { originX: 0, originY: 0 }
+import { boundsOf, buildMaskStrokePolygon } from '../../services/mask-brush'
 
 /**
- * Element geometry for masking — extends `resolveElementGeometry` so text
- * boxes (maskable, but not bitmap targets) resolve to their box too.
+ * Pending mask stroke — geometry is SCENE-space (canvas coordinates) for every
+ * shape, so the commit path needs no element targeting or local-frame mapping.
  */
-function resolveMaskGeometry(scene: Scene, hit: HitTestResult): ElementGeometry | null {
-  if (hit.kind === 'textBox') {
-    const t = scene.textBoxes.find((el) => el.id === hit.id)
-    if (!t) return null
-    return { id: t.id, x: t.x, y: t.y, width: t.width, height: t.height, rotation: 0 }
-  }
-  return resolveElementGeometry(scene, hit)
-}
-
 interface PendingMask {
   pointerId: number
-  targetId: string
   shape: 'rectangle' | 'ellipse' | 'brush'
-  /** unmask mode commits an inverted (punch) mask. */
+  /** 'mask' mode commits an inverted (punch) mask. */
   inverted: boolean
-  element: ElementGeometry
   anchor: { x: number; y: number }
   last: { x: number; y: number }
   /** Scene-space polyline for brush strokes. */
@@ -50,10 +32,8 @@ const BRUSH_MIN_DISTANCE_SQ = 2.25
 
 function pushPreview(rt: RuntimeSlice, pm: PendingMask): void {
   rt.setMaskPreview({
-    targetId: pm.targetId,
     shape: pm.shape,
     points: pm.shape === 'brush' ? pm.points : [pm.anchor, pm.last],
-    element: pm.element,
     inverted: pm.inverted,
     radius: pm.shape === 'brush' ? pm.radius : undefined
   })
@@ -65,36 +45,44 @@ function pushPreview(rt: RuntimeSlice, pm: PendingMask): void {
  * transparency checkerboard and the mask stays visible right after the stroke.
  *
  * A mask is frozen (embedding a whole-scene capture) only via the explicit
- * PropertiesPanel Refresh action (`refreshMaskSnapshot`). Auto-capturing at
- * creation was reverted: a snapshot taken at creation time captures the same
- * canvas the user is looking at, so the frozen pixels are pixel-identical to
- * the live scene and the freshly-drawn mask is invisible — exactly the reported
- * "the mask disappears on mouse release" regression.
+ * MasksPanel Refresh action (`refreshMaskSnapshot`). Auto-capturing at creation
+ * was reverted: a snapshot taken at creation time captures the same canvas the
+ * user is looking at, so the frozen pixels are pixel-identical to the live scene
+ * and the freshly-drawn mask is invisible — exactly the reported "the mask
+ * disappears on mouse release" regression.
  */
-function commitLiveMask(
-  pm: PendingMask,
-  rect: { x: number; y: number; width: number; height: number },
-  stroke: { x: number; y: number }[]
-): void {
+function commitLiveMask(pm: PendingMask, rect: { x: number; y: number; width: number; height: number }): void {
   const state = useStore.getState()
+  const scene = safeScene(state)
   state.pushHistory('Add mask')
+  const base = {
+    name: `Mask ${scene.masks.length + 1}`,
+    zIndex: nextMaskZIndex(scene),
+    visible: true,
+    locked: false
+  }
   if (pm.shape === 'brush') {
-    const box = boundsOf(stroke)
+    // The brush mask is stored as the closed capsule polygon (round caps +
+    // joins), NOT the raw polyline — `maskOuterRing`/`mask-diff` consume the
+    // ring directly, so committing the raw centre-line would render a zero-width
+    // stroke. Same builder the live preview uses, so what you see is what commits.
+    const polygon = buildMaskStrokePolygon(pm.points, pm.radius)
+    const box = boundsOf(polygon)
     state.addMask({
       id: generateId(),
-      targetId: pm.targetId,
+      ...base,
       inverted: true,
       shape: 'brush' as const,
       x: box.x,
       y: box.y,
       width: box.width,
       height: box.height,
-      points: stroke
+      points: polygon
     })
   } else {
     state.addMask({
       id: generateId(),
-      targetId: pm.targetId,
+      ...base,
       shape: pm.shape,
       points: [],
       inverted: true,
@@ -114,50 +102,15 @@ export const maskTool: Tool = {
 
   onPointerDown(ctx: InteractionContext, e: PointerEvent) {
     if (e.button !== 0) return
-    const hit = ctx.hitResult
     const rt = ctx.getRuntime()
-    const scene = safeScene(useStore.getState())
-
-    let targetId: string
-    let element: ElementGeometry
-    if (hit) {
-      if (!getCapabilities(hit.kind).maskable || hit.locked) return
-      if ((rt.focusGroupId || rt.focusElementId) && !isInFocusScope(hit.id, rt.focusGroupId, scene, rt.focusElementId)) {
-        ctx.actions.clearSelection()
-        return
-      }
-      const resolved = resolveMaskGeometry(scene, hit)
-      if (!resolved) return
-      targetId = hit.id
-      element = resolved
-      ctx.actions.selectDirect(hit.id)
-    } else {
-      // Painting on empty canvas targets the scene background, so the mask
-      // brush behaves like the normal paint brush — freehand strokes apply
-      // masks to the canvas layer itself (scene coords, origin 0,0).
-      // The background is never part of the focus scope, so focus blocks it.
-      if (rt.focusGroupId || rt.focusElementId) return
-      targetId = BACKGROUND_MASK_TARGET_ID
-      element = {
-        id: BACKGROUND_MASK_TARGET_ID,
-        x: 0,
-        y: 0,
-        width: scene.canvas.width,
-        height: scene.canvas.height,
-        rotation: 0
-      }
-    }
-
     if (!ctx.claimPointer(e.pointerId)) return
 
     pendingMask = {
       pointerId: e.pointerId,
-      targetId,
       shape: rt.maskShape,
-      // 'mask' mode cuts the DRAWN region out of the target (the shape becomes
+      // 'mask' mode cuts the DRAWN region out of the canvas (the shape becomes
       // transparent); 'unmask' mode keeps the drawn region and hides the rest.
       inverted: rt.maskMode === 'mask',
-      element,
       anchor: { x: ctx.scenePoint.x, y: ctx.scenePoint.y },
       last: { x: ctx.scenePoint.x, y: ctx.scenePoint.y },
       points: [{ x: ctx.scenePoint.x, y: ctx.scenePoint.y }],
@@ -211,47 +164,37 @@ export const maskTool: Tool = {
       if (dx * dx + dy * dy < MIN_DRAG_DISTANCE_SQ) return
     }
 
-    const localAnchor = toLocalPoint(pm.element, ZERO_ORIGIN, pm.anchor)
-    const localLast = toLocalPoint(pm.element, ZERO_ORIGIN, pm.last)
     const rect = {
-      x: Math.min(localAnchor.x, localLast.x),
-      y: Math.min(localAnchor.y, localLast.y),
-      width: Math.abs(localLast.x - localAnchor.x),
-      height: Math.abs(localLast.y - localAnchor.y)
+      x: Math.min(pm.anchor.x, pm.last.x),
+      y: Math.min(pm.anchor.y, pm.last.y),
+      width: Math.abs(pm.last.x - pm.anchor.x),
+      height: Math.abs(pm.last.y - pm.anchor.y)
     }
     const stroke =
       pm.shape === 'brush'
-        ? buildMaskStrokePolygon(
-            pm.points.map((p) => toLocalPoint(pm.element, ZERO_ORIGIN, p)),
-            pm.radius
-          )
+        ? buildMaskStrokePolygon(pm.points, pm.radius)
         : pm.shape === 'ellipse'
           ? ellipseRing(rect.x, rect.y, rect.width, rect.height)
           : rectRing(rect.x, rect.y, rect.width, rect.height)
 
     if (pm.inverted) {
       // Mask mode: the drawn region becomes transparent. Additive — every
-      // stroke adds a fresh mask and never removes a previous one on the same
-      // target (masks compose by intersection, so strokes stack). Committed
-      // LIVE so the checkerboard stays visible; Refresh freezes the current
-      // canvas into the mask (`refreshMaskSnapshot`).
-      commitLiveMask(pm, rect, stroke)
+      // stroke adds a fresh mask and never removes a previous one (masks
+      // compose by intersection, so strokes stack). Committed LIVE so the
+      // checkerboard stays visible; Refresh freezes the current canvas into
+      // the mask (`refreshMaskSnapshot`).
+      commitLiveMask(pm, rect)
     } else {
       // Unmask mode: the drawn region is restored. Subtractive — carve the
-      // stroke out of every existing mask on the target. A no-op stroke
-      // (nothing masked under the stroke) changes nothing and pushes no
-      // history entry, so unmask never masks anything by itself.
+      // stroke out of every scene mask whose hidden region it touches. A
+      // no-op stroke (nothing masked under the stroke) changes nothing and
+      // pushes no history entry, so unmask never masks anything by itself.
       const scene = safeScene(useStore.getState())
-      const commit = resolveUnmaskCommit(
-        scene.masks.filter((m) => m.targetId === pm.targetId),
-        stroke,
-        pm.element.width,
-        pm.element.height
-      )
+      const commit = resolveUnmaskCommit(scene.masks, stroke, scene.canvas.width, scene.canvas.height)
       if (commit) {
         const state = useStore.getState()
         state.pushHistory('Unmask')
-        state.replaceTargetMasks(pm.targetId, commit)
+        state.replaceMasks(commit)
       }
     }
   },

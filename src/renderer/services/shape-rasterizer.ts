@@ -20,12 +20,91 @@
  * model using `getShapePath` (the same geometry the renderer uses), so the
  * rasterized bitmap never drifts from on-screen rendering.
  */
-import type { Shape } from '@shared/types'
+import type { Shape, ShapeGradient } from '@shared/types'
 import { getShapePath } from './shape-geometry'
 import { createRasterSurface, canvasToDataUrl } from './rasterizer'
 
 /** Resolution multiplier for the rasterized bitmap. 1 = 1px per scene unit. */
 const DEFAULT_SCALE = 1
+
+/** Number of angular wedges used to approximate a conic gradient on canvas. */
+const CONIC_SEGMENTS = 128
+
+function hexLerp(a: string, b: string, t: number): string {
+  const pa = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(a)
+  const pb = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(b)
+  if (!pa || !pb) return b
+  const channel = (i: number) =>
+    Math.round(parseInt(pa[i], 16) + (parseInt(pb[i], 16) - parseInt(pa[i], 16)) * t)
+      .toString(16)
+      .padStart(2, '0')
+  return `#${channel(1)}${channel(2)}${channel(3)}`
+}
+
+function fillShapeGradient(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  w: number,
+  h: number,
+  gradient: ShapeGradient
+): void {
+  const colors = gradient.colors
+  if (colors.length < 2) return
+  const n = colors.length - 1
+  const cx = w / 2
+  const cy = h / 2
+  const maxR = Math.sqrt(cx * cx + cy * cy)
+  const addStops = (grad: CanvasGradient) => colors.forEach((color, i) => grad.addColorStop(i / n, color))
+  const type = gradient.type ?? 'linear'
+
+  if (type === 'radial') {
+    ctx.save()
+    ctx.translate(cx, cy)
+    // Canvas gradients are circular; scale y so `r = cx` maps to an ellipse
+    // reaching the box edges in both axes (CSS ellipse farthest-corner).
+    if ((gradient.radialShape ?? 'circle') === 'ellipse') ctx.scale(1, h / w)
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, (gradient.radialShape ?? 'circle') === 'ellipse' ? cx : maxR)
+    addStops(grad)
+    ctx.fillStyle = grad
+    ctx.fillRect(-w, -w, w * 2, w * 2)
+    ctx.restore()
+    return
+  }
+
+  if (type === 'conic') {
+    // Canvas has no native conic gradient — approximate with solid wedges,
+    // each filled with the color interpolated at its midpoint angle.
+    const angle = (gradient.angle ?? 0) * (Math.PI / 180)
+    for (let i = 0; i < CONIC_SEGMENTS; i++) {
+      const a0 = angle + (i / CONIC_SEGMENTS) * Math.PI * 2
+      const a1 = angle + ((i + 1) / CONIC_SEGMENTS) * Math.PI * 2
+      const aMid = (a0 + a1) / 2
+      const t = (((aMid - angle) / (Math.PI * 2)) % 1 + 1) % 1
+      const span = t * n
+      const lo = Math.min(Math.floor(span), n - 1)
+      const frac = span - lo
+      ctx.fillStyle = hexLerp(colors[lo], colors[Math.min(lo + 1, n - 1)], frac)
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(cx + Math.cos(a0) * maxR, cy + Math.sin(a0) * maxR)
+      ctx.lineTo(cx + Math.cos(a1) * maxR, cy + Math.sin(a1) * maxR)
+      ctx.closePath()
+      ctx.fill()
+    }
+    return
+  }
+
+  // linear — rotate the gradient direction, then fill a square of half-side
+  // maxR so every box corner is covered under any angle.
+  const angleRad = (gradient.angle * Math.PI) / 180
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.rotate(angleRad)
+  const grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2)
+  addStops(grad)
+  ctx.fillStyle = grad
+  ctx.fillRect(-maxR, -maxR, maxR * 2, maxR * 2)
+  ctx.restore()
+}
 
 /**
  * Rasterizes a shape's fill into a bitmap data URL.
@@ -78,24 +157,7 @@ export async function rasterizeShapeBitmap(shape: Shape, scale: number = DEFAULT
   ctx.clip(path)
 
   if (shape.gradient?.enabled && shape.gradient.colors.length >= 2) {
-    const colors = shape.gradient.colors
-    const angleRad = (shape.gradient.angle * Math.PI) / 180
-    const cx = w / 2
-    const cy = h / 2
-
-    // SVG renders a vertical gradient (y1=0%, y2=100%) rotated by `angle` around
-    // the bounding-box center. Replicate via context rotation.
-    ctx.save()
-    ctx.translate(cx, cy)
-    ctx.rotate(angleRad)
-    const grad = ctx.createLinearGradient(0, -h / 2, 0, h / 2)
-    const n = colors.length - 1
-    colors.forEach((color, i) => {
-      grad.addColorStop(i / n, color)
-    })
-    ctx.fillStyle = grad
-    ctx.fillRect(-w / 2, -h / 2, w, h)
-    ctx.restore()
+    fillShapeGradient(ctx, w, h, shape.gradient)
   } else {
     ctx.fillStyle = shape.color
     ctx.fillRect(0, 0, w, h)

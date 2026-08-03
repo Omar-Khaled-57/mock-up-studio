@@ -1,10 +1,16 @@
 # Mask Engine
 
-The masking system turns any scene element — or the whole canvas — into a
-transparent cutout. Masks are first-class scene content: reusable clip geometry
-stored in each target element's **local coordinate frame**, rendered through
-CSS `clip-path` compositing in the editor, and reproduced deterministically on
-the raster at export time.
+The masking system cuts regions out of the scene as first-class, reusable
+**scene layers**. A mask is an independent layer (like a device, image or
+shape): it owns a `name`, participates in z-order via `zIndex`, and honors
+`visible`/`locked`. Its geometry is **scene-space** (canvas coordinates), so a
+mask has **no target element** — it clips whatever stacks above it.
+
+Masks are Z-AWARE: a mask **preserves everything at or below its z-index**
+(content beneath the mask — the scene background and anything drawn before it —
+shows through its region) **and punches out only content above it**. A mask
+drawn over a shape then followed by paint leaves the shape visible while the
+paint is removed in the mask region.
 
 This document describes the full pipeline: the data model, geometry
 primitives, the render path, the tool, the UI, export, serialization, and the
@@ -17,30 +23,33 @@ contracts that hold it together.
 ```
  Scene.masks: Mask[]                    ← the single source of truth
    │
-   ├── editor render path (Scene.tsx / ElementFacade.tsx / container-clip.ts)
-   │     └── CSS clip-path (evenodd compositing) → visual cutout
+   ├── editor render path (Scene.tsx)
+   │     └── z-band partitioning + CSS clip-path wrappers → visual cutout
    │
    ├── overlay render path (MaskOverlay)
-   │     └── checkerboard / outlines / scrim — pure derived geometry
+   │     └── committed outlines + live-stroke checkerboard — pure derived geometry
    │
    ├── live stroke (mask.ts tool + runtime maskPreview)
    │     └── same geometry builders as commit → WYSIWYG
    │
    └── export path (export-engine.ts)
-         └── domToCanvas + deterministic canvas punch (foreignObject
+         └── per-band domToCanvas + deterministic canvas punch (foreignObject
              capture silently drops clip-path: polygon(… evenodd))
 ```
 
-Masks are stored in `Scene.masks[]` and reference their target element by
-`targetId` (elements never know their masks). Any element kind can be masked
-with zero per-type code, and masks never participate in z-order — they ride
-along with the target element.
+Masks are stored in `Scene.masks[]` as independent scene layers with scene-space
+geometry and their own `zIndex`. There is no target element — no per-type code,
+no local-frame mapping.
 
-**Key invariant — local coordinates:** every mask's geometry (`x`, `y`,
-`width`, `height`, `points`, `holes`) lives in the target element's local
-frame, so the clip rotates with the element. The scene-wide exception is the
-background sentinel (`__background__`), whose "local frame" IS the canvas
-(origin 0,0, full canvas size).
+**Key invariant — scene coordinates:** every mask's geometry (`x`, `y`,
+`width`, `height`, `points`, `holes`) is in canvas coordinates, so the clip
+aligns with the canvas at render time. Ellipses are 32-gons (shared with the
+diff engine and the punch).
+
+**Key invariant — z-awareness:** a mask preserves content at/below its
+`zIndex` and punches out content above it. The editor expresses this by
+partitioning the scene into z-bands (Section 8.3); the export rebuilds the same
+semantics per band (Section 10.3).
 
 **History contract:** callers MUST call `pushHistory()` BEFORE mutating so
 undo restores the exact pre-mask state (same rule as every other document
@@ -50,7 +59,7 @@ slice).
 
 ## 2. Data model
 
-Defined in `src/shared/types.ts` (L226–282).
+Defined in `src/shared/types.ts` (L236–291).
 
 ```ts
 type MaskShape = 'rectangle' | 'ellipse' | 'brush'
@@ -59,16 +68,19 @@ interface MaskPoint { x: number; y: number }
 
 interface Mask {
   id: string
-  targetId: string              // element id, or BACKGROUND_MASK_TARGET_ID
+  name: string                // user-facing (e.g. "Mask 1", renamed in the panel)
   shape: MaskShape
-  x: number                     // local-frame bounding box
+  x: number                   // scene-space bounding box
   y: number
   width: number
   height: number
-  points: MaskPoint[]           // brush outline polygon (rect/ellipse: [])
-  inverted: boolean             // false = reveal, true = punch
-  holes?: MaskPoint[][]         // restored sub-regions on a brush punch
-  snapshot?: MaskSnapshot       // frozen whole-scene freeze stamp
+  points: MaskPoint[]         // brush outline polygon (rect/ellipse: [])
+  inverted: boolean           // false = reveal, true = punch
+  zIndex: number              // z-order layer (nextMaskZIndex → max + 1)
+  visible: boolean
+  locked: boolean
+  holes?: MaskPoint[][]       // restored sub-regions on a brush punch
+  snapshot?: MaskSnapshot     // frozen whole-scene freeze stamp
 }
 
 interface MaskSnapshot {
@@ -82,21 +94,22 @@ interface MaskSnapshot {
 
 ### 2.1 `Scene.masks`
 
-`Scene` carries `masks: Mask[]` (default `[]` in `createDefaultScene`). Every
-mask is matched against its target by `targetId`; masks whose target is missing
-("ghost" masks) are tolerated by the renderer and simply not drawn.
+`Scene` carries `masks: Mask[]` (default `[]` in `createDefaultScene`). Masks
+are independent scene layers — no `targetId`, no element coupling. `addMask`,
+`updateMask`, `removeMask`, `replaceMasks`, `clearAllMasks` and
+`nextMaskZIndex` live in `store/maskSlice.ts`.
 
-### 2.2 Targets
+### 2.2 Z-order
 
-| Target | `targetId` | Local frame | Notes |
-|---|---|---|---|
-| Any element | element id | element box (x/y/w/h/rotation) | devices, textBoxes, images, shapes |
-| Container | element id | container box | children clip to the container's geometry **and** its masks |
-| Background/canvas | `'__background__'` (sentinel) | full canvas (0,0 → scene.canvas.w/h) | a scene-level cutout; clips the background layer + grid + every element |
-
-The sentinel is exported from `services/mask-visualization.ts` as
-`BACKGROUND_MASK_TARGET_ID`. It is never part of the focus scope, so a focused
-mask session can't reach the dimmed background.
+A mask is a layer in the scene's z-order like any element: its `zIndex` decides
+which content it preserves vs. punches. `nextMaskZIndex(scene)` assigns the
+maximum z-index across all elements and masks + 1, so freshly-drawn masks sit
+above existing content by default (masks drawn first get lower z and are
+preserved by later masks). The MasksPanel manages the mask list (add, reverse,
+freeze, duplicate, delete, rename, visibility/lock); mask z-order is currently
+assigned by creation order via `nextMaskZIndex`. A mask's `zIndex` is the
+single piece of data that drives both the editor banding (Section 8.3) and the
+export punch (Section 10).
 
 ### 2.3 Inversion semantics (the single source of truth)
 
@@ -105,7 +118,7 @@ Every mask is interpreted through its **hidden (masked-out) region**:
 - **`inverted: true` — punch**: the drawn shape becomes transparent.
   hidden = `shape ∖ holes`
 - **`inverted: false` — reveal**: everything outside the drawn shape is
-  transparent (the shape is the "window"). hidden = `element box ∖ shape ∖ holes`
+  transparent (the shape is the "window"). hidden = `canvas box ∖ shape ∖ holes`
 
 This hidden-region interpretation is shared verbatim by:
 - the renderer (`buildMaskClipPath` — CSS clip),
@@ -116,7 +129,7 @@ This hidden-region interpretation is shared verbatim by:
 ### 2.4 `Mask.holes`
 
 Restored-area rings carved out of a punch by a subtractive unmask stroke
-(Section 8). Rendered as nested evenodd contours: every hole ring contributes
+(Section 7). Rendered as nested evenodd contours: every hole ring contributes
 to the same `polygon(...)`, and evenodd compositing subtracts them from the
 shape — a reveal carved into a punch shows the original content through the
 hole. `holes` is optional and legacy-absent (read with `?? []`); rect/ellipse
@@ -124,10 +137,10 @@ masks carrying holes render through the generic polygon branch.
 
 ### 2.5 `Mask.snapshot` (frozen masks)
 
-An immutable freeze stamp of the whole scene captured at creation/refresh time
-(Section 9). Frozen masks never show a checkerboard — the captured pixels ARE
-the visualization of the masked region. Only the explicit Refresh action
-rewrites a snapshot.
+An immutable freeze stamp of the whole scene captured at refresh time (Section
+9). Frozen masks never show a checkerboard — the captured pixels ARE the
+visualization of the masked region, and they render over the live canvas. Only
+the explicit MasksPanel Refresh action rewrites a snapshot.
 
 ---
 
@@ -135,7 +148,7 @@ rewrites a snapshot.
 
 ### 3.1 `maskOuterRing(mask)` — `services/mask-visualization.ts`
 
-The closed contour that bounds a mask's own shape, in local coordinates:
+The closed contour that bounds a mask's own shape, in scene coordinates:
 
 - rectangle → 4 corners (top-left → top-right → bottom-right → bottom-left)
 - ellipse → 32-point approximation (matches the diff engine and clip renderer)
@@ -156,24 +169,24 @@ punch.
 ## 4. Clip path builders — `services/mask-visualization.ts`
 
 `buildMaskClipPath(mask, width, height): string` builds the CSS `clip-path`
-value for a target box of local dimensions `width`/`height`. Null is never
-returned for a well-formed mask.
+value for the canvas of dimensions `width`/`height` (the mask is scene-space).
+Null is never returned for a well-formed mask.
 
 | Case | Output |
 |---|---|
 | inverted, box-covering | `polygon(<outer>, <holes…>, evenodd)` — single contour (see below) |
-| inverted, partial | `polygon(0px 0px, W 0px, W H, 0px H, <outer>, <holes…>, evenodd)` — full box + shape hole |
+| inverted, partial | `polygon(0px 0px, W 0px, W H, 0px H, <outer>, <holes…>, evenodd)` — full canvas + shape hole |
 | non-inverted rectangle, no holes | `inset(top right bottom left)` |
 | non-inverted ellipse, no holes | `ellipse(rx ry at cx cy)` |
 | non-inverted polygon, no holes | `polygon(<outer>)` |
 | any shape with holes | `polygon(<outer>, <holes…>, evenodd)` |
 
 **Box-covering single contour:** an inverted mask whose outer ring spans the
-whole element box must emit the outer contour directly. Emitting
+whole canvas must emit the outer contour directly. Emitting
 `polygon(box, shape, evenodd)` would be a self-cancelling double contour
 (evenodd parity flips twice over the box) that renders as an EMPTY clip — a
-whole-canvas mask would leave the box exposed instead of hidden. Guarded by
-`ringCoversBox` (Section 7.4).
+whole-canvas mask would leave the canvas exposed instead of hidden. Guarded by
+`ringCoversBox` (Section 7.3).
 
 `buildMaskPunchClipPath(mask, width, height)` returns the complement — the
 clip of the **transparent** region — by flipping `inverted` and re-building:
@@ -217,12 +230,11 @@ what you see while painting is exactly what commits (WYSIWYG).
 
 ## 6. Mask visual resolution — `services/mask-visualization.ts`
 
-### 6.1 `MaskTarget` resolution
+### 6.1 Per-mask overlay visuals
 
-`findMaskTarget(scene, id): MaskTarget | null` resolves a targetId to its
-scene-space geometry + z-index. The background sentinel resolves to a
-full-canvas target with `rotation: 0`, `visible: true`, and `zIndex: -1` (the
-background's checkerboard stacks beneath every element's).
+Because masks are scene-space layers spanning the whole canvas, every `MaskVisual`
+has origin `(0,0)`, canvas dimensions, `rotation: 0`, and stacks by the mask's
+own `zIndex`. No target resolution exists anymore (`findMaskTarget` is gone).
 
 ### 6.2 `MaskVisualItem` / `MaskVisual`
 
@@ -235,55 +247,49 @@ interface MaskVisualItem {
   inverted: boolean
   hiddenClipPath: string    // transparent region clip → checkerboard area
   visibleClipPath: string   // kept region clip → editing highlight
-  rect: { x, y, width, height }       // local bbox
+  rect: { x, y, width, height }       // scene-space bbox
   points: MaskPoint[] | null          // brush polygon (null for rect/ellipse)
   holes: MaskPoint[][] | null         // restored rings
 }
 
 interface MaskVisual {
-  elementId: string
-  origin: { x, y }          // scene position of the target
-  width: number
-  height: number
-  rotation: number
-  zIndex: number
-  items: MaskVisualItem[]   // one per mask on this target
+  maskId: string
+  origin: { x, y }          // always (0,0) — the mask spans the whole canvas
+  width: number             // scene.canvas.width
+  height: number            // scene.canvas.height
+  rotation: number          // always 0
+  zIndex: number            // mask.zIndex — stacks like the mask layer itself
+  items: MaskVisualItem[]   // one per mask
 }
 ```
 
+`maskToVisualItem(mask, canvasW, canvasH)` derives one item (hidden clip =
+`buildMaskPunchClipPath`, visible clip = `buildMaskClipPath`).
+
 ### 6.3 `collectMaskVisuals(scene, options)`
 
-Resolves every visible, in-scope target mask to scene-space visuals, grouped
-per element and z-sorted (checkerboards stack like the scene itself). Skips:
+Resolves every mask to a scene-space visual, z-sorted (`mask.zIndex` ascending)
+so the overlay stacks like the scene. Skips:
 
 - frozen masks (with a `snapshot`) — they render their own snapshot content,
-  never a checkerboard;
-- ghost (unresolvable target) and invisible targets;
-- out-of-scope targets when `focusGroupId`/`focusElementId` options are given.
+  never an outline;
+- invisible masks (`mask.visible === false`);
+- masks not in `options.ids` when `options.targets === 'ids'`.
 
-Options: `{ targets: 'all' | 'ids', ids?, focusGroupId?, focusElementId? }`.
+Options: `{ targets: 'all' | 'ids', ids? }`.
 
-### 6.4 `previewToMaskVisual(preview)`
+### 6.4 `previewToMaskVisual(preview, canvasWidth, canvasHeight)`
 
 Converts a live mask stroke (`maskPreview` from the runtime store) into a
 scene-space visual so the overlay renders the same shape that will commit.
-Scene-space stroke points are mapped to local coordinates via `toLocalPoint`,
-then:
+Stroke points are already in scene coordinates:
 
-- brush → `buildMaskStrokePolygon(localPoints, preview.radius ?? 8)`, bbox from
-  `boundsOf`;
-- rect/ellipse → normalized box from the two local corner points.
+- brush → `buildMaskStrokePolygon(preview.points, preview.radius ?? 8)`, bbox
+  from the polygon extents;
+- rect/ellipse → normalized box from the two corner points.
 
 Returns null until the stroke has at least one point. The synthetic mask id is
 `'__mask_preview__'`.
-
-### 6.5 Focus scrim
-
-`buildSceneDimPunch(canvasWidth, canvasHeight, x, y, width, height, rotation)`
-builds the evenodd `polygon(whole canvas, rotated target box)` clip used to dim
-everything but the target while a mask stroke is in flight. Null when the
-canvas is degenerate. `rotatedBoxCorners` computes the rotated target corners
-(rotation pivot = box center).
 
 ---
 
@@ -291,9 +297,11 @@ canvas is degenerate. `rotatedBoxCorners` computes the rotated target corners
 
 The Mask tool's **unmask** mode must ERASE previously applied masks (restore
 content) by exactly subtracting the drawn stroke from each existing mask's
-masked-out region. A reveal clip can never do that — `(element ∖ A) ∩ R` only
+masked-out region. A reveal clip can never do that — `(canvas ∖ A) ∩ R` only
 hides more — so the subtraction happens in the **data model** with real polygon
-boolean difference (`polygon-clip.differenceRegion`).
+boolean difference (`polygon-clip.differenceRegion`). Unmasking operates
+**scene-wide**: every mask in `scene.masks` is a candidate, and any mask whose
+hidden region the stroke touches is rewritten (Section 11.4).
 
 ### 7.1 Ring builders
 
@@ -305,22 +313,22 @@ boolean difference (`polygon-clip.differenceRegion`).
 ```ts
 function maskHiddenRegion(mask, width, height): Region {
   // inverted (punch):      hidden = shape ∖ holes
-  // non-inverted (reveal): hidden = element box ∖ shape ∖ holes
+  // non-inverted (reveal): hidden = canvas box ∖ shape ∖ holes
 }
 ```
 
-The clip ring is the stroke's simple ring in the target's local coordinate
-frame.
+The clip ring is the stroke's simple ring in **scene coordinates** (the stroke
+is scene-space, so no local-frame mapping is involved).
 
-### 7.3 `resolveUnmaskCommit(targetMasks, stroke, width, height): Mask[] | null`
+### 7.3 `resolveUnmaskCommit(sceneMasks, stroke, width, height): Mask[] | null`
 
-For each mask on the target, computes `hidden ∖ stroke`:
+For each mask in the scene, computes `hidden ∖ stroke`:
 
 - masks the stroke never touches → kept **by reference** (identity preserved);
 - fully-erased masks → removed;
-- a reveal (non-inverted) mask whose target box is touched at all → removed
+- a reveal (non-inverted) mask whose kept shape the stroke overlaps → removed
   entirely (see 7.5);
-- a residual whose outer ring still covers the whole element box → dropped
+- a residual whose outer ring still covers the whole canvas → dropped
   (see 7.6);
 - everything else → replaced by one `brush`-shape mask per residual connected
   region, always `inverted: true`, carrying rounded (2dp) coords, fitted
@@ -333,27 +341,27 @@ unmask click over unmasked area is never an undo entry.
 
 ### 7.4 `ringCoversBox(ring, width, height): boolean`
 
-True when a ring's boundary spans the whole element box — the degenerate
+True when a ring's boundary spans the whole canvas — the degenerate
 "mask hides everything" state. Uses full-precision ring bounds + absolute
 area (vs. `width × height`) with a 0.5 tolerance, so rounded residuals never
 false-trigger. Shared by:
 
-- the unmask resolver (drop box-covering residuals);
+- the unmask resolver (drop canvas-covering residuals);
 - the renderer (single-contour guard in `buildMaskClipPath`).
 
 ### 7.5 Reveal-mask recovery
 
 A reveal (non-inverted) mask is a subtractive dead end: its hidden region is
-the whole element box, so a stroke anywhere on the target (on its kept shape
-OR in the hidden frame) can only leave the entire box hidden. Reveals are only
-produced by PropertiesPanel Add Mask/Reverse or legacy builds, so ANY unmask
-stroke on a reveal's target removes it entirely — the in-app recovery path for
-stale whole-canvas checkerboards.
+the whole canvas, so a stroke anywhere on it (on its kept shape OR in the
+hidden frame) can only leave the entire canvas hidden. Reveals are only
+produced by the MasksPanel Reveal / Add-Mask actions or legacy builds, so ANY
+unmask stroke that overlaps a reveal's kept shape removes it entirely — the
+in-app recovery path for stale whole-canvas checkerboards.
 
 ### 7.6 Box-covering residual drop
 
-A residual whose outer ring still spans the whole element box is the
-"unmask restored only interior holes" state — the mask hides the entire box
+A residual whose outer ring still spans the whole canvas is the
+"unmask restored only interior holes" state — the mask hides the entire canvas
 again after the carve. Dropping it means an unmask stroke clears a whole-canvas
 punch rather than leaving it masked. An edge-touching carve genuinely restores
 a strip/bay and is kept (topology preserved).
@@ -373,29 +381,17 @@ a strip/bay and is kept (topology preserved).
 
 ## 8. Render path
 
-### 8.1 Per-element masks — `elements/ElementFacade.tsx`
+### 8.1 Element facades — `elements/ElementFacade.tsx`
 
-The single shared positioned wrapper every element kind renders through.
-Applies the element's masks with zero per-type code, so masking works for
-devices, text boxes, images and shapes. The clip correctly lives in the
-element's rotated local frame.
+The single shared positioned wrapper every element kind renders through
+(`data-element-id` / `data-element-kind` hit surface, no pointer handlers).
+Masks are deliberately **NOT** applied here: masks are independent scene layers
+clipped at the Scene level (scene-space clip wrappers over all content), never
+per-element clips. Elements carry no mask references and no clip-path; masking
+one region of the canvas affects whatever content happens to sit under the
+mask — by z-order, not by which element it belongs to.
 
-- The first mask clips the element's own border box (`masks[0]` → root
-  `clipPath`).
-- Any additional masks are intersected as **nested inset-0 clip layers**
-  (`data-element-mask-clip="true"`), each in the same local frame — pure
-  `clip-path` intersection, no compositing math. Layer order: `masks[0]`
-  innermost, the last mask outermost (the outer-most extra mask wraps the
-  inner ones).
-- **Frozen masks** (with a `snapshot`) do NOT clip the element. A frozen
-  `masks[0]` cannot clip the root (its hidden region would clip the frozen
-  layer away with it), so the root stays unclipped and a `MaskSnapshotLayer`
-  paints the frozen pixels over the hidden region, keeping the element's live
-  content visible everywhere else. Frozen extra masks keep their clip wrapper
-  (live content clipped to the visible region) plus a `MaskSnapshotLayer`
-  sibling.
-
-### 8.2 Container masks — `Scene.tsx` + `services/container-clip.ts`
+### 8.2 Container clipping — `Scene.tsx` + `services/container-clip.ts`
 
 When an element has children (`containerId` references), those children clip to
 the container's exact geometry at render time (Phase 3 container pipeline):
@@ -404,9 +400,8 @@ the container's exact geometry at render time (Phase 3 container pipeline):
   wrapper;
 - shape parents additionally clip to their SVG outline via
   `clip-path: path('…')` (from `shape-geometry.getShapePath`);
-- any masks on the container are intersected with the shape by nesting
-  `data-container-mask-clip` inset-0 clip-path layers (each in the container's
-  local frame) — frozen container masks emit a `MaskSnapshotLayer` sibling;
+- masks are NOT part of container clipping — they are scene layers and apply
+  scene-wide on top of whatever the container already clipped;
 - a container that is the active `focusElementId` skips its wrapper so its
   children render in full (fully editable); nested containers stay clipped
   inside any unfocused ancestor;
@@ -417,45 +412,73 @@ The wrapper is positioned at the container's scene origin, carries the
 container's `zIndex`, and hosts a counter-translate layer returning children to
 scene coordinates.
 
-### 8.3 Background masks (scene-level cutout) — `Scene.tsx`
+### 8.3 Z-aware scene masks — `Scene.tsx`
 
-A mask drawn on empty canvas targets the `__background__` sentinel and is a
-**scene-level cutout**: the `data-scene-mask-clip` wrapper holds the background
-layer (`data-scene-background`), the grid and every element, so content added
-AFTER the mask (new shapes/devices/images) is clipped too and can never leak
-into the masked region. Multi-mask intersection via nested inset-0 layers,
-mirroring ElementFacade's contract; frozen bg masks emit a `MaskSnapshotLayer`
-sibling. Editor chrome that must stay interactive or export-stripped (guides,
-watermark, context menu) renders outside the wrapper.
+Masks are independent SCENE layers with scene-space geometry and their own
+`zIndex`. A mask **preserves everything at or below its z-index** (content
+beneath the mask — the scene background and anything drawn before it — shows
+through its region) **and punches out only content above it**. A mask drawn
+over a shape then followed by paint leaves the shape visible while the paint is
+removed in the mask region.
 
-Background masks are exported at full opacity in exports via
-`punchSceneMaskHoles` (Section 10), and the `data-scene-background` node
-survives `background: 'scene'` exports.
+To express that, the scene content is partitioned into **z-bands**:
+
+- band 0 = the background layer (`data-scene-background`) + the grid + every
+  node with z ≤ the lowest live mask's z — never clipped;
+- band i = content with z in `(mask[i-1].z, mask[i].z]`, clipped by every mask
+  below it;
+- the top band = everything above the highest live mask.
+
+`bandForZ(z)` assigns each content layer its band; the background always lands
+in band 0 (`bandForZ(-1)`), the grid bands at z=1 like any element. Each band
+renders inside an inert `<div data-scene-band={i}>` wrapper
+(`position:absolute; inset:0` — no z-index/transform, so children keep stacking
+by their own z-index) — the grouping exists so the export engine can capture
+bands independently.
+
+Live masks (no `snapshot`) fold **descending** into `data-scene-mask-clip`
+divs: `clip m(i)` wraps `band i+1` plus every higher mask, so the **lowest-z
+mask is the OUTERMOST wrapper and the highest is the innermost**, and band b
+lands inside the clip of exactly the masks below it. Each wrapper is
+`inset:0`, `overflow:hidden`, `pointerEvents:none`, `zIndex: mask.zIndex`
+(keeping the wrappers in the scene's stacking order), and clips via
+`buildMaskClipPath`. A mask therefore affects exactly the content above it —
+content at or below its z stays unclipped (preserved).
+
+Frozen masks (a `snapshot`) don't create bands: their opaque snapshot is the
+only thing the masked region shows, which makes banding them a visual no-op —
+they emit a `MaskSnapshotLayer` sibling (Section 8.4) instead. Editor chrome
+that must stay interactive or export-stripped (guides, watermark, context
+menu) renders outside the band wrappers.
+
+Z-aware bands are exported via `punchSceneMaskHoles` (Section 10), and the
+`data-scene-background` node survives `background: 'scene'` exports.
 
 ### 8.4 Frozen content — `components/masks/MaskSnapshotLayer.tsx`
 
-Paints `mask.snapshot` pixels inside the element's clip frame:
+Paints `mask.snapshot` pixels as a scene layer covering the whole canvas:
 
-- container clipped to the mask's HIDDEN region
-  (`buildMaskPunchClipPath(mask, targetWidth, targetHeight)`), with
+- an inset-0 wrapper spans the whole canvas and clips to the mask's HIDDEN
+  region (`buildMaskPunchClipPath(mask, canvasWidth, canvasHeight)`), with
   `background: transparent` so the live canvas can never leak through — the
   frozen pixels are the ONLY thing the masked region shows;
-- the snapshot `<img>` placed at `sourceBounds` offset by the element's scene
-  position (`elementX`/`elementY`) and sized to `sourceBounds` in scene units,
-  so the captured region lines up with the element's box at render time (it
-  moves/rotates with the facade, exactly like clip geometry).
+- the snapshot `<img>` is placed at its own `sourceBounds` (already scene-space)
+  and sized to `sourceBounds` in scene units, so the captured region lines up
+  with the canvas at render time (masks are scene layers, no element offset).
 
-Emits `data-element-mask-clip="true"` + `data-mask-snapshot="true"` so DOM
-tests can count live wrappers via `[data-element-mask-clip]:not([data-mask-snapshot])`.
+Emits `data-scene-mask-snapshot="true"` + `data-mask-snapshot="true"` +
+`data-mask-snapshot-for={mask.id}` (the export engine re-captures frozen masks
+by that marker, Section 10.3). Renders as a sibling of the z-band wrappers, on
+top of the live scene.
 
 ---
 
 ## 9. Frozen-mask capture — `services/mask-snapshot.ts`
 
 `captureMaskSnapshot(bounds)` produces an immutable PNG freeze stamp of the
-whole scene, cropped to the target's scene-space bounding box — the masked
-region shows exactly what the canvas looked like at capture time, including
-other layers, z-order, and the scene background.
+whole scene, cropped to the mask's own scene-space box — the masked region
+shows exactly what the canvas looked like at capture time, including other
+layers, z-order, and the scene background.
 
 - Clone-strip-offscreen-cleanup pattern (same as the export engine): clones
   `[data-scene-export]`, positions it fixed at `-99999px`, strips
@@ -469,16 +492,16 @@ other layers, z-order, and the scene background.
   used by callers to keep the commit path synchronous when there is nothing to
   capture.
 
-Frozen masks are created ONLY via the PropertiesPanel Refresh action
+Frozen masks are created ONLY via the MasksPanel Refresh action
 (`refreshMaskSnapshot` in `maskSlice`). Auto-capturing at creation was
 reverted: a snapshot taken at creation time captures the same canvas the user
 is looking at, so the frozen pixels are pixel-identical to the live scene and
 the freshly-drawn mask is invisible — the reported "the mask disappears on
 mouse release" regression.
 
-`refreshMaskSnapshot(maskId)`: finds the mask + its target, captures the target
-box, no-ops (no history) when the mask/target is missing or capture returns
-null, else `pushHistory('Refresh mask')` + `updateMask(maskId, { snapshot })`.
+`refreshMaskSnapshot(maskId)`: finds the mask, captures its own scene box,
+no-ops (no history) when the mask is missing or capture returns null, else
+`pushHistory('Refresh mask')` + `updateMask(maskId, { snapshot })`.
 
 ---
 
@@ -493,10 +516,6 @@ transparency hole on the raster deterministically.
 
 ### 10.2 `punchSceneMaskHoles(ctx, masks, canvasWidth, canvasHeight, scale)`
 
-- Only background masks (target `__background__`) are punched. Element and
-  container masks clip only their own facade — reproducing their hidden regions
-  would require revealing content beneath them, which CSS clip-path does not do
-  either — out of scope (documented decision).
 - `destination-out` fill with `fillRule: 'evenodd'` erases exactly the masked
   region. Hidden-region semantics mirror `buildMaskClipPath`:
   - inverted (punch): path = shape + holes
@@ -504,31 +523,45 @@ transparency hole on the raster deterministically.
 - No-op / degenerate rings (empty outer) are skipped.
 - Uses `maskOuterRing` — the same geometry source as the editor clip.
 
-### 10.3 Scene-background preservation
+The punch is Z-AWARE in how `exportScene` calls it: a mask punches only the
+content ABOVE it, so each band is punched by exactly the masks below it
+(`liveMasks.slice(0, b)`) and content at or below a mask's z — the background
+in band 0 and any element beneath the mask — survives inside its region.
 
-For `background: 'scene'` exports with background masks present, the punched
-hole must reveal the scene's own background layer — the content "under" the
-mask — instead of a transparent void (which reads as the app surface, black in
-dark mode / white in light mode, in preview and paste).
+### 10.3 Band compositing in `exportScene`
 
-`captureSceneBackgroundNode(sceneNode, width, height, scale)` captures just the
-`[data-scene-background]` layer: the bg node is re-homed inside a fixed,
-scene-sized wrapper (the node is `absolute; inset: 0` and its renderers are
-full-size absolute children, so the wrapper supplies the containing block),
-`domToCanvas` with the same `scale`/`style` options as the main capture, then
-`destination-over` `drawImage` under the punched capture — so only the hole
-reveals the preserved background while everything above the mask stays hidden.
+For masked scenes the foreignObject capture drops the masks' evenodd clip-path
+wrappers, so the z-aware semantics are rebuilt on the raster. The scene
+renders as z-bands (Section 8.3); `exportScene` captures each band
+independently from the export clone and composites them bottom-up:
 
-Gating:
-- `'scene'` + bg masks → punch + background composite.
-- `'solid'` → punch + `destination-over` fill with the requested color.
+- `captureSceneBandNode(cloned, b, w, h, scale)` re-homes a clone of
+  `[data-scene-band="b"]` inside a fixed, scene-sized wrapper (the band is
+  `absolute; inset: 0`, so the wrapper supplies the containing block) and
+  `domToCanvas`s it with the same `scale`/`style` options as the main capture.
+- Band b's canvas is punched with `liveMasks.slice(0, b)` (the masks below it)
+  and `drawImage`d onto an offscreen out-canvas — so masks erase only the
+  content above them, and the background in band 0 is never punched (its
+  capture is raw and always present, giving `background: 'scene'` exports their
+  preserved background through every hole with no separate composite step).
+- Frozen masks are repainted, not punched away: their hole is punched on the
+  out-canvas, then `[data-mask-snapshot-for={id}]` is captured, punched to the
+  mask's shape, and drawn back over the hole — so exports show the frozen
+  snapshot exactly where the editor shows it.
+
+Background gating:
+- `'scene'` → band 0 keeps `[data-scene-background]` (holes reveal the scene's
+  own background); the out-canvas needs no fill.
+- `'solid'` → `destination-over` fill with the requested color after
+  compositing (holes read as the requested color).
 - `'transparent'` → punch only (hole stays transparent alpha).
 - JPEG/WebP (no alpha) composite over black via the encoder — holes read as the
   background color instead of black.
 
+No visible masks → a single flat capture (no band machinery, no out-canvas).
+
 Every export route (Preview/Save/Copy, and `exportAllScenes` per-scene) calls
-`exportScene`, so the punch applies to all of them. Frozen-mask snapshots are
-unhandled by the punch — a frozen mask's export behavior is a separate concern.
+`exportScene`, so the punch applies to all of them.
 
 ---
 
@@ -540,23 +573,26 @@ Tool id `mask`, group `'mask'`, shortcut `G`, `options: true`, cursor
 ### 11.1 Pointer-down
 
 - Primary button only.
-- Hit on an element:
-  - rejects non-maskable kinds and locked elements (`getCapabilities(...).maskable`);
-  - focus-gates: an out-of-scope (dimmed) hit → `clearSelection()` + return;
-  - resolves geometry via `resolveMaskGeometry` (extends
-    `resolveElementGeometry` so textBoxes — maskable, but not bitmap targets —
-    resolve to their box with `rotation: 0`);
-  - `selectDirect(hit.id)` so the panel/mask section follows the stroke.
-- Empty-canvas press targets the background via the sentinel (scene coords,
-  origin 0,0, canvas dims, rotation 0) — the mask brush behaves like the paint
-  brush. The background is never in the focus scope, so focus blocks it
-  (returns, no selection change).
-- Claims the pointer, pins a `PendingMask` (`{ pointerId, targetId, shape,
-  inverted, element, anchor, last, points, radius }`), begins the `mask`
-  interaction, pushes the preview.
+- Claims the pointer and pins a `PendingMask` — geometry is SCENE-space (canvas
+  coordinates) for every shape, so there is no element targeting, no
+  hit-testing, and no local-frame mapping:
+
+  ```ts
+  interface PendingMask {
+    pointerId: number
+    shape: 'rectangle' | 'ellipse' | 'brush'
+    inverted: boolean                       // 'mask' mode
+    anchor: { x; y }                        // pointer-down scene point
+    last: { x; y }
+    points: { x; y }[]                      // scene-space polyline (brush only)
+    radius: number                          // brush.size / 2
+  }
+  ```
+
+- Begins the `mask` interaction and pushes the live preview.
 
 `inverted = rt.maskMode === 'mask'` — 'mask' mode cuts the DRAWN region out of
-the target (the shape becomes transparent); 'unmask' mode keeps the drawn
+the canvas (the shape becomes transparent); 'unmask' mode keeps the drawn
 region and hides the rest. Default `maskMode` is `'mask'`.
 
 ### 11.2 Pointer-move
@@ -572,23 +608,23 @@ region and hides the rest. Default `maskMode` is `'mask'`.
   release point even when the final move was > the sample distance away).
 - Ends the interaction, clears the preview.
 - Sub-3px clicks (rect/ellipse only) are ignored (`MIN_DRAG_DISTANCE_SQ = 9`).
-- Converts scene points to the target's local frame via `toLocalPoint(element,
-  ZERO_ORIGIN, …)` — so rotated targets carve correctly.
 - Computes the stroke:
-  - brush → `buildMaskStrokePolygon(localPoints, pm.radius)` (radius =
-    `rt.brush.size / 2`);
-  - ellipse → `ellipseRing(...)`;
-  - rect → `rectRing(...)`.
+  - brush → `buildMaskStrokePolygon(pm.points, pm.radius)` (the closed capsule
+    polygon, NOT the raw polyline — `maskOuterRing`/`mask-diff` consume the
+    ring directly);
+  - ellipse → `ellipseRing(rect…)`;
+  - rect → `rectRing(rect…)`.
 - **Mask mode (`inverted`)**: `commitLiveMask` — `pushHistory('Add mask')`
-  BEFORE the mutation, then `addMask` with a fresh id. Additive: every stroke
-  appends a fresh mask; strokes stack by clip-path intersection (re-drawing
-  over an already-masked target adds a SECOND mask, never replacing).
-  Committed LIVE (geometry-only, no snapshot) so the checkerboard stays
-  visible right after mouse-up.
-- **Unmask mode**: `resolveUnmaskCommit` against the target's masks in
-  element-local coords; only when non-null → `pushHistory('Unmask')` +
-  `replaceTargetMasks(targetId, commit)`. A no-op stroke changes nothing and
-  pushes no history entry.
+  BEFORE the mutation, then `addMask` with a fresh id and
+  `zIndex: nextMaskZIndex(scene)`. Additive: every stroke appends a fresh mask;
+  strokes stack by clip-path intersection (re-drawing over an already-masked
+  region adds a SECOND mask, never replacing). Committed LIVE (geometry-only,
+  no snapshot); frozen only via the MasksPanel Refresh action.
+- **Unmask mode**: `resolveUnmaskCommit(scene.masks, stroke, canvasW, canvasH)`
+  against the scene's mask list (scene-wide — a stroke can touch any mask's
+  hidden region); only when non-null → `pushHistory('Unmask')` +
+  `replaceMasks(commit)`. A no-op stroke changes nothing and pushes no history
+  entry.
 
 ### 11.4 Cancel / interrupt
 
@@ -602,10 +638,8 @@ runtime-store access — a stranded pending mask can never commit.
 
 ```ts
 interface MaskPreviewState {
-  targetId: string
   shape: 'rectangle' | 'ellipse' | 'brush'
-  points: { x: number; y: number }[]   // scene space
-  element: { id: string; x: number; y: number; width: number; height: number; rotation: number }
+  points: { x: number; y: number }[]   // scene coordinates
   inverted: boolean
   radius?: number                      // brush strokes only
 }
@@ -629,7 +663,9 @@ interface MaskPreviewState {
 Transient editor chrome rendered as a sibling overlay (never inside
 `[data-scene-export]`), in scene coordinates, on top of the scene.
 
-**Checkerboard:** dark + blue squares exactly where the element is masked out.
+**Checkerboard:** dark + blue squares exactly where a mask is being drawn. The
+checkerboard is a LIVE-STROKE affordance only — committed masks render as
+outlines, never as a checkerboard.
 
 ```ts
 CHECKER_DARK = '#000000'
@@ -642,36 +678,48 @@ per tile, so `backgroundSize = CHECKER_SIZE * 2` keeps each square exactly
 64×64 scene units.
 
 Rendering:
-- per-element `data-mask-visual` rotation-matched wrapper at the target's
-  scene origin;
-- one `data-mask-checkerboard` layer per mask, clipped to `hiddenClipPath`
-  (opacity 0.85 at rest, 1 while editing);
-- `data-mask-visible-highlight` layers while editing (kept-region clip + inset
-  ring, blue for punch, amber for inverted);
-- SVG `MaskOutline` — dashed outlines + corner controls (amber for inverted,
-  emphasized while editing); brush outlines draw `points` and each `holes`
-  ring;
-- while a stroke is in flight: `data-mask-edit-dim` (whole-canvas scrim punched
-  to the target via `buildSceneDimPunch`), the live `MaskPreviewVisual`
-  (checkerboard for mask strokes, green "restore" highlight for unmask — a
-  subtractive stroke masks nothing), and a `data-mask-edit-badge`
-  ("Hide mask" / "Unmask" by mode).
+- per-mask `data-mask-visual` wrapper at the mask's scene origin (scene-space
+  geometry, `data-mask-for` carries the mask id);
+- committed masks render as an SVG `MaskOutline` per mask — a dashed outline
+  only (blue `#6366f1` for punch masks, amber `#f59e0b` for inverted),
+  emphasizing the shape + each `holes` ring, with corner-control dots on
+  rect/ellipse masks. Committed masks show NO checkerboard, scrim, badge, or
+  highlight: the editor renders the mask's effect via the scene's own z-band
+  clipping (Section 8.3) and the outline just marks where a mask exists
+  (it must never read as transparency);
+- while a stroke is in flight (`preview != null`, which also emphasizes the
+  committed outlines): `data-mask-preview` renders `data-mask-preview-checkerboard`
+  (the live checkerboard clipped to the stroke's hidden region, mask strokes
+  only), `data-mask-preview-highlight` (blue tint on mask strokes, green
+  "restore" tint on unmask — a subtractive stroke masks nothing), and the live
+  stroke outline.
 
 `MaskOverlay` is rendered unconditionally by `OverlayRenderer` with
-`visuals={collectMaskVisuals(scene)}` — committed masks show their checkerboard
+`visuals={collectMaskVisuals(scene)}` — committed masks show their outlines
 permanently.
 
-### 13.2 PropertiesPanel mask section
+### 13.2 MasksPanel — `components/sidebar/MasksPanel.tsx`
 
-Per-mask row (masks filtered by the selected element's `targetId`):
-shape/inverted label + three controls — **Reverse** (`reverseMask`, toggles
-inverted), **Freeze**↔**Refresh** (`refreshMaskSnapshot`; shows "Freeze" when
-the mask has no snapshot, "Refresh" when frozen), **Remove** (`removeMask`).
-Plus "Add Mask" (full-bounds `maskElement`) and "Clear all masks"
-(`pushHistory('Clear masks')` → `removeMaskFromElement(selected.data.id)`).
-Every operation pushes history BEFORE the mutation; `maskElement` is a
-non-inverted (reveal) full-bounds mask — the legacy whole-canvas checkerboard
-source, recoverable via unmask (Section 7.5).
+The dedicated sidebar panel (`masks` tab) for managing scene-layer masks. It is
+the ONLY panel that edits masks — the PropertiesPanel never references masks
+(masks belong to the canvas, not to any selected element).
+
+- **Add Mask** — "Full Canvas Mask" button: `pushHistory('Add mask')` +
+  `addMask` with a fresh id, `name: Mask N` (count + 1), a full-canvas
+  rectangle, `inverted: true` (punch), `zIndex: nextMaskZIndex(scene)`, visible
+  and unlocked.
+- **Per-mask row** (name + shape/inverted caption): visibility eye, lock,
+  **Reverse** (`pushHistory('Reverse mask')` → `reverseMask`, toggles
+  punch↔reveal), **Freeze↔Refresh** (`refreshMaskSnapshot`; "Freeze current
+  canvas" when live, "Refresh frozen snapshot" when frozen), **Duplicate**
+  (`pushHistory('Duplicate mask')` → `addMask({...m, id, name: name copy,
+  zIndex: nextMaskZIndex})`), and **Delete** (`pushHistory('Remove mask')` →
+  `removeMask`).
+- Double-click the name to rename (`pushHistory('Rename mask')` on commit).
+- **Clear all masks** danger button — the in-app recovery path for stale masks
+  (e.g. a reveal mask tiling the whole canvas in checkerboards).
+
+Every operation pushes history BEFORE the mutation.
 
 ### 13.3 ToolOptionsPanel mask options
 
@@ -680,8 +728,8 @@ source, recoverable via unmask (Section 7.5).
 - Brush radius slider (1–120px) when `maskShape === 'brush'` (writes
   `brush.size`).
 - "Clear masks" danger button (`pushHistory('Clear masks')` →
-  `clearAllMasks()`), so stale canvas/background masks are removable without
-  selecting anything.
+  `clearAllMasks()`), so stale whole-canvas masks are removable without opening
+  the panel.
 
 ---
 
@@ -692,12 +740,11 @@ source, recoverable via unmask (Section 7.5).
 | `addMask(mask)` | appends to the active scene |
 | `updateMask(id, patch)` | merges a partial patch |
 | `removeMask(id)` | deletes by id |
-| `maskElement(id, geometry)` | creates a full-bounds rectangle reveal mask |
-| `removeMaskFromElement(id)` | clears every mask on the target |
 | `reverseMask(id)` | toggles `inverted` |
-| `replaceTargetMasks(targetId, masks)` | filters the target's masks then splices the residual list in one immutable update — the commit boundary for a subtractive unmask stroke (one history entry) |
-| `clearAllMasks()` | empties the active scene's `masks` incl. the background sentinel |
+| `replaceMasks(masks)` | replaces the whole active scene's mask list — the commit boundary for a subtractive unmask stroke (one history entry) |
+| `clearAllMasks()` | empties the active scene's `masks` |
 | `refreshMaskSnapshot(maskId)` | re-captures a frozen snapshot (Section 9) |
+| `nextMaskZIndex(scene)` | max z-index across all elements and masks, + 1 |
 
 All mutators are pure immutable `set` updates on `scenes[activeSceneIndex]`.
 History is the caller's responsibility (`pushHistory` BEFORE the mutation).
@@ -706,12 +753,21 @@ History is the caller's responsibility (`pushHistory` BEFORE the mutation).
 
 ## 15. Serialization — `lib/project-serialization.ts`
 
-`SerializedScene.masks?: SerializedMask[]` — each round-trips `id`, `targetId`,
-`shape`, `x/y/width/height`, `points`, `inverted`, optional `holes`, and
-optional `snapshot`. The snapshot's `dataUrl` is walked through the asset
-walker (`asset://img-*.png` and back), so a frozen capture survives `.mockup`
-save/load. Deserialization reads `masks: scene.masks ?? []` (legacy files
-predate masks), and `holes`/`snapshot` are legacy-absent (no hydration logic).
+`SerializedScene.masks?: SerializedMask[]` — each round-trips `id`, `name`,
+`shape`, `x/y/width/height`, `points`, `inverted`, `zIndex`, `visible`,
+`locked`, optional `holes`, and optional `snapshot`. The snapshot's `dataUrl`
+is walked through the asset walker (`asset://img-*.png` and back), so a frozen
+capture survives `.mockup` save/load. Deserialization reads
+`masks: scene.masks ?? []` (legacy files predate masks), and `holes`/`snapshot`
+are legacy-absent (no hydration logic).
+
+**Legacy migration:** pre-mask-layers files stored masks with a `targetId`
+referencing an element and local-frame geometry. On deserialize, `targetId`
+masks are migrated to scene layers: the target's scene position is added to the
+geometry (element rotation is baked in at load time — documented limitation),
+the background sentinel becomes a full-canvas low-z mask, and masks whose
+target no longer exists are dropped. New-format masks (no `targetId`) pass
+through unchanged.
 
 `regionToMask` (mask-diff) copies a source mask's `snapshot` onto carved
 residuals, so unmasking a frozen mask keeps showing frozen content.
@@ -720,9 +776,11 @@ residuals, so unmasking a frozen mask keeps showing frozen content.
 
 ## 16. Clipboard
 
-`ClipboardEntry` carries `masks: Mask[]`; copy/cut clones masks matching each
-copied target; paste re-adds each with `{ ...m, id: generateId(), targetId:
-newId }`. Masks ride along with their elements.
+Clipboard is element-only: `ClipboardEntry` copies/cuts/pastes elements and
+groups but NEVER masks. Masks are scene layers that don't belong to any
+element, so copy/cut/paste of an element leaves every mask untouched — a mask
+keeps clipping the canvas (and whatever content happens to be under it) exactly
+as before the operation.
 
 ---
 
@@ -732,39 +790,44 @@ Contract tests live in `src/__tests__/`:
 
 | File | Coverage |
 |---|---|
-| `mask.test.ts` | clip-path builders, `collectMaskVisuals` (per kind, background, frozen skip), maskSlice CRUD, serialization round-trip + legacy, tool behaviors (rect/ellipse/brush, additive re-draw, unmask carve/cover/reveal-recovery/box-clear, sub-3px click, locked, textBox, focus gating, non-primary, undo, pointer-cancel) |
+| `mask.test.ts` | clip-path builders, `collectMaskVisuals` (scene-wide, frozen skip), maskSlice CRUD + `nextMaskZIndex`, serialization round-trip + legacy migration, tool behaviors (rect/ellipse/brush, additive re-draw, unmask carve/cover/reveal-recovery/box-clear, sub-3px click, non-primary, undo, pointer-cancel, scene-wide strokes) |
 | `mask-diff.test.ts` | ring builders, `resolveUnmaskCommit` (no-ops, carve with hole, split, full cover, reveal erasure, reference preservation, coincident-hole no-op, clip-path hole contours, box-covering single contour), `ringCoversBox` |
 | `maskBrush.test.ts` | capsule for 2-point stroke, corner regression (both flanks), U-turn, smooth-curve flanks, single-point circle |
-| `maskOverlay.test.tsx` | checkerboard color contract, per-mask clipped layers, rotation, scrim/badge/preview, badge label by mode, nested evenodd contours, background/canvas mask visual, scene-level bg clip (export-node isolation), end-to-end canvas-mask-then-shape clipping, textBox targeting, never leaks into export node |
-| `maskSnapshot.test.ts` | live geometry-only commit (no snapshot), `refreshMaskSnapshot` re-capture/undo, capture-fail no-op, unknown-id no-op, background-sentinel canvas-box capture |
-| `containerClip.test.tsx` | container clip wrappers, multi-mask nesting, frozen snapshot layers in facades |
+| `maskOverlay.test.tsx` | checkerboard color contract, per-mask clipped layers, live preview checkerboard/highlight, badge label by mode, nested evenodd contours, outline-only committed visuals, never leaks into the export node |
+| `maskSnapshot.test.ts` | live geometry-only commit (no snapshot), `refreshMaskSnapshot` re-capture/undo, capture-fail no-op, unknown-id no-op |
+| `masksPanel.test.tsx` | panel Add/visibility/lock/reverse/freeze/duplicate/delete/rename/clear-all with one history entry each |
+| `export-engine.test.ts` | punch primitives (inverted/reveal/holes/degenerate), **z-aware band compositing** (band b punched by `liveMasks.slice(0, b)`, band 0 never punched, no-background masked scene, frozen-mask repaint over its punched hole) |
+| `containerClip.test.tsx` | container clip wrappers + shape-outline clipping (mask intersection removed from containers) |
 | `polygon-clip.test.ts` | boolean difference engine (contained clip → hole, split, full cover, disjoint, annulus sever, re-entrant fold) |
 
 ---
 
 ## 18. Contract summary (the rules that must not break)
 
-1. **Geometry is local**: element masks store local-frame coords; only the
-   background sentinel uses scene coords. Scene→local conversion happens once
-   in the tool via `toLocalPoint` (inverse-rotate around the element center).
-2. **Hidden region is the single source of truth**: inverted → `shape ∖ holes`;
-   non-inverted → `box ∖ shape ∖ holes`; used identically by clip builder,
+1. **Geometry is scene-space**: masks store full-canvas coordinates, never
+   element-local frames; there is no `targetId`, no `findMaskTarget`, and no
+   `toLocalPoint` mapping in the mask path. A mask clips the whole canvas.
+2. **Z-awareness**: a mask preserves content at/below its `zIndex` and punches
+   out only content above it. Editor rendering expresses this with z-bands and
+   a descending `data-scene-mask-clip` fold; export reproduces it with
+   per-band punch subsets (`liveMasks.slice(0, b)`) and bottom-up compositing.
+3. **Hidden region is the single source of truth**: inverted → `shape ∖ holes`;
+   non-inverted → `canvas ∖ shape ∖ holes`; used identically by clip builder,
    overlay, diff engine, and export punch.
-3. **History BEFORE mutation**, always, one entry per committed stroke/action.
-4. **Additive mask / subtractive unmask**: mask mode appends fresh masks
-   (compose by intersection); unmask mode rewrites via `resolveUnmaskCommit`
-   and returns `null` (no history) when nothing is erased.
-5. **Frozen snapshots are Refresh-only**: capture at creation is invisible
+4. **History BEFORE mutation**, always, one entry per committed stroke/action.
+5. **Additive mask / subtractive unmask**: mask mode appends fresh masks
+   (compose by z + intersection); unmask mode rewrites via
+   `resolveUnmaskCommit` and returns `null` (no history) when nothing is erased.
+6. **Frozen snapshots are Refresh-only**: capture at creation is invisible
    (pixel-identical to the live canvas) and was reverted; live-by-default is
-   the contract.
-6. **Export punch scope**: only background masks; the scene background is
-   composited beneath the punch for `'scene'` exports so the hole preserves the
-   area under the mask.
-7. **Overlay is export-clean by structure**: MaskOverlay is a sibling of
-   `[data-scene-export]`; the export clone strips `data-watermark`/`data-guide`
-   and never sees the overlay.
+   the contract. Frozen masks never show an outline/checkerboard — their
+   snapshot layer is the visualization.
+7. **Export punch is z-aware and background-correct**: band 0 (the background
+   layer) is never punched, so `'scene'` exports show the preserved background
+   through every hole with no separate composite; frozen masks repaint their
+   snapshot over their punched hole.
 8. **Box-covering masks are single-contour**: `ringCoversBox` guards both the
    renderer (no self-cancelling evenodd double contour) and the unmask resolver
-   (drop box-covering residuals).
+   (drop canvas-covering residuals).
 9. **Tools never touch the DOM**: geometry is pure functions over store/runtime
    state; the only DOM the mask path touches is the snapshot capture service.

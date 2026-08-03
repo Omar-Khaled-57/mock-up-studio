@@ -11,6 +11,8 @@ interface Props {
   active?: boolean
   disabled?: boolean
   className?: string
+  /** Override the icon glyph size (defaults to the size-derived value). */
+  iconSize?: number
 }
 
 export default function IconButton({
@@ -21,7 +23,8 @@ export default function IconButton({
   variant = 'ghost',
   active = false,
   disabled,
-  className = ''
+  className = '',
+  iconSize
 }: Props) {
   const { clsx, bg } = useTheme()
   const dims = size === 'sm' ? 'h-7 w-7' : 'h-9 w-9'
@@ -35,7 +38,7 @@ export default function IconButton({
       disabled={disabled}
       className={clsx('p-0 flex-shrink-0', dims, active && bg.active, className)}
     >
-      <Icon size={size === 'sm' ? 14 : 16} strokeWidth={active ? 2 : 1.75} />
+      <Icon size={iconSize ?? (size === 'sm' ? 14 : 16)} strokeWidth={active ? 2 : 1.75} />
     </Button>
   )
 }

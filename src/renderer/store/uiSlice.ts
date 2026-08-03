@@ -13,6 +13,7 @@ export type SidebarTab =
   | 'images'
   | 'text'
   | 'shapes'
+  | 'masks'
   | 'layers'
   | 'grid'
   | 'history'

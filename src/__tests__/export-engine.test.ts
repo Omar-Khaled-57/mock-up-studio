@@ -66,7 +66,17 @@ vi.mock('modern-screenshot', () => ({
 import { getMimeType, getExtension, getExportFilename, exportScene, punchSceneMaskHoles } from '../renderer/lib/export-engine'
 
 function rectMask(partial: Partial<Mask> & { x: number; y: number; width: number; height: number }): Mask {
-  return { id: 'm1', targetId: '__background__', shape: 'rectangle', inverted: true, holes: [], ...partial }
+  return {
+    id: 'm1',
+    name: 'Mask 1',
+    shape: 'rectangle',
+    inverted: true,
+    zIndex: 0,
+    visible: true,
+    locked: false,
+    holes: [],
+    ...partial
+  }
 }
 
 describe('getMimeType', () => {
@@ -98,26 +108,60 @@ describe('getExportFilename', () => {
 })
 
 describe('exportScene clone sanitization', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.innerHTML = ''
     capture.node = null
     capture.fakeCtx._calls.length = 0
+    const { resetStore } = await import('./helpers')
+    resetStore()
   })
 
-  it('strips watermark and guide chrome from the export clone', async () => {
+  it('strips guide chrome and injects no watermark when disabled', async () => {
     document.body.innerHTML = `
       <div data-scene-export>
         <div class="content">real content</div>
         <div data-guide="true" style="position:absolute">guide</div>
-        <div data-watermark style="position:absolute">watermark</div>
       </div>
     `
     const blob = await exportScene({ format: 'png', scale: 2, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
 
     expect(blob).not.toBeNull()
     expect(capture.node?.querySelector('[data-guide]')).toBeNull()
-    expect(capture.node?.querySelector('[data-watermark]')).toBeNull()
     expect(capture.node?.querySelector('.content')).not.toBeNull()
+    // Watermark off by default in the test store → nothing injected.
+    expect(capture.node?.querySelector('[data-watermark]')).toBeNull()
+  })
+
+  it('injects the watermark into the export clone when enabled', async () => {
+    const { useStore } = await import('../renderer/store')
+    useStore.getState().setWatermark({ enabled: true, text: 'Mockup Studio', fontSize: 34, opacity: 60 })
+    document.body.innerHTML = `
+      <div data-scene-export>
+        <div class="content">real content</div>
+      </div>
+    `
+    const blob = await exportScene({ format: 'png', scale: 2, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
+
+    expect(blob).not.toBeNull()
+    const wm = capture.node?.querySelector<HTMLElement>('[data-watermark]')
+    expect(wm).not.toBeNull()
+    expect(wm?.textContent).toBe('Mockup Studio')
+    expect(wm?.style.fontSize).toBe('34px')
+    expect(wm?.style.opacity).toBe('0.6')
+    expect(wm?.style.position).toBe('absolute')
+  })
+
+  it('does not inject a watermark for an enabled-but-empty text setting', async () => {
+    const { useStore } = await import('../renderer/store')
+    useStore.getState().setWatermark({ enabled: true, text: '   ' })
+    document.body.innerHTML = `
+      <div data-scene-export>
+        <div class="content">real content</div>
+      </div>
+    `
+    await exportScene({ format: 'png', scale: 2, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
+
+    expect(capture.node?.querySelector('[data-watermark]')).toBeNull()
   })
 
   it('returns null when the scene node is missing', async () => {
@@ -191,10 +235,10 @@ describe('punchSceneMaskHoles', () => {
     expect(capture.fakeCtx._calls).toEqual([])
   })
 
-  it('ignores masks that target elements, not the background', () => {
+  it('skips invisible masks', () => {
     punchSceneMaskHoles(
       ctx,
-      [rectMask({ id: 'el', targetId: 'dev-1', x: 10, y: 10, width: 40, height: 30 })],
+      [rectMask({ id: 'el', visible: false, x: 10, y: 10, width: 40, height: 30 })],
       100,
       100
     )
@@ -265,7 +309,7 @@ describe('punchSceneMaskHoles', () => {
   it('no-ops on a degenerate mask with no ring points', () => {
     punchSceneMaskHoles(
       ctx,
-      [{ ...rectMask({ x: 0, y: 0, width: 10, height: 10 }), shape: 'freeform', points: [] }],
+      [{ ...rectMask({ x: 0, y: 0, width: 10, height: 10 }), shape: 'brush', points: [] }],
       100,
       100
     )
@@ -274,48 +318,96 @@ describe('punchSceneMaskHoles', () => {
 })
 
 describe('exportScene mask punch integration', () => {
+  const origCreateElement = document.createElement.bind(document)
+
   beforeEach(async () => {
     document.body.innerHTML = ''
     capture.node = null
     capture.fakeCtx._calls.length = 0
+    // jsdom has no 2d context, so route every canvas exportScene creates (band
+    // captures, the composite output canvas, frozen snapshot layers) through
+    // the recorded fake ctx and a resolving toBlob — otherwise the bottom-up
+    // compositing is unobservable and encode() would hang on the unimplemented
+    // jsdom toBlob.
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string, options?: ElementCreationOptions) => {
+      if (tag === 'canvas') {
+        const el = origCreateElement('canvas') as HTMLCanvasElement
+        el.getContext = () => capture.fakeCtx as unknown as CanvasRenderingContext2D
+        el.toBlob = (cb: BlobCallback) => cb(new Blob(['png'], { type: 'image/png' }))
+        return el
+      }
+      return origCreateElement(tag, options)
+    })
     const { resetStore } = await import('./helpers')
     resetStore()
   })
 
-  it('punches the active scene background masks into the captured canvas', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const addMasks = async (masks: Mask[]) => {
     const { useStore } = await import('../renderer/store')
-    const state = useStore.getState()
-    state.addMask({
-      id: 'bg-mask',
-      targetId: '__background__',
-      shape: 'rectangle',
-      x: 100,
-      y: 100,
-      width: 200,
-      height: 150,
-      inverted: true
-    })
+    for (const m of masks) useStore.getState().addMask(m)
+  }
+
+  it('punches each band by exactly the masks below it (z-aware)', async () => {
+    await addMasks([
+      rectMask({ id: 'low', name: 'Low', x: 100, y: 100, width: 200, height: 150, zIndex: 0 }),
+      rectMask({ id: 'high', name: 'High', x: 500, y: 500, width: 100, height: 100, zIndex: 5 })
+    ])
 
     document.body.innerHTML = `
       <div data-scene-export>
-        <div data-scene-background><div>scene bg</div></div>
-        <div data-element-id="dev-1">shape</div>
+        <div data-scene-band="0"><div data-scene-background><div>scene bg</div></div></div>
+        <div data-scene-band="1"><div data-element-id="dev-1">shape</div></div>
+        <div data-scene-band="2"><div data-element-id="dev-2">top</div></div>
       </div>
     `
 
-    const blob = await exportScene({ format: 'png', scale: 2, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
+    const blob = await exportScene({ format: 'png', scale: 1, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
 
     expect(blob).not.toBeNull()
     const ops = capture.fakeCtx._calls
-    expect(ops).toEqual(
-      expect.arrayContaining([
-        { op: 'moveTo', x: 200, y: 200 },
-        { op: 'lineTo', x: 600, y: 200 },
-        { op: 'lineTo', x: 600, y: 500 },
-        { op: 'lineTo', x: 200, y: 500 }
-      ])
-    )
+    // Band 0 (background + content strictly below the lowest mask z) is never
+    // punched; band 1 is punched by the low mask only; band 2 by both. That is
+    // two punch passes with both rings traced at least once.
+    expect(ops.filter((o) => o.op === 'save')).toHaveLength(2)
+    expect(ops.some((o) => o.op === 'moveTo' && o.x === 100 && o.y === 100)).toBe(true)
+    expect(ops.some((o) => o.op === 'moveTo' && o.x === 500 && o.y === 500)).toBe(true)
     expect(ops.filter((o) => o.op === 'fill').pop()?.fillRule).toBe('evenodd')
+  })
+
+  it('composites bands bottom-up, each punched before the next draws over it', async () => {
+    await addMasks([
+      rectMask({ id: 'low', name: 'Low', x: 100, y: 100, width: 200, height: 150, zIndex: 0 }),
+      rectMask({ id: 'high', name: 'High', x: 500, y: 500, width: 100, height: 100, zIndex: 5 })
+    ])
+
+    document.body.innerHTML = `
+      <div data-scene-export>
+        <div data-scene-band="0"><div data-scene-background><div>scene bg</div></div></div>
+        <div data-scene-band="1"><div data-element-id="dev-1">shape</div></div>
+        <div data-scene-band="2"><div data-element-id="dev-2">top</div></div>
+      </div>
+    `
+
+    const blob = await exportScene({ format: 'png', scale: 1, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
+    expect(blob).not.toBeNull()
+
+    const ops = capture.fakeCtx._calls
+    const drawIdx = ops.map((o, i) => (o.op === 'drawImage' ? i : -1)).filter((i) => i >= 0)
+    const punchIdx = ops.map((o, i) => (o.op === 'gco' && o.gco === 'destination-out' ? i : -1)).filter((i) => i >= 0)
+    // draw(band0) → punch(band1) → draw(band1) → punch(band2) → draw(band2)
+    expect(drawIdx).toHaveLength(3)
+    expect(punchIdx).toHaveLength(2)
+    expect(drawIdx[0]).toBeLessThan(punchIdx[0])
+    expect(drawIdx[0]).toBeLessThan(drawIdx[1])
+    expect(punchIdx[0]).toBeLessThan(drawIdx[1])
+    expect(punchIdx[1]).toBeLessThan(drawIdx[2])
+    // The background is band-0 content now — there is no separate
+    // destination-over background pass in scene exports.
+    expect(ops.some((o) => o.op === 'gco' && o.gco === 'destination-over')).toBe(false)
   })
 
   it('fills behind the punch with the solid background color', async () => {
@@ -337,24 +429,15 @@ describe('exportScene mask punch integration', () => {
     expect(fillRectIdx).toBeGreaterThan(fillStyleIdx)
   })
 
-  it('composites the scene background beneath the punch in scene exports', async () => {
-    const { useStore } = await import('../renderer/store')
-    const state = useStore.getState()
-    state.addMask({
-      id: 'bg-mask',
-      targetId: '__background__',
-      shape: 'rectangle',
-      x: 100,
-      y: 100,
-      width: 200,
-      height: 150,
-      inverted: true
-    })
+  it('exports a masked scene that lacks a background layer (band 0 is unclipped)', async () => {
+    await addMasks([
+      rectMask({ id: 'low', name: 'Low', x: 0, y: 0, width: 50, height: 50, zIndex: 0 })
+    ])
 
     document.body.innerHTML = `
       <div data-scene-export>
-        <div data-scene-background><div>scene bg</div></div>
-        <div data-element-id="dev-1">shape</div>
+        <div data-scene-band="0"><div class="content">content</div></div>
+        <div data-scene-band="1"><div data-element-id="dev-1">shape</div></div>
       </div>
     `
 
@@ -362,51 +445,66 @@ describe('exportScene mask punch integration', () => {
 
     expect(blob).not.toBeNull()
     const ops = capture.fakeCtx._calls
-    const punchIdx = ops.findIndex((o) => o.op === 'gco' && o.gco === 'destination-out')
-    const overIdx = ops.findIndex((o) => o.op === 'gco' && o.gco === 'destination-over')
-    const drawIdx = ops.findIndex((o) => o.op === 'drawImage')
-    expect(punchIdx).toBeGreaterThanOrEqual(0)
-    expect(overIdx).toBeGreaterThan(punchIdx)
-    expect(drawIdx).toBeGreaterThan(overIdx)
+    // Band 0 is captured and composited unpunched; band 1 gets the one punch.
+    expect(ops.filter((o) => o.op === 'drawImage')).toHaveLength(2)
+    expect(ops.filter((o) => o.op === 'save')).toHaveLength(1)
   })
 
-  it('skips the background composite when the scene has no background masks', async () => {
-    document.body.innerHTML = `
-      <div data-scene-export>
-        <div data-scene-background><div>scene bg</div></div>
-        <div class="content">content</div>
-      </div>
-    `
-
-    const blob = await exportScene({ format: 'png', scale: 1, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
-
-    expect(blob).not.toBeNull()
-    expect(capture.fakeCtx._calls.some((o) => o.op === 'drawImage')).toBe(false)
-  })
-
-  it('skips the background composite when the scene lacks a background layer', async () => {
+  it('composites the watermark as its own layer on masked exports when enabled', async () => {
     const { useStore } = await import('../renderer/store')
-    const state = useStore.getState()
-    state.addMask({
-      id: 'bg-mask',
-      targetId: '__background__',
-      shape: 'rectangle',
-      x: 0,
-      y: 0,
-      width: 50,
-      height: 50,
-      inverted: true
-    })
+    useStore.getState().setWatermark({ enabled: true, text: 'Mockup Studio', fontSize: 34, opacity: 60 })
+    await addMasks([rectMask({ id: 'low', name: 'Low', x: 0, y: 0, width: 50, height: 50, zIndex: 0 })])
+    document.body.innerHTML = `
+      <div data-scene-export>
+        <div data-scene-band="0"><div data-scene-background><div>scene bg</div></div></div>
+        <div data-scene-band="1"><div data-element-id="dev-1">shape</div></div>
+      </div>
+    `
+
+    const blob = await exportScene({ format: 'png', scale: 1, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
+    expect(blob).not.toBeNull()
+
+    const ops = capture.fakeCtx._calls
+    // band 0, band 1, then the injected watermark layer — one extra drawImage.
+    expect(ops.filter((o) => o.op === 'drawImage')).toHaveLength(3)
+    // The last capture was the watermark node itself.
+    expect(capture.node?.querySelector('[data-watermark]')).not.toBeNull()
+  })
+
+  it('paints frozen-mask snapshots back over their punched hole', async () => {
+    await addMasks([
+      rectMask({
+        id: 'frozen',
+        name: 'Frozen',
+        x: 50,
+        y: 50,
+        width: 120,
+        height: 90,
+        zIndex: 0,
+        snapshot: {
+          dataUrl: 'data:image/png;base64,AA==',
+          width: 400,
+          height: 300,
+          sourceBounds: { x: 0, y: 0, width: 400, height: 300 },
+          capturedAt: 1
+        }
+      })
+    ])
 
     document.body.innerHTML = `
       <div data-scene-export>
-        <div class="content">content</div>
+        <div data-scene-band="0"><div data-scene-background><div>scene bg</div></div></div>
+        <div data-mask-snapshot-for="frozen"><img alt="snapshot" /></div>
       </div>
     `
 
     const blob = await exportScene({ format: 'png', scale: 1, background: 'scene', backgroundColor: '#ffffff', quality: 90 })
 
     expect(blob).not.toBeNull()
-    expect(capture.fakeCtx._calls.some((o) => o.op === 'drawImage')).toBe(false)
+    const ops = capture.fakeCtx._calls
+    // band 0 drawn, then the frozen mask punched out of the output canvas and
+    // its snapshot layer punched + drawn back over the hole
+    expect(ops.filter((o) => o.op === 'drawImage')).toHaveLength(2)
+    expect(ops.filter((o) => o.op === 'gco' && o.gco === 'destination-out')).toHaveLength(2)
   })
 })

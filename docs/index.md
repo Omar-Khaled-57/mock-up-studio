@@ -15,7 +15,7 @@
 | [Architecture Overview](./architecture.md) | High-level architecture, rendering pipeline, store separation, data flow |
 | [Engines](./engines.md) | Rasterizer, export, transform sessions, polygon boolean, paint layers, stroke sampling, preview system |
 | [Tools](./tools.md) | Tool manager, select/hand/marquee/focus/mask/brush tool taxonomy and behavior |
-| [State Management](./state.md) | Zustand store (14 slices), history, serialization, clipboard, runtime store |
+| [State Management](./state.md) | Zustand store (13 slices), history, serialization, clipboard, runtime store |
 | [Components](./components.md) | Component hierarchy, element facades, overlay renderer, canvas subsystems |
 | [Core Types](./types.md) | Type definitions for Scene, Device, TextBox, ImageOverlay, Shape, Mask, Background, etc. |
 
@@ -39,7 +39,7 @@
 | Bundler | electron-vite (requires Vite 5) |
 | UI framework | React 19 + TypeScript |
 | Styling | Tailwind CSS 3.4 |
-| State management | Zustand (14 slices merged into a single store + separate runtime store) |
+| State management | Zustand (13 slices merged into a single store + separate runtime store) |
 | Testing | vitest + jsdom (980 tests across 64 files) |
 | Packaging | electron-builder (Windows NSIS/portable, macOS DMG, Linux AppImage) |
 | Auto-update | electron-updater via GitHub Releases |
@@ -52,21 +52,21 @@
 │  (index.ts, menu.ts, ipc-handlers.ts, file-system.ts)   │
 ├─────────────────────────────────────────────────────────┤
 │                    Preload (contextBridge)              │
-│  (index.ts → window.electronAPI)                       │
+│  (index.ts → window.api)                                │
 └──────────────────────────┬──────────────────────────────┘
                            │
 ┌──────────────────────────┴──────────────────────────────┐
 │                     Renderer Process                     │
 │                                                         │
 │  Document Store (Zustand)          Runtime Store       │
-│  - sceneSlice                       - runtimeSlice      │
-│  - selectionSlice                 - brush, focus,     │
-│  - historySlice                     preview, overlay   │
-│  - clipboardSlice                   transient state   │
-│  - effectsSlice                                         │
-│  - maskSlice                                           │
-│  - uiSlice                                             │
-│  - ... (14 slices total)                               │
+│  - ProjectSlice                     - runtimeSlice      │
+│  - SceneSlice / SelectionSlice      - brush, focus,     │
+│  - HistorySlice / ViewportSlice     preview, overlay   │
+│  - UiSlice / ExportSlice            transient state   │
+│  - ClipboardSlice / VersionHistory                     │
+│  - WatermarkSlice / ShapeSlice                         │
+│  - MaskSlice / EffectsSlice                           │
+│  - (13 slices total)                                  │
 │                                                         │
 │  App.tsx                                               │
 │  ├── Sidebar (rail + tab panels)                       │
@@ -81,13 +81,13 @@
 │  │   │   │   │   ├── DeviceFrame / TextBox /         │
 │  │   │   │   │   │   ImageOverlay / ShapeRenderer      │
 │  │   │   │   ├── Container clip wrappers             │
-│  │   │   │   ├── Guides.tsx (persistent)             │
-│  │   │   │   └── WatermarkOverlay                    │
+│  │   │   │   └── Guides.tsx (persistent)             │
+│  │   │   │   (watermark is export-only)              │
 │  │   │   └── ToolEventSurface (pointer dispatcher)   │
 │  │   └── OverlayRenderer (transient editor chrome)   │
 │  │       ├── FocusDim                               │
 │  │       ├── Guides (snap, transient)              │
-│  │       ├── MaskOverlay                             │
+│  │       ├── MaskRenderer                           │
 │  │       ├── Selection chrome (resize handles)      │
 │  │       ├── Marquee                                 │
 │  │       ├── Hover outline                          │
@@ -113,7 +113,7 @@
 
 5. **History contract** — `pushHistory(label)` is called **BEFORE** every store mutation. Undo restores the pre-mutation snapshot. Max 500 entries. Undo/redo triggers `resetRuntime('transient')` to clear stale editor state.
 
-6. **Mask system** — First-class scene content (`Scene.masks[]`). Masks are referenced by `targetId` (elements never know their masks). Geometry stored in the target's **local coordinate frame** so clips rotate with the element. Additive masking (every `mask`-mode stroke adds a new mask); subtractive unmask (polygon boolean difference in the data model via `differenceRegion`). Frozen masks embed whole-scene captures via `MaskSnapshotLayer`.
+6. **Mask system** — First-class scene layers (`Scene.masks[]`). Masks are **z-aware scene layers**: no `targetId`, no element coupling — geometry is stored in **scene coordinates** and a mask preserves content at/below its `zIndex` while punching out content above it. Additive masking (every `mask`-mode stroke adds a new mask); subtractive unmask (polygon boolean difference in the data model via `differenceRegion`). Frozen masks embed whole-scene captures via `MaskSnapshotLayer`.
 
 7. **Polygon boolean clipping** — The `polygon-clip.ts` module implements a full Martinez-style boolean difference algorithm for the unmask operation, since CSS `clip-path` can only intersect (keep-sets), never subtract.
 

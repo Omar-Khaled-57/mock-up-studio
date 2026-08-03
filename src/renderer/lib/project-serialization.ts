@@ -82,7 +82,7 @@ interface SerializedScene {
 
 interface SerializedMask {
   id: string
-  targetId: string
+  name: string
   shape: string
   x: number
   y: number
@@ -90,6 +90,9 @@ interface SerializedMask {
   height: number
   points: { x: number; y: number }[]
   inverted: boolean
+  zIndex: number
+  visible: boolean
+  locked: boolean
   holes?: { x: number; y: number }[][]
   /** Frozen-mask snapshot. `dataUrl` round-trips through the asset walk. */
   snapshot?: {
@@ -206,7 +209,7 @@ interface SerializedShape {
   rotation: number
   opacity: number
   color: string
-  gradient: { enabled: boolean; colors: string[]; angle: number } | null
+  gradient: { enabled: boolean; colors: string[]; angle: number; type?: 'linear' | 'radial' | 'conic'; radialShape?: 'circle' | 'ellipse' } | null
   blur: number
   glow: SerializedImageGlow[]
   shadow: SerializedImageShadow[]
@@ -557,11 +560,75 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Uin
       containerId: shape.containerId ?? null
     }))
 
-    const masks = (scene.masks ?? []).map((m) => {
-      const snap = (m as { snapshot?: { dataUrl?: string } }).snapshot
-      if (!snap?.dataUrl) return m as SerializedMask
-      return { ...m, snapshot: { ...snap, dataUrl: resolveAssetRef(snap.dataUrl, assets) ?? snap.dataUrl } } as SerializedMask
-    })
+    /**
+     * Pre-mask-layers files stored masks with a `targetId` referencing the
+     * element (or the `__background__` canvas sentinel) they clipped, with
+     * geometry in that element's LOCAL frame. Masks are now independent scene
+     * layers, so legacy masks are migrated here: the target's scene position is
+     * added to the geometry, the sentinel becomes a full-canvas low-z mask, and
+     * layer fields (`name`/`zIndex`/`visible`/`locked`) are derived from the
+     * target. Masks whose target no longer exists are dropped. Element rotation
+     * is not representable in the new model and is intentionally ignored
+     * (documented limitation). New-format masks pass through unchanged.
+     */
+    const LEGACY_BACKGROUND_MASK_TARGET = '__background__'
+
+    const findElementForMaskMigration = (
+      elId: string
+    ): { x: number; y: number; zIndex: number; visible: boolean; locked: boolean } | null => {
+      for (const list of [scene.devices, scene.textBoxes, scene.images, scene.shapes ?? []]) {
+        const el = list.find((e) => e.id === elId)
+        if (el) return { x: el.x, y: el.y, zIndex: el.zIndex, visible: el.visible, locked: el.locked }
+      }
+      return null
+    }
+
+    const masks = (scene.masks ?? [])
+      .map((m, index) => {
+        const mask = m as SerializedMask & { targetId?: string }
+        const base: SerializedMask & { targetId?: string } = mask.snapshot?.dataUrl
+          ? { ...mask, snapshot: { ...mask.snapshot, dataUrl: resolveAssetRef(mask.snapshot.dataUrl, assets) ?? mask.snapshot.dataUrl } }
+          : { ...mask }
+
+        const stripTargetId = (source: SerializedMask & { targetId?: string }) => {
+          const copy = { ...source } as Record<string, unknown>
+          delete copy.targetId
+          return copy
+        }
+
+        if (!base.targetId) {
+          return {
+            ...stripTargetId(base),
+            name: base.name ?? `Mask ${index + 1}`,
+            zIndex: base.zIndex ?? 0,
+            visible: base.visible ?? true,
+            locked: base.locked ?? false
+          } as SerializedMask
+        }
+
+        const target =
+          base.targetId === LEGACY_BACKGROUND_MASK_TARGET
+            ? { x: 0, y: 0, zIndex: -1, visible: true, locked: false }
+            : findElementForMaskMigration(base.targetId)
+        if (!target) return null
+
+        return {
+          ...stripTargetId(base),
+          name: base.name ?? `Mask ${index + 1}`,
+          shape: base.shape ?? 'brush',
+          x: (base.x ?? 0) + target.x,
+          y: (base.y ?? 0) + target.y,
+          width: base.width ?? 0,
+          height: base.height ?? 0,
+          points: (base.points ?? []).map((p) => ({ x: p.x + target.x, y: p.y + target.y })),
+          inverted: base.inverted ?? false,
+          holes: (base.holes ?? []).map((ring) => ring.map((p) => ({ x: p.x + target.x, y: p.y + target.y }))),
+          zIndex: target.zIndex,
+          visible: target.visible,
+          locked: target.locked
+        } as SerializedMask
+      })
+      .filter((m): m is SerializedMask => m !== null)
 
     // Pre-v0.3.0 files stored the hero title/slogan as chromeless styles on
     // the scene (`titleText`/`sloganText`). Migrate them into real text boxes

@@ -2,7 +2,7 @@
 
 Mockup Studio uses **two completely separate Zustand stores** with a strict dependency rule:
 
-- **Document store** (`src/renderer/store/index.ts`) — all persisted/serialized state. Composed of 14 merged slices.
+- **Document store** (`src/renderer/store/index.ts`) — all persisted/serialized state. Composed of 13 merged slices.
 - **Runtime store** (`src/renderer/runtime/store.ts`) — transient editor state (tools, previews, focus, gestures). Never serialized.
 
 Document slices import `resetRuntime` from the runtime module — the runtime store must never import from the document store (circular dependency avoidance).
@@ -26,12 +26,17 @@ export const useStore = create<StoreState>()((...a) => ({
   ...createClipboardSlice(...a),
   ...createVersionHistorySlice(...a),
   ...createWatermarkSlice(...a),
-  ...createMaskSlice(...a),
   ...createShapeSlice(...a),
-  ...createEffectsSlice(...a),
-  // dirty tracking
-  ...attachDirtyTracking(...),
+  ...createMaskSlice(...a),
+  ...createEffectsSlice(...a)
 }))
+
+// Dirty tracking is wired AFTER the store is created (it subscribes to the
+// merged store), not inside `create()`.
+attachDirtyTracking(
+  (listener) => useStore.subscribe(listener),
+  () => useStore.getState()
+)
 ```
 
 Each slice is a `createXSlice(set, get, api)` function returning a partial state. The `StoreState` type is the intersection of all slice state interfaces.
@@ -40,29 +45,30 @@ Each slice is a `createXSlice(set, get, api)` function returning a partial state
 
 ```typescript
 // store/dirtyTracking.ts
-function attachDirtyTracking(subscribe, getState) {
-  let prevScenes = getState().scenes
-  subscribe(
-    (state) => state.scenes,
-    (scenes) => {
-      if (scenes !== prevScenes) {
-        prevScenes = scenes
-        useStore.setState({ dirty: true })
-      }
-    }
-  )
+let suppressDirty = false
+let prevScenes: unknown = undefined
+
+export function attachDirtyTracking(
+  subscribe: (listener: () => void) => () => void,
+  getState: () => { scenes: unknown; dirty: boolean; setDirty: (dirty: boolean) => void }
+): () => void {
+  prevScenes = getState().scenes
+  return subscribe(() => {
+    const state = getState()
+    const scenesChanged = state.scenes !== prevScenes
+    prevScenes = state.scenes
+    if (suppressDirty || !scenesChanged || state.dirty) return
+    state.setDirty(true)
+  })
 }
 
-function withDirtySuppressed<T>(fn: () => T): T {
-  let prevDirty: boolean
-  return suppressDirty(() => {
-    prevDirty = useStore.getState().dirty
-    useStore.setState({ dirtySuppressed: true })
-    try { return fn() }
-    finally {
-      useStore.setState({ dirtySuppressed: false, dirty: prevDirty })
-    }
-  })
+export function withDirtySuppressed<T>(fn: () => T): T {
+  suppressDirty = true
+  try {
+    return fn()
+  } finally {
+    suppressDirty = false
+  }
 }
 ```
 
@@ -78,25 +84,29 @@ function withDirtySuppressed<T>(fn: () => T): T {
 
 | Field | Type | Purpose |
 |---|---|---|
-| `project` | `Project?` | `{ id, name, createdAt, updatedAt, filePath? }` |
-| `projectFilePath` | `string \| null` | OS file path for save (null for unsaved) |
+| `project` | `Project?` | `{ id, name, createdAt, updatedAt, scenes, activeSceneIndex }` (no `filePath` on the object) |
+| `filePath` | `string \| null` | OS file path for save (null for unsaved) |
 | `dirty` | `boolean` | Unsaved-changes flag (set by dirty tracking) |
-| `showSplash` | `boolean` | Splash screen visibility |
+
+> `showSplash` lives in **UiSlice** (not ProjectSlice).
 
 ### Actions
 
 | Action | Behavior |
 |---|---|
 | `newProject()` | Creates a fresh project, calls `createDefaultScene`, wraps in `withDirtySuppressed` |
-| `openProject(manifest, assets, filePath?)` | Hydrates from deserialized manifest, wraps in `withDirtySuppressed` |
-| `setProjectInfo(patch)` | Updates name/filePath/timestamps |
+| `openProject()` | No-arg — loads + deserializes the current project via the `window.api.openProject()` IPC, wraps in `withDirtySuppressed` |
+| `setProject(project)` | Replaces the project object (name/filePath/timestamps flow through the project) |
+| `setProjectName(name)` | Updates the project name |
+| `setFilePath(path)` | Sets the save path |
 | `setDirty(value)` | Direct dirty setter (rare — most goes through tracking) |
-| `setShowSplash(value)` | Splash visibility |
-| `saveImage(dataUrl, defaultName)` | Triggers `saveImageDialog` IPC |
+| `clearProject()` | Resets to a fresh unsaved state |
+
+> `saveImageDialog` is not a slice action — `ExportDialog` calls `window.api.saveImageDialog(fileName, dataUrl)` directly for Save/Copy workflows.
 
 ### Key Decision
 
-`newProject` and `openProject` wrap their entire operation in `withDirtySuppressed` — the new project's `pushHistory('New project')`/`pushHistory('Open project')` must not mark the project dirty (opening an existing file is not "unsaved changes").
+`newProject` and `openProject` wrap their entire operation in `withDirtySuppressed` — a fresh project or a freshly opened file is not "unsaved changes". They also **reset `undoStack`/`redoStack` directly** rather than calling `pushHistory`, so no history entries are created for the load.
 
 ---
 
@@ -117,7 +127,7 @@ function withDirtySuppressed<T>(fn: () => T): T {
 interface Scene {
   id: string
   name: string
-  pinned: boolean            // excluded from multi-scene export
+  pinned: boolean            // delete-protection + pinned tab in the scene tab strip (NOT export-filtered)
   canvas: CanvasSettings     // { width, height, aspectRatio }
   background: Background      // type/color/gradient/image/preset/transparent
   devices: Device[]
@@ -150,7 +160,7 @@ interface Scene {
 Each kind has add/update/remove. Updates accept partial patches. All create/update/delete actions do NOT push history — callers push first.
 
 #### Convenience Creators
-- `addDeviceOfType(type)` — creates, `pushHistory('Add device')`, selects, returns id.
+- `addDeviceOfType(type)` — creates, `pushHistory(\`Add ${type}\`)` (per-type label), selects, returns id.
 - `addDefaultTextBox()` — centered "Double-click to edit" box.
 - `importImageFromFile(file)` — FileReader → Image → `buildImageOverlay` → pushHistory + select.
 
@@ -159,7 +169,7 @@ All use `findAllElements` + `patchZIndex`:
 - `bringToFront`, `sendToBack`, `bringForward`, `sendBackward`, `reorderLayer`.
 
 #### Grouping
-- `groupSelected()` — requires ≥2 selected; creates group, sets `groupId` on all 4 arrays, `pushHistory('Group')`.
+- `groupSelected()` — requires ≥2 selected; creates group, sets `groupId` on all 4 arrays. The slice is **dumb** — history is pushed by the call sites (`select.ts` context menus, `PropertiesPanel`, `LayersPanel`), all `pushHistory('Group')` before calling.
 - `ungroup(groupId)` — clears `groupId`, filters groups; **exits focus** if the ungrouped group is the focused one.
 - `renameGroup(id, name)`, `duplicateGroup` (deep-clone children with new IDs + offset), `nestGroup(childId, parentId)`, `combineGroups(groupIds)` (merges into the first + sets parent), `makeParentGroup` (wraps selected groups under a new parent), `reverseNesting(groupId)`.
 - `addToGroup(groupId, elementId)` — no-op if group missing or element already a member.
@@ -183,7 +193,7 @@ Every mutating convenience creator pushes history BEFORE the mutation:
 ```typescript
 addDeviceOfType(type) {
   const device = createDeviceElement(type, scene)
-  pushHistory('Add device')          ← BEFORE
+  pushHistory(`Add ${type}`)          ← BEFORE
   updateDevice(device)                 ← mutation
   select(device.id)
   return device.id
@@ -278,8 +288,8 @@ function distributeSelected(ids, direction):
 
 | Field | Type |
 |---|---|
-| `historyUndoStack` | `HistoryEntry[]` |
-| `historyRedoStack` | `HistoryEntry[]` |
+| `undoStack` | `HistoryEntry[]` |
+| `redoStack` | `HistoryEntry[]` |
 | `MAX_HISTORY` | `500` (constant) |
 
 ### HistoryEntry
@@ -301,11 +311,11 @@ interface HistoryEntry {
 | `pushHistory(label?)` | `JSON.stringify(state.scenes)` → push to undoStack, clear redoStack, cap at 500 (shift oldest). Triggers `maybeAutoSnapshot()` via `setTimeout(0)`. |
 | `undo()` | Pops undoStack, pushes current `JSON.stringify(scenes)` to redoStack, `JSON.parse` restores scenes, clamps `activeSceneIndex`, calls `resetRuntime()` (transient). |
 | `redo()` | Mirror of undo. |
-| `canUndo()` / `canRedo()` | Reactive selectors (for toolbar buttons). |
+| `canUndo()` / `canRedo()` | Imperative `get()`-based checks (`get().undoStack.length > 0`). The toolbar subscribes to `undoStack.length`/`redoStack.length` reactively instead. |
 
 ### `maybeAutoSnapshot`
 
-Called from the version history slice — creates a checkpoint snapshot every N actions or T seconds, stored in `versionHistorySnapshots`. Only fires when the active scene is pinned (user wants version history for that scene).
+Delegated to the version history slice — `pushHistory` fires `setTimeout(() => get().maybeAutoSnapshot(), 0)`. Creates a checkpoint snapshot **every 5 minutes** (`AUTO_SNAPSHOT_INTERVAL = 5 * 60 * 1000`), stored in `snapshots`, gated only by `autoSnapshotEnabled`. No action-count threshold and no pinned-scene gate.
 
 ### History Contract (Universal)
 
@@ -339,7 +349,7 @@ interface ClipboardEntry {
   id: string                    // original element id (for reference)
   kind: ElementKind             // 'device' | 'textbox' | 'image' | 'shape'
   data: Device | TextBox | ImageOverlay | Shape  // deep clone of element
-  masks: Mask[]                // masks targeting this element (cloned)
+  // No `masks` field — masks are scene layers, never copied with elements.
 }
 
 interface CopiedStyle {
@@ -352,9 +362,9 @@ interface CopiedStyle {
 
 | Action | Behavior |
 |---|---|
-| `copySelected()` | Deep-clones selected elements into clipboard entries. Includes their masks (cloned, targetId preserved for re-targeting on paste). Sets `clipboardMode: 'copy'`. |
+| `copySelected()` | Deep-clones selected elements into clipboard entries. Masks are NOT included — masks are scene layers, not element children. Sets `clipboardMode: 'copy'`. |
 | `cutSelected()` | Same as copy, then `pushHistory('Cut')` BEFORE `deleteSelected(ids)`, sets `clipboardMode: 'cut'`. |
-| `pasteClipboard()` | Deep-clones clipboard entries with +30px offset, new IDs (via `generateId`), maxZ+1. **ID remapping**: assigns new IDs up front, then remaps `containerId` and `groupId` via `idMap`. Re-adds masks with new IDs + re-targeted `targetId`. `pushHistory('Paste')` before mutation. Auto-selects pasted elements. If `clipboardMode === 'cut'`, clears clipboard + mode. Returns new IDs. |
+| `pasteClipboard()` | Deep-clones clipboard entries with +30px offset, new IDs (via `generateId`), maxZ+1. **ID remapping**: assigns new IDs up front, then remaps `containerId` via `idMap` (a child pasted alongside its container re-targets the pasted container; otherwise the reference survives). `groupId` is **preserved unchanged** via the spread (not remapped). Masks are untouched (never copied, so nothing to re-target). `pushHistory('Paste')` before mutation. Auto-selects pasted elements. If `clipboardMode === 'cut'`, clears clipboard + mode. Returns new IDs. |
 | `copyStyleSelected()` | Snapshots appearance-only fields from the first selected element via `pickStyle` + `styleFieldsFor(kind)`. |
 | `pasteStyleToSelected()` | Applies `copiedStyle` to every selected element of the **same kind**. `pushHistory('Paste style')` before. Cross-kind targets silently skipped. |
 
@@ -375,13 +385,9 @@ function pasteClipboard():
   for entry in entries:
     if entry.data.containerId in idMap:
       entry.data.containerId = idMap[entry.data.containerId]   ← child re-targets pasted container
-    if entry.data.groupId:
-      entry.data.groupId = idMap.get(entry.data.groupId) ?? entry.data.groupId  ← group ref
-    
-    // Re-target masks
-    for mask in entry.masks:
-      mask.id = generateId()
-      mask.targetId = newId                         ← mask follows its element
+    // groupId is intentionally NOT remapped — the spread preserves the copied
+    // group reference unchanged (group relationships are excluded on paste).
+    // Masks are not involved: they are scene layers, never copied with elements.
   
   pushHistory('Paste')
   addDevices/TextBoxes/Images/Shapes(newEntries)
@@ -455,21 +461,18 @@ Returns empty string when all neutral (or when `effects` is `null`/`undefined`).
 
 | Action | Behavior |
 |---|---|
-| `addMask(mask)` | Appends a fully-formed mask to `Scene.masks[]`. |
+| `addMask(mask)` | Appends a fully-formed mask to `Scene.masks[]`. Called by the Mask tool with `{ ...mask, zIndex: nextMaskZIndex(scene) }`. |
 | `updateMask(maskId, patch)` | Merges patch into mask by id. |
 | `removeMask(maskId)` | Deletes mask by id. |
-| `maskElement(elementId, geometry)` | Creates a full-bounds rectangle mask targeting the element. `pushHistory('Add mask')` at call site. |
-| `removeMaskFromElement(elementId)` | Removes every mask targeting an element. `pushHistory('Remove mask')` at call site. |
 | `reverseMask(maskId)` | Toggles `inverted` flag. `pushHistory('Reverse mask')` at call site. |
-| `replaceTargetMasks(targetId, masks)` | Replaces every mask targeting an element with a fresh list (atomic). The commit boundary for subtractive unmask — `resolveUnmaskCommit` returns a new mask list, this action swaps it in. |
-| `clearAllMasks()` | Empties the entire scene's masks array (all targets, including the `BACKGROUND_MASK_TARGET_ID` sentinel). Recovery path for stale masks. |
-| `refreshMaskSnapshot(maskId)` | Async — finds mask + target, calls `captureMaskSnapshot`, `pushHistory('Refresh mask')` before, updates mask with snapshot. No-ops (no history) on missing mask/target or failed capture. |
+| `replaceMasks(masks)` | Replaces the entire `Scene.masks[]` list atomically. The commit boundary for subtractive unmask — `resolveUnmaskCommit(scene.masks, ...)` returns a new mask list, this action swaps it in. |
+| `clearAllMasks()` | Empties the entire scene's masks array. Recovery path for stale masks (MasksPanel/Toolbar "Clear masks"). |
+| `refreshMaskSnapshot(maskId)` | Async — calls `captureMaskSnapshot`, `pushHistory('Refresh mask')` before, updates mask with snapshot. No-ops (no history) on missing mask or failed capture. |
+| `nextMaskZIndex(scene)` | Returns `max(zIndex of every element kind + masks) + 1` — creation order places new masks on top. |
 
-### Full Reset Hook
+### Reset
 
-Registered via `useStore.getState().effects`... no — via the runtime store's `registerFullResetHook` — `maskSlice` doesn't need reset hooks since masks live on the scene (which is replaced on project load). `clearAllMasks` is called on scene switch to prevent masks from the previous scene appearing on the new canvas.
-
-Wait — actually, masks are part of `Scene.masks[]`, so they're replaced wholesale when the scene changes. No special reset needed. `clearAllMasks` is only for the PropertiesPanel/Toolbar "Clear masks" action.
+`maskSlice` needs no reset hook — masks live in `Scene.masks[]` and are replaced wholesale on project load / scene switch. `clearAllMasks` exists only for the MasksPanel/Toolbar "Clear masks" action.
 
 ---
 
@@ -481,19 +484,19 @@ Wait — actually, masks are part of `Scene.masks[]`, so they're replaced wholes
 
 | Field | Type |
 |---|---|
-| `versionHistory: VersionSnapshot[]` | Auto-checkpointed snapshots |
-| `versionHistoryEnabled` | `boolean` (default true) |
+| `snapshots` | `Snapshot[]` (max 50) |
+| `autoSnapshotEnabled` | `boolean` (default true) |
+| `lastSnapshotTime` | `number` (timestamp of the last snapshot) |
 
-### VersionSnapshot
+### Snapshot
 
 ```typescript
-interface VersionSnapshot {
+interface Snapshot {
   id: string
-  label: string              // human-readable, e.g. "Add device"
   timestamp: number
-  scenesSnapshot: string     // JSON (same format as history)
-  canvasWidth: number
-  canvasHeight: number
+  label: string              // human-readable, e.g. "Add device"
+  scenesJson: string         // JSON (same format as history)
+  activeSceneIndex: number   // restored on rollback
 }
 ```
 
@@ -501,15 +504,16 @@ interface VersionSnapshot {
 
 | Action | Behavior |
 |---|---|
-| `maybeAutoSnapshot(label)` | Creates a checkpoint if conditions met (scene is pinned + enough actions/time elapsed since last). Called from `pushHistory` via `setTimeout(0)`. |
-| `createSnapshot(label)` | Explicit user save. |
-| `restoreSnapshot(id)` | Deep-restores scenes from snapshot, `pushHistory('Restore snapshot')` before. |
+| `maybeAutoSnapshot()` | No args. Creates a checkpoint if `autoSnapshotEnabled` AND ≥5 min since `lastSnapshotTime`. Called from `pushHistory` via `setTimeout(0)`. |
+| `createSnapshot(label)` | Explicit user save (prepends, caps at `MAX_SNAPSHOTS = 50`). |
+| `restoreSnapshot(id)` | Restores `scenes` + `activeSceneIndex` from the snapshot's `scenesJson` and clears `selectedIds`. **Does NOT push history** — the restore is not undoable. |
 | `deleteSnapshot(id)` | Removes from array. |
 | `clearSnapshots()` | Empties array. |
+| `setAutoSnapshotEnabled(enabled)` | Toggles the auto-snapshot gate. |
 
 ### Auto-Snapshot Policy
 
-Only snapshots when the active scene is **pinned** (`scene.pinned === true`) — the user has explicitly opted into version history for that scene. Threshold: 5 actions or 2 minutes since the last snapshot.
+Snapshots are created only when `autoSnapshotEnabled` is true and at least `AUTO_SNAPSHOT_INTERVAL` (5 minutes) has elapsed since the last one. There is **no pinned-scene gate and no action-count threshold**.
 
 ---
 
@@ -519,7 +523,7 @@ Only snapshots when the active scene is **pinned** (`scene.pinned === true`) —
 
 ### Architecture
 
-A **completely separate Zustand store** — `useRuntimeStore`. The document store imports `resetRuntime` from this module; the runtime store imports nothing from the document store. All 14 document slices share a single `resetRuntime` import.
+A **completely separate Zustand store** — `useRuntimeStore`. The document store imports `resetRuntime` from this module; the runtime store imports nothing from the document store. All 13 document slices share a single `resetRuntime` import.
 
 ```typescript
 // runtime/store.ts
@@ -530,12 +534,12 @@ export const useRuntimeStore = create<RuntimeState & RuntimeSlice>()(
 )
 ```
 
-### Full State Fields (22)
+### Full State Fields (25)
 
 | Field | Type | Default | Reset (transient) | Reset (all) |
 |---|---|---|---|---|
 | `activeToolId` | `string` | `'select'` | kept | `'select'` |
-| `temporaryToolStack` | `TempEntry[]` | `[]` | cleared | cleared |
+| `temporaryToolStack` | `TempEntry[]` | `[]` | **kept** | cleared |
 | `hoveredElement` | `{id,kind} \| null` | `null` | cleared | cleared |
 | `pointerScenePos` | `{x,y} \| null` | `null` | cleared | cleared |
 | `pointerInCanvas` | `boolean` | `false` | cleared | cleared |
@@ -604,34 +608,25 @@ export const useRuntimeStore = create<RuntimeState & RuntimeSlice>()(
 ### `resetRuntime` Implementation
 
 ```typescript
-export function resetRuntime(scope: 'transient' | 'all' = 'all') {
-  if (scope === 'transient') {
-    useRuntimeStore.setState(TRANSIENT_RESET, false)  // shallow merge, no replace
-  } else {
-    useRuntimeStore.setState(FULL_RESET, false)
-    fullResetHooks.forEach(hook => hook())            // toolManager.reset(), etc.
-  }
+export function resetRuntime(scope: 'transient' | 'all' = 'transient') {
+  // 'transient' → TRANSIENT_RESET; 'all' → FULL_RESET (which spreads TRANSIENT_RESET).
+  useRuntimeStore.setState(scope === 'all' ? FULL_RESET : TRANSIENT_RESET)
+  if (scope === 'all') fullResetHook?.()
 }
 ```
 
-### Full-Reset Hooks
+### Full-Reset Hook
 
 ```typescript
-const fullResetHooks: (() => void)[] = []
+let fullResetHook: (() => void) | null = null
 
 export function registerFullResetHook(fn: () => void) {
-  fullResetHooks.push(fn)
-  return () => {
-    const idx = fullResetHooks.indexOf(fn)
-    if (idx >= 0) fullResetHooks.splice(idx, 1)
-  }
+  fullResetHook = fn
 }
 ```
 
 Registered by:
-- **ToolManager** — `toolManager.reset()` (restores default tool, clears temp stack + ownership, interrupts all pending sessions).
-- **ToolEventSurface** — clears `hoveredElement`.
-- **Keyboard shortcuts** — resets modifier state.
+- **ToolManager** — `registerFullResetHook(() => toolManager.reset())` (the sole registrant; restores the default tool, clears the temp stack + ownership, interrupts all pending sessions).
 
 ### Why Transient Reset Preserves Tools/Focus
 
@@ -665,10 +660,8 @@ mockup-project.mockup (ZIP)
 2. Walks all scenes, finds all `data:` URLs in:
    - `device.screenImage`
    - `images[].src`
-   - `shapes[].backgroundImage`
    - `background.image.src` (background image type)
    - `mask.snapshot.dataUrl` (frozen masks)
-   - `versionHistory[].scenesSnapshot` (nested! re-serialized recursively)
 3. For each data URL: decode base64 → binary buffer → assign sequential filename (`img-1.png`).
 4. Replace data URL with `asset://<filename>` reference.
 5. Return `{ manifest: JSON string, assets: Map<name, Uint8Array> }`.
@@ -728,14 +721,14 @@ Focus scope = focused group's subtree (all descendant groups' children) OR a foc
 
 ### Serialization Contract
 
-- `lockAspectRatio`, `wrap`, `effects`, `containerId`, `transparent`, `focusGroupId`, `masks[].holes`, `masks[].snapshot` are all **optional** fields that round-trip cleanly via spread — no hydration/migration logic.
+- `lockAspectRatio`, `wrap`, `effects`, `containerId`, `transparent`, `masks[].holes`, `masks[].snapshot` are all **optional** fields that round-trip cleanly via spread — no hydration/migration logic. (`focusGroupId` is runtime-store state, never serialized.)
 - Legacy `.mockup` files load with absent fields → defaults via `??` operator.
 - Assets are extracted from data URLs and stored as binary in the ZIP; on load they're reconstructed as data URLs.
-- The manifest is `JSON.stringify(projects, null, 2)` — human-readable.
+- The manifest is `JSON.stringify(manifest, null, 2)` — human-readable.
 
 ### Multi-Scene Contract
 
 - Each scene is fully independent (its own elements, guides, grid, groups, masks).
-- `setActiveSceneIndex` triggers `resetRuntime('transient')` (clear stale references) + `maybeAutoSnapshot`.
+- `setActiveSceneIndex` triggers `resetRuntime()` (transient) to clear stale element references.
 - Multi-scene export: iterates scenes with double-rAF waits between captures, restores the original index in `finally`.
-- Pinned scenes are excluded from multi-scene export (user's explicit choice).
+- Pinned scenes are **not** excluded from multi-scene export — `pinned` only protects a scene from deletion and pins its tab in the scene tab strip.

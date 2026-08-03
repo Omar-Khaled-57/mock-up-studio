@@ -2,32 +2,22 @@
  * mask-visualization — pure mask geometry for the overlay renderer.
  *
  * Everything the checkerboard `MaskOverlay` needs is computed here from scene
- * data (no DOM reads): the CSS clip-path that masks the target element (and the
- * inverted "punch" clip that describes the transparent region), the grouped
- * scene-space visuals per target element, the live stroke preview converted to
- * a visual, and the focus scrim punch used while editing.
+ * data (no DOM reads): the CSS clip-path that a mask applies to the canvas (and
+ * the inverted "punch" clip that describes the transparent region), the
+ * per-mask scene-space visuals, and the live stroke preview converted to a
+ * visual.
  *
- * Inversion ("punch") uses evenodd clip-path compositing: the full element
- * bounds as the outer contour plus the mask shape as a hole (architecture
- * §10.2). Ellipse holes are approximated as a 32-point polygon.
+ * Masks are independent scene layers with SCENE-space geometry: each mask spans
+ * the whole canvas (`x/y/width/height/points` in canvas coordinates) and clips
+ * via `buildMaskClipPath(mask, canvasW, canvasH)`. Inversion ("punch") uses
+ * evenodd clip-path compositing: the full canvas as the outer contour plus the
+ * mask shape as a hole. Ellipse holes are approximated as a 32-point polygon.
  */
 
 import { Mask, MaskPoint, MaskShape, Scene } from '@shared/types'
-import { isInFocusScope } from './focus'
-import { ElementGeometry, toLocalPoint } from './bitmap-targets'
 import { buildMaskStrokePolygon } from './mask-brush'
 import { ringCoversBox } from './mask-diff'
 import { MaskPreviewState } from '../runtime/runtimeSlice'
-
-const ZERO_ORIGIN = { originX: 0, originY: 0 }
-
-/**
- * Sentinel `targetId` for a mask applied to the scene's background/canvas layer.
- * Geometry lives in scene coordinates (origin 0,0, full canvas), so the mask
- * clips the `data-scene-background` layer exactly like an element mask clips
- * its element's local frame.
- */
-export const BACKGROUND_MASK_TARGET_ID = '__background__'
 
 export interface MaskVisualItem {
   maskId: string
@@ -37,16 +27,16 @@ export interface MaskVisualItem {
   hiddenClipPath: string
   /** Clip-path of the visible (kept) region — used for the editing highlight. */
   visibleClipPath: string
-  /** Mask bounding box in element-local coordinates. */
+  /** Mask bounding box in scene coordinates. */
   rect: { x: number; y: number; width: number; height: number }
-  /** Brush (freehand) polygon in element-local coordinates (null for rect/ellipse). */
+  /** Brush (freehand) polygon in scene coordinates (null for rect/ellipse). */
   points: MaskPoint[] | null
   /** Restored-area rings carved out of a punch (subtractive unmask). */
   holes: MaskPoint[][] | null
 }
 
 export interface MaskVisual {
-  elementId: string
+  maskId: string
   origin: { x: number; y: number }
   width: number
   height: number
@@ -58,19 +48,6 @@ export interface MaskVisual {
 export interface MaskVisualOptions {
   targets: 'all' | 'ids'
   ids?: string[]
-  focusGroupId?: string | null
-  focusElementId?: string | null
-}
-
-export interface MaskTarget {
-  id: string
-  x: number
-  y: number
-  width: number
-  height: number
-  rotation: number
-  visible: boolean
-  zIndex: number
 }
 
 function fmt(v: number): string {
@@ -159,31 +136,6 @@ export function buildMaskPunchClipPath(mask: Mask, width: number, height: number
   return buildMaskClipPath({ ...mask, inverted: !mask.inverted }, width, height)
 }
 
-export function findMaskTarget(scene: Scene, id: string): MaskTarget | null {
-  if (id === BACKGROUND_MASK_TARGET_ID) {
-    return {
-      id,
-      x: 0,
-      y: 0,
-      width: scene.canvas.width,
-      height: scene.canvas.height,
-      rotation: 0,
-      visible: true,
-      // Renders behind every element's checkerboard, matching the background.
-      zIndex: -1
-    }
-  }
-  const d = scene.devices.find((x) => x.id === id)
-  if (d) return { id: d.id, x: d.x, y: d.y, width: d.width, height: d.height, rotation: d.rotation ?? 0, visible: d.visible, zIndex: d.zIndex }
-  const t = scene.textBoxes.find((x) => x.id === id)
-  if (t) return { id: t.id, x: t.x, y: t.y, width: t.width, height: t.height, rotation: 0, visible: t.visible, zIndex: t.zIndex }
-  const i = scene.images.find((x) => x.id === id)
-  if (i) return { id: i.id, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation ?? 0, visible: i.visible, zIndex: i.zIndex }
-  const s = scene.shapes.find((x) => x.id === id)
-  if (s) return { id: s.id, x: s.x, y: s.y, width: s.width, height: s.height, rotation: s.rotation ?? 0, visible: s.visible, zIndex: s.zIndex }
-  return null
-}
-
 export function maskToVisualItem(mask: Mask, width: number, height: number): MaskVisualItem {
   return {
     maskId: mask.id,
@@ -198,95 +150,88 @@ export function maskToVisualItem(mask: Mask, width: number, height: number): Mas
 }
 
 /**
- * Resolves every visible, in-scope target mask to scene-space visuals, grouped
- * per element and z-sorted (checkerboards stack like the scene itself).
+ * Resolves every visible mask to a scene-space visual. Each mask spans the whole
+ * canvas (origin 0,0, canvas dims, rotation 0) and stacks by its own `zIndex`,
+ * so checkerboards align with the canvas exactly like the mask clip layers.
  */
 export function collectMaskVisuals(scene: Scene, options: MaskVisualOptions = { targets: 'all' }): MaskVisual[] {
   const wanted = options.targets === 'ids' ? new Set(options.ids ?? []) : null
-  const byElement = new Map<string, MaskVisual>()
+  const visuals: MaskVisual[] = []
   for (const mask of scene.masks) {
-    // Frozen masks render their own snapshot content inside the element clip
+    // Frozen masks render their own snapshot content inside the mask clip
     // layers — their hidden region shows the captured canvas, not checkerboard
     // transparency, so the overlay must not draw a checkerboard for them.
     if (mask.snapshot) continue
-    const el = findMaskTarget(scene, mask.targetId)
-    if (!el || !el.visible) continue
-    if (wanted && !wanted.has(el.id)) continue
-    if (
-      (options.focusGroupId || options.focusElementId) &&
-      !isInFocusScope(el.id, options.focusGroupId ?? null, scene, options.focusElementId ?? null)
-    ) {
-      continue
-    }
-    let visual = byElement.get(el.id)
-    if (!visual) {
-      visual = {
-        elementId: el.id,
-        origin: { x: el.x, y: el.y },
-        width: el.width,
-        height: el.height,
-        rotation: el.rotation,
-        zIndex: el.zIndex,
-        items: []
-      }
-      byElement.set(el.id, visual)
-    }
-    visual.items.push(maskToVisualItem(mask, el.width, el.height))
+    if (!mask.visible) continue
+    if (wanted && !wanted.has(mask.id)) continue
+    visuals.push({
+      maskId: mask.id,
+      origin: { x: 0, y: 0 },
+      width: scene.canvas.width,
+      height: scene.canvas.height,
+      rotation: 0,
+      zIndex: mask.zIndex,
+      items: [maskToVisualItem(mask, scene.canvas.width, scene.canvas.height)]
+    })
   }
-  return [...byElement.values()].sort((a, b) => a.zIndex - b.zIndex)
+  return visuals.sort((a, b) => a.zIndex - b.zIndex)
 }
 
 /**
  * Converts a live mask stroke (`maskPreview` from the runtime store) into a
  * scene-space visual so the overlay renders the same shape that will commit.
- * Returns null until the stroke has enough geometry.
+ * Stroke points are already in scene coordinates. Returns null until the stroke
+ * has enough geometry.
  */
-export function previewToMaskVisual(preview: MaskPreviewState): MaskVisual | null {
+export function previewToMaskVisual(preview: MaskPreviewState, canvasWidth: number, canvasHeight: number): MaskVisual | null {
   if (preview.points.length === 0) return null
-  const el = preview.element
-  const element: ElementGeometry = { id: preview.targetId, x: el.x, y: el.y, width: el.width, height: el.height, rotation: el.rotation }
-  const localPoints = preview.points.map((p) => toLocalPoint(element, ZERO_ORIGIN, p))
   let synthetic: Mask
   if (preview.shape === 'brush') {
-    const polygon = buildMaskStrokePolygon(localPoints, preview.radius ?? 8)
+    const polygon = buildMaskStrokePolygon(preview.points, preview.radius ?? 8)
     const minX = Math.min(...polygon.map((p) => p.x))
     const minY = Math.min(...polygon.map((p) => p.y))
     const maxX = Math.max(...polygon.map((p) => p.x))
     const maxY = Math.max(...polygon.map((p) => p.y))
     synthetic = {
       id: '__mask_preview__',
-      targetId: preview.targetId,
+      name: 'Mask',
       shape: 'brush',
       x: minX,
       y: minY,
       width: maxX - minX,
       height: maxY - minY,
       points: polygon,
-      inverted: preview.inverted
+      inverted: preview.inverted,
+      zIndex: 0,
+      visible: true,
+      locked: false
     }
   } else {
-    const a = localPoints[0]
-    const b = localPoints[1] ?? a
+    const a = preview.points[0]
+    const b = preview.points[1] ?? a
     synthetic = {
       id: '__mask_preview__',
-      targetId: preview.targetId,
+      name: 'Mask',
       shape: preview.shape,
       x: Math.min(a.x, b.x),
       y: Math.min(a.y, b.y),
       width: Math.abs(b.x - a.x),
       height: Math.abs(b.y - a.y),
       points: [],
-      inverted: preview.inverted
+      inverted: preview.inverted,
+      zIndex: 0,
+      visible: true,
+      locked: false
     }
   }
   return {
-    elementId: preview.targetId,
-    origin: { x: el.x, y: el.y },
-    width: el.width,
-    height: el.height,
-    rotation: el.rotation,
+    maskId: '__mask_preview__',
+    origin: { x: 0, y: 0 },
+    width: canvasWidth,
+    height: canvasHeight,
+    rotation: 0,
     zIndex: 0,
-    items: [maskToVisualItem(synthetic, el.width, el.height)]
+    items: [maskToVisualItem(synthetic, canvasWidth, canvasHeight)]
   }
 }
 

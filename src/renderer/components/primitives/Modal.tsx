@@ -1,8 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { X } from 'lucide-react'
 import { useTheme } from '../../hooks/useTheme'
-import IconButton from './IconButton'
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -79,7 +77,18 @@ export default function Modal({ open, onClose, title, children, width = 480, cla
       >
         <div className={clsx('flex items-center justify-between px-4 py-3 shrink-0 border-b', border.primary)}>
           <h2 className={clsx('text-sm font-semibold', text.primary)}>{title}</h2>
-          <IconButton icon={X} label="Close dialog" onClick={onClose} size="sm" />
+          <button
+            type="button"
+            aria-label="Close dialog"
+            title="Close dialog"
+            onClick={onClose}
+            className={clsx(
+              'inline-flex h-7 w-7 flex-shrink-0 select-none items-center justify-center rounded-lg text-2xl opacity-70 transition-all duration-150 hover:opacity-100 active:scale-[0.98]',
+              text.secondary
+            )}
+          >
+            <span className="translate-y-px leading-none">×</span>
+          </button>
         </div>
         <div className={clsx('px-4 py-4 overflow-y-auto', className)}>{children}</div>
       </div>

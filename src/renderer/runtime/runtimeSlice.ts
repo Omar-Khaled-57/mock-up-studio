@@ -86,11 +86,9 @@ export interface SnapGuides {
 }
 
 export interface MaskPreviewState {
-  targetId: string
   shape: MaskPreviewShape
+  /** Stroke geometry in scene coordinates: two corners for rect/ellipse, polyline for brush. */
   points: { x: number; y: number }[]
-  /** Scene-space geometry of the element the mask is being drawn on. */
-  element: { id: string; x: number; y: number; width: number; height: number; rotation: number }
   /** Whether the stroke will commit inverted (unmask / hide region). */
   inverted: boolean
   /** Brush radius in scene units (brush strokes only). */

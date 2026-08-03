@@ -1,22 +1,28 @@
 /**
- * MaskOverlay — checkerboard transparency visualization for masks.
+ * MaskOverlay — scene-layer mask visualization.
  *
  * Rendered as a sibling overlay (never inside `[data-scene-export]`), in scene
- * coordinates, on top of the scene. It shows, per masked element, the classic
- * transparency checkerboard (dark + blue squares) exactly where the element is
- * masked out, so the user immediately sees "here is transparent, here is
- * content". While a mask stroke is in flight it additionally renders a focus
- * scrim (everything but the target dimmed), a live checkerboard preview of the
- * stroke, and a mode badge.
+ * coordinates, on top of the scene. Masks are Z-AWARE scene layers: a mask
+ * preserves everything strictly below its z-index and punches out content at
+ * or above it — so a masked region shows the preserved content beneath it,
+ * never transparency. Committed masks therefore render as a dashed OUTLINE
+ * plus a faint 50%-opacity checkerboard over the masked-out region: purely a
+ * visual affordance so a committed mask still reads as a cutout (the preserved
+ * content shows through it), never exported.
  *
- * The checkerboard is transient editor chrome: the export engine clones only
- * the scene node and the overlay is its sibling, so it can never appear in
- * exports. Mask geometry lives in the target's local frame and rotates with
- * the element; each element's visuals render inside a rotation-matched wrapper.
+ * While a mask stroke is in flight the overlay renders a live preview of the
+ * stroke: a checkerboard over the region that will be punched out plus a
+ * "restore" highlight, so the user sees exactly what the commit will do.
+ *
+ * The overlay is transient editor chrome: the export engine clones only the
+ * scene node and the overlay is its sibling, so it can never appear in
+ * exports. Masks are independent scene layers with scene-space geometry
+ * (origin = mask x/y, no rotation), so each mask's visuals render at its own
+ * box — the overlay aligns with the canvas exactly like the mask clip layers.
  */
 
 import { MaskPreviewState } from '../../runtime/runtimeSlice'
-import { buildSceneDimPunch, MaskVisual, MaskVisualItem, previewToMaskVisual } from '../../services/mask-visualization'
+import { MaskVisual, MaskVisualItem, previewToMaskVisual } from '../../services/mask-visualization'
 import { CHECKER_BG, CHECKER_DARK, CHECKER_BLUE, CHECKER_SIZE } from '../shared/Checkerboard'
 
 // Legacy re-exports — the checkerboard tokens live in the shared Checkerboard
@@ -112,7 +118,7 @@ function MaskElementVisual({ visual, editing }: { visual: MaskVisual; editing: b
   return (
     <div
       data-mask-visual
-      data-mask-element-id={visual.elementId}
+      data-mask-for={visual.maskId}
       style={{
         position: 'absolute',
         left: visual.origin.x,
@@ -122,29 +128,12 @@ function MaskElementVisual({ visual, editing }: { visual: MaskVisual; editing: b
         ...rotateStyle(visual.rotation, visual.width, visual.height)
       }}
     >
+      {/* Committed masks keep a faint checkerboard over their masked-out region
+          at 50% opacity (visual only) so a committed mask still reads as a
+          transparency cutout; the preserved content shows through it. */}
       {visual.items.map((item) => (
-        <div
-          key={item.maskId}
-          data-mask-checkerboard
-          data-mask-checker-for={item.maskId}
-          style={{ position: 'absolute', inset: 0, clipPath: item.hiddenClipPath, ...CHECKER_BG, opacity: editing ? 1 : 0.85 }}
-        />
+        <div key={item.maskId} data-mask-checkerboard style={{ position: 'absolute', inset: 0, clipPath: item.hiddenClipPath, ...CHECKER_BG, opacity: 0.5 }} />
       ))}
-      {editing &&
-        visual.items.map((item) => (
-          <div
-            key={item.maskId}
-            data-mask-visible-highlight
-            data-mask-highlight-for={item.maskId}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              clipPath: item.visibleClipPath,
-              background: 'rgba(59, 130, 246, 0.16)',
-              boxShadow: item.inverted ? 'inset 0 0 0 1px rgba(245, 158, 11, 0.8)' : 'inset 0 0 0 1px rgba(59, 130, 246, 0.8)'
-            }}
-          />
-        ))}
       <svg width={visual.width} height={visual.height} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
         {visual.items.map((item) => (
           <MaskOutline key={item.maskId} item={item} emphasized={editing} />
@@ -154,14 +143,13 @@ function MaskElementVisual({ visual, editing }: { visual: MaskVisual; editing: b
   )
 }
 
-function MaskPreviewVisual({ preview }: { preview: MaskPreviewState }) {
-  const visual = previewToMaskVisual(preview)
+function MaskPreviewVisual({ preview, canvasWidth, canvasHeight }: { preview: MaskPreviewState; canvasWidth: number; canvasHeight: number }) {
+  const visual = previewToMaskVisual(preview, canvasWidth, canvasHeight)
   if (!visual) return null
   const item = visual.items[0]
   return (
     <div
       data-mask-preview
-      data-mask-preview-target={preview.targetId}
       style={{
         position: 'absolute',
         left: visual.origin.x,
@@ -176,7 +164,7 @@ function MaskPreviewVisual({ preview }: { preview: MaskPreviewState }) {
           masked — so they render as a "restore" highlight over the stroke
           instead of a checkerboard. */}
       {preview.inverted && (
-        <div data-mask-preview-checkerboard style={{ position: 'absolute', inset: 0, clipPath: item.hiddenClipPath, ...CHECKER_BG }} />
+        <div data-mask-preview-checkerboard style={{ position: 'absolute', inset: 0, clipPath: item.hiddenClipPath, ...CHECKER_BG, opacity: 0.7 }} />
       )}
       <div
         data-mask-preview-highlight
@@ -202,53 +190,18 @@ export interface MaskOverlayProps {
 }
 
 /**
- * Overlay layer drawing the transparency checkerboard for every committed
- * mask, plus the live mask preview + focus scrim + mode badge while a stroke
- * is in flight. Rendered in scene coordinates inside the transformed canvas
- * space; never part of the export node.
+ * Overlay layer drawing the transparency checkerboard for every visible mask,
+ * plus the live mask preview while a stroke is in flight. Rendered in scene
+ * coordinates inside the transformed canvas space; never part of the export
+ * node.
  */
 export function MaskOverlay({ width, height, visuals, preview }: MaskOverlayProps) {
-  const target = preview?.element ?? null
   return (
     <div data-mask-overlay className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-      {target && (
-        <div
-          data-mask-edit-dim
-          data-mask-edit-target={preview!.targetId}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            clipPath: buildSceneDimPunch(width, height, target.x, target.y, target.width, target.height, target.rotation) ?? undefined,
-            background: 'rgba(9, 9, 11, 0.35)'
-          }}
-        />
-      )}
       {visuals.map((visual) => (
-        <MaskElementVisual key={visual.elementId} visual={visual} editing={preview?.targetId === visual.elementId} />
+        <MaskElementVisual key={visual.maskId} visual={visual} editing={preview != null} />
       ))}
-      {preview && <MaskPreviewVisual preview={preview} />}
-      {target && (
-        <div
-          data-mask-edit-badge
-          data-mask-edit-target={preview!.targetId}
-          style={{
-            position: 'absolute',
-            left: target.x,
-            top: Math.max(4, target.y - 26),
-            padding: '2px 8px',
-            borderRadius: 999,
-            background: 'rgba(15, 15, 20, 0.92)',
-            border: '1px solid rgba(99, 102, 241, 0.5)',
-            color: '#c7d2fe',
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: 0.2,
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {preview!.inverted ? 'Hide mask' : 'Unmask'}
-        </div>
-      )}
+      {preview && <MaskPreviewVisual preview={preview} canvasWidth={width} canvasHeight={height} />}
     </div>
   )
 }

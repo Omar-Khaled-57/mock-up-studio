@@ -270,7 +270,7 @@ describe('single selection — aspect ratio lock', () => {
   })
 })
 
-describe('single selection — effects & mask sections', () => {
+describe('single selection — effects section', () => {
   it('collapses the Effects section by default when effects are neutral', () => {
     addAndSelect(makeImage())
     render(<PropertiesPanel />)
@@ -283,77 +283,6 @@ describe('single selection — effects & mask sections', () => {
     render(<PropertiesPanel />)
     const header = screen.getByRole('button', { name: 'Effects' })
     expect(header).toHaveAttribute('aria-expanded', 'true')
-  })
-
-  it('opens the Mask section by default when a mask exists and shows actions', () => {
-    const shape = makeShape()
-    addAndSelect(shape)
-    useStore.getState().maskElement(shape.id, { width: shape.width, height: shape.height })
-    render(<PropertiesPanel />)
-
-    const header = screen.getByRole('button', { name: /Mask/ })
-    expect(header).toHaveAttribute('aria-expanded', 'true')
-    expect(screen.getByRole('button', { name: /Reverse/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Remove/ })).toBeInTheDocument()
-  })
-
-  it('Add Mask creates a full-bounds mask and switches the section to edit mode', () => {
-    const shape = makeShape()
-    addAndSelect(shape)
-    render(<PropertiesPanel />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Mask/ }))
-    fireEvent.click(screen.getByRole('button', { name: /Add Mask/ }))
-
-    const mask = useStore.getState().scenes[0].masks.find((m) => m.targetId === shape.id)
-    expect(mask).toBeTruthy()
-    expect(mask!.width).toBe(shape.width)
-    expect(screen.getByRole('button', { name: /Reverse/ })).toBeInTheDocument()
-  })
-
-  it('lists every mask with per-mask Reverse/Remove (additive masks never collapse)', () => {
-    const shape = makeShape()
-    addAndSelect(shape)
-    act(() => {
-      const state = useStore.getState()
-      state.addMask({ id: 'm-a', targetId: shape.id, shape: 'rectangle', x: 0, y: 0, width: 100, height: 50, points: [], inverted: true })
-      state.addMask({ id: 'm-b', targetId: shape.id, shape: 'ellipse', x: 10, y: 10, width: 40, height: 30, points: [], inverted: false })
-    })
-    render(<PropertiesPanel />)
-
-    expect(screen.getAllByRole('button', { name: /Reverse/ })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: /Remove/ })).toHaveLength(2)
-
-    act(() => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Remove/ })[0])
-    })
-    expect(useStore.getState().scenes[0].masks.map((m) => m.id)).toEqual(['m-b'])
-
-    act(() => {
-      fireEvent.click(screen.getAllByRole('button', { name: /Reverse/ })[0])
-    })
-    expect(useStore.getState().scenes[0].masks[0].inverted).toBe(true)
-  })
-
-  it('Clear all masks removes every mask on the selected element with one history entry', () => {
-    const shape = makeShape()
-    addAndSelect(shape)
-    act(() => {
-      const state = useStore.getState()
-      state.addMask({ id: 'm-a', targetId: shape.id, shape: 'rectangle', x: 0, y: 0, width: 100, height: 50, points: [], inverted: true })
-      state.addMask({ id: 'm-b', targetId: shape.id, shape: 'ellipse', x: 10, y: 10, width: 40, height: 30, points: [], inverted: false })
-    })
-    render(<PropertiesPanel />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Clear all masks/ }))
-
-    expect(useStore.getState().scenes[0].masks.filter((m) => m.targetId === shape.id)).toHaveLength(0)
-    expect(useStore.getState().undoStack.length).toBe(1)
-
-    act(() => {
-      useStore.getState().undo()
-    })
-    expect(useStore.getState().scenes[0].masks.filter((m) => m.targetId === shape.id)).toHaveLength(2)
   })
 })
 
@@ -426,5 +355,44 @@ describe('multi selection', () => {
     fireEvent.click(screen.getByRole('button', { name: /Paste Style/ }))
     const s2 = useStore.getState().scenes[0].shapes.find((s) => s.id === 's2')!
     expect(s2.color).toBe('#ff0000')
+  })
+})
+
+describe('single selection — shape fill control', () => {
+  it('renders the Fill control for a selected shape and applies gradient edits', () => {
+    addAndSelect(makeShape({ id: 'fill-shp', color: '#ff0000' }))
+    render(<PropertiesPanel />)
+    expect(screen.getByText('Fill')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /gradient/i }))
+    const shp = useStore.getState().scenes[0].shapes.find((s) => s.id === 'fill-shp')!
+    expect(shp.gradient).toEqual({
+      enabled: true,
+      colors: ['#ff0000', '#1e1b4b'],
+      angle: 135,
+      type: 'linear',
+      radialShape: 'circle'
+    })
+  })
+
+  it('records one debounced history entry for a fill change', () => {
+    vi.useFakeTimers()
+    addAndSelect(makeShape({ id: 'fill-shp-2', color: '#00ff00' }))
+    render(<PropertiesPanel />)
+    expect(useStore.getState().undoStack).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: /gradient/i }))
+    // The debounce hasn't fired yet
+    expect(useStore.getState().undoStack).toHaveLength(0)
+    act(() => { vi.advanceTimersByTime(600) })
+    expect(useStore.getState().undoStack).toHaveLength(1)
+  })
+
+  it('switching back to solid disables the gradient and keeps the config', () => {
+    addAndSelect(makeShape({ id: 'fill-shp-3', color: '#ff0000' }))
+    render(<PropertiesPanel />)
+    fireEvent.click(screen.getByRole('button', { name: /gradient/i }))
+    fireEvent.click(screen.getByRole('button', { name: /^solid$/i }))
+    const shp = useStore.getState().scenes[0].shapes.find((s) => s.id === 'fill-shp-3')!
+    expect(shp.gradient!.enabled).toBe(false)
+    expect(shp.gradient!.colors).toEqual(['#ff0000', '#1e1b4b'])
   })
 })

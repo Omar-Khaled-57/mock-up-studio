@@ -1,5 +1,5 @@
-import { useMemo, useCallback, useRef, useState, Fragment } from 'react'
-import type { Device, ImageOverlay as ImageOverlayType, Mask, Scene, Shape, TextBox as TextBoxType } from '@shared/types'
+import { useMemo, useCallback, useRef, useState } from 'react'
+import type { Device, ImageOverlay as ImageOverlayType, Scene, Shape, TextBox as TextBoxType } from '@shared/types'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useRuntimeStore } from '../../runtime/store'
@@ -10,10 +10,9 @@ import TextBox from '../text/TextBox'
 import ImageOverlay from '../images/ImageOverlay'
 import ShapeRenderer from '../shapes/ShapeRenderer'
 import Grid from './Grid'
-import WatermarkOverlay from './WatermarkOverlay'
 import MaskSnapshotLayer from '../masks/MaskSnapshotLayer'
 import { buildContainerClip, ContainerClipInput } from '../../services/container-clip'
-import { BACKGROUND_MASK_TARGET_ID, buildMaskClipPath } from '../../services/mask-visualization'
+import { buildMaskClipPath } from '../../services/mask-visualization'
 import { screenToScene } from '../../services/viewport'
 
 type ElementEntry =
@@ -52,7 +51,7 @@ function buildSortedEntries(scene: Scene): ElementEntry[] {
   ].sort((a, b) => a.zIndex - b.zIndex)
 }
 
-function buildClipInput(container: ElementEntry, masks: Mask[]): ContainerClipInput {
+function buildClipInput(container: ElementEntry): ContainerClipInput {
   switch (container.type) {
     case 'shape':
       return {
@@ -64,15 +63,13 @@ function buildClipInput(container: ElementEntry, masks: Mask[]): ContainerClipIn
         angles: container.data.angles,
         plusThickness: container.data.plusThickness,
         arrowThickness: container.data.arrowThickness,
-        crossThickness: container.data.crossThickness,
-        masks
+        crossThickness: container.data.crossThickness
       }
     default:
       return {
         kind: container.type,
         width: container.data.width,
-        height: container.data.height,
-        masks
+        height: container.data.height
       }
   }
 }
@@ -90,10 +87,9 @@ export default function Scene() {
    * Flat render tree with container clipping. Every element that has children
    * (a `containerId` parent) renders through a clip wrapper positioned at the
    * container's box: rect boxes clip via overflow, shape parents clip to their
-   * exact outline, and container masks are intersected as nested clip layers.
-   * When the container is the active `focusElementId` its clip is skipped so
-   * the children render in full (fully editable), and nested containers stay
-   * clipped whenever they sit inside an unfocused ancestor.
+   * exact outline. When the container is the active `focusElementId` its clip
+   * is skipped so the children render in full (fully editable), and nested
+   * containers stay clipped whenever they sit inside an unfocused ancestor.
    */
   const renderNodes = useMemo(() => {
     const sorted = buildSortedEntries(scene)
@@ -275,7 +271,7 @@ export default function Scene() {
   const renderClip = (node: { container: ElementEntry; children: RenderNode[] }): React.ReactNode => {
     const container = node.container
     const d = container.data
-    const clip = buildContainerClip(buildClipInput(container, scene.masks.filter((m) => m.targetId === d.id)))
+    const clip = buildContainerClip(buildClipInput(container))
 
     // Counter-translate layer: wrapper box starts at the container's corner,
     // so children (positioned in scene coordinates) shift back to scene space.
@@ -293,31 +289,6 @@ export default function Scene() {
       </div>
     )
 
-    // Intersect the container's masks with the shape clip via nested
-    // clip-path layers (mask geometry lives in the container's local frame).
-    let content: React.ReactNode = translateLayer
-    for (let i = clip.masks.length - 1; i >= 0; i--) {
-      const mask = clip.masks[i]
-      content = (
-        <Fragment key={`container-mask-${mask.id}`}>
-          <div
-            data-container-mask-clip="true"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              overflow: 'hidden',
-              clipPath: buildMaskClipPath(mask, d.width, d.height)
-            }}
-          >
-            {content}
-          </div>
-          {mask.snapshot ? (
-            <MaskSnapshotLayer mask={mask} elementX={d.x} elementY={d.y} targetWidth={d.width} targetHeight={d.height} />
-          ) : null}
-        </Fragment>
-      )
-    }
-
     return (
       <div
         key={`clip-${d.id}`}
@@ -333,7 +304,7 @@ export default function Scene() {
           ...(clip.shapeClip ? { clipPath: clip.shapeClip } : {})
         }}
       >
-        {content}
+        {translateLayer}
       </div>
     )
   }
@@ -344,46 +315,116 @@ export default function Scene() {
   }
 
   /**
-   * Scene content clipped by background (canvas) masks. A mask drawn on empty
-   * canvas targets the `__background__` sentinel and is a SCENE-LEVEL cutout:
-   * the wrapper holds the background layer, the grid and every element, so
-   * content added AFTER the mask (new shapes/devices/images) is clipped too and
-   * can never leak into the masked region. Background mask geometry lives in
-   * scene coordinates (0,0 → canvas size); each extra mask intersects as an
-   * inset-0 layer, mirroring ElementFacade's multi-mask contract. Editor chrome
-   * that must stay interactive or export-stripped (guides, watermark, context
-   * menu) renders outside the wrapper.
+   * Scene content clipped by mask layers. Masks are independent SCENE layers
+   * with Z-AWARE semantics: a mask PRESERVES everything strictly below its
+   * z-index (content beneath the mask — including the scene background and
+   * anything drawn before it — shows through its region) and PUNCHES OUT
+   * content at or above it. Content sharing a mask's z-index counts as ABOVE
+   * the mask and is clipped — layers added after a mask can land at the same
+   * z-index, and they must not leak into its region.
+   *
+   * To express that, content is partitioned into z-bands: band 0 holds the
+   * background, the grid and every node strictly below the lowest mask; band i
+   * holds `[mask[i-1].z, mask[i].z)`; the top band holds everything at or above
+   * the highest mask. Band 0 renders unclipped. Each mask clips its own band
+   * and every higher band by wrapping them ascending (lowest mask innermost,
+   * highest outermost), so a mask affects exactly the content above it —
+   * `zIndex: mask.zIndex` keeps the wrappers in the scene's stacking order.
+   *
+   * Editor chrome that must stay interactive or export-stripped (guides,
+   * watermark, context menu) renders outside the wrapper.
    */
-  const bgMasks = scene.masks.filter((m) => m.targetId === BACKGROUND_MASK_TARGET_ID)
-  let maskedContent: React.ReactNode = (
-    <>
-      <div data-scene-background style={{ position: 'absolute', inset: 0 }}>
-        <BackgroundRenderer background={scene.background} />
-      </div>
-      <Grid grid={scene.grid} canvasWidth={scene.canvas.width} canvasHeight={scene.canvas.height} />
-      {renderNodes.map(renderNode)}
-    </>
+  // Masks are independent SCENE layers with z-aware semantics. LIVE masks (no
+  // `snapshot`) drive the z-band clipping below: each mask preserves everything
+  // strictly below its z-index and punches out content at or above it. FROZEN
+  // masks (a `snapshot` capture) paint their snapshot layer over their hole
+  // instead — they don't create bands, because their opaque snapshot is the
+  // only thing the masked region shows, which makes banding them a visual
+  // no-op.
+  const allVisibleMasks = scene.masks
+    .filter((m) => m.visible)
+    .sort((a, b) => a.zIndex - b.zIndex)
+  const liveMasks = allVisibleMasks.filter((m) => !m.snapshot)
+  const frozenMasks = allVisibleMasks.filter((m) => m.snapshot)
+
+  /** The band a content layer belongs to, given its z-index. */
+  const bandForZ = (z: number): number => {
+    for (let i = 0; i < liveMasks.length; i++) {
+      if (z < liveMasks[i].zIndex) return i
+    }
+    return liveMasks.length
+  }
+  const zOfNode = (node: RenderNode): number =>
+    node.kind === 'element' ? node.entry.zIndex : node.container.zIndex
+
+  const bandContent: React.ReactNode[][] = Array.from({ length: liveMasks.length + 1 }, () => [])
+  // The background is beneath every mask (a mask always preserves the canvas
+  // behind it); the grid is a z-index-1 content layer, banded like any element.
+  bandContent[bandForZ(-1)].push(
+    <div key="scene-background" data-scene-background style={{ position: 'absolute', inset: 0 }}>
+      <BackgroundRenderer background={scene.background} />
+    </div>
   )
-  for (let i = bgMasks.length - 1; i >= 0; i--) {
-    const mask = bgMasks[i]
+  bandContent[bandForZ(1)].push(
+    <Grid key="scene-grid" grid={scene.grid} canvasWidth={scene.canvas.width} canvasHeight={scene.canvas.height} />
+  )
+  for (const node of renderNodes) {
+    bandContent[bandForZ(zOfNode(node))].push(renderNode(node))
+  }
+
+  // Each band renders inside a `data-scene-band` grouping div. The div is inert
+  // for layout — no z-index/transform, so its children keep stacking by their
+  // own z-index — but lets the export engine capture the bands independently.
+  const bandEls = bandContent.map((nodes, i) => (
+    <div key={`scene-band-${i}`} data-scene-band={i} style={{ position: 'absolute', inset: 0 }}>
+      {nodes}
+    </div>
+  ))
+
+  const frozenLayers = frozenMasks.map((mask) => (
+    <MaskSnapshotLayer key={mask.id} mask={mask} canvasWidth={scene.canvas.width} canvasHeight={scene.canvas.height} />
+  ))
+
+  let maskedContent: React.ReactNode
+  if (liveMasks.length === 0) {
     maskedContent = (
-      <Fragment key={`bg-mask-${mask.id}`}>
+      <>
+        {bandEls[0]}
+        {frozenLayers}
+      </>
+    )
+  } else {
+    // Fold descending: the top band is innermost; clip m(i) wraps band i+1 and
+    // every higher mask, so each mask clips exactly the content above it. The
+    // lowest mask ends up the OUTERMOST wrapper, the highest the innermost.
+    let inner: React.ReactNode = null
+    for (let i = liveMasks.length - 1; i >= 0; i--) {
+      const mask = liveMasks[i]
+      inner = (
         <div
+          key={`scene-mask-${mask.id}`}
           data-scene-mask-clip="true"
           data-scene-mask-for={mask.id}
           style={{
             position: 'absolute',
             inset: 0,
             overflow: 'hidden',
+            zIndex: mask.zIndex,
+            pointerEvents: 'none',
             clipPath: buildMaskClipPath(mask, scene.canvas.width, scene.canvas.height)
           }}
         >
-          {maskedContent}
+          {bandEls[i + 1]}
+          {inner}
         </div>
-        {mask.snapshot ? (
-          <MaskSnapshotLayer mask={mask} elementX={0} elementY={0} targetWidth={scene.canvas.width} targetHeight={scene.canvas.height} />
-        ) : null}
-      </Fragment>
+      )
+    }
+    maskedContent = (
+      <>
+        {bandEls[0]}
+        {inner}
+        {frozenLayers}
+      </>
     )
   }
 
@@ -427,8 +468,6 @@ export default function Scene() {
           </div>
         ))}
       </div>
-
-      <WatermarkOverlay />
 
       {contextMenu && (
         <ContextMenu items={contextMenu.items} x={contextMenu.x} y={contextMenu.y} onClose={closeContextMenu} />

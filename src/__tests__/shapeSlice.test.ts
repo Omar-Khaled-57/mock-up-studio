@@ -167,6 +167,15 @@ describe('removeShape', () => {
     const scene = safeScene(useStore.getState())
     expect(scene.shapes).toHaveLength(0)
   })
+
+  it('removing a shape leaves scene masks untouched', () => {
+    useStore.getState().addShape(makeShape({ id: 's1' }))
+    useStore.getState().addMask({ id: 'm1', name: 'Mask 1', shape: 'rectangle', x: 0, y: 0, width: 100, height: 100, inverted: true, zIndex: 0, visible: true, locked: false })
+    useStore.getState().removeShape('s1')
+    const scene = safeScene(useStore.getState())
+    expect(scene.shapes).toHaveLength(0)
+    expect(scene.masks.find((m) => m.id === 'm1')).toBeDefined()
+  })
 })
 
 describe('shape integration with selectionSlice', () => {

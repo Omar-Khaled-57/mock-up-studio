@@ -1,21 +1,18 @@
 /**
- * maskSlice — CRUD and operations for reusable masks (architecture §6.1, §10).
+ * maskSlice — CRUD and operations for scene-layer masks (architecture §6.1).
  *
- * Masks are first-class scene content: `Scene.masks[]` where each mask
- * references its target element by id (not the other way around), so any
- * element kind can be masked with zero per-type code. Geometry is stored in
- * the target element's local coordinate frame and never participates in
- * z-order — it rides along with the target element.
+ * Masks are first-class scene layers: `Scene.masks[]` with scene-space
+ * geometry and their own `name`/`zIndex`/`visible`/`locked` layer fields.
+ * They are never tied to an element — a mask clips the whole canvas (via the
+ * scene mask wrappers) independently of any object.
  *
  * History contract: callers MUST call `pushHistory()` BEFORE mutating so undo
  * restores the exact pre-mask state (same rule as every other document slice).
  */
 
 import { StateCreator } from 'zustand'
-import { Mask } from '@shared/types'
+import { Mask, Scene } from '@shared/types'
 import { StoreState } from './index'
-import { generateId } from '../lib/id'
-import { findMaskTarget } from '../services/mask-visualization'
 import { captureMaskSnapshot } from '../services/mask-snapshot'
 
 export interface MaskSlice {
@@ -25,30 +22,36 @@ export interface MaskSlice {
   updateMask: (maskId: string, patch: Partial<Mask>) => void
   /** Deletes a mask object by id. */
   removeMask: (maskId: string) => void
-  /** Creates a full-bounds rectangle mask covering the given element geometry. */
-  maskElement: (elementId: string, geometry: { width: number; height: number }) => void
-  /** Removes every mask targeting an element. */
-  removeMaskFromElement: (elementId: string) => void
   /** Toggles the mask's invert flag (clip → punch). */
   reverseMask: (maskId: string) => void
   /**
-   * Replaces every mask targeting an element with a fresh list — the commit
-   * boundary for a subtractive unmask stroke (one history entry).
+   * Replaces the whole active scene's mask list — the commit boundary for a
+   * subtractive unmask stroke (one history entry).
    */
-  replaceTargetMasks: (targetId: string, masks: Mask[]) => void
+  replaceMasks: (masks: Mask[]) => void
   /**
-   * Removes every mask in the active scene — all targets, including the
-   * canvas/background sentinel. The in-app recovery path for stale masks
-   * (e.g. a reveal mask tiling the whole canvas in checkerboards).
+   * Removes every mask in the active scene. The in-app recovery path for stale
+   * masks (e.g. a reveal mask tiling the whole canvas in checkerboards).
    */
   clearAllMasks: () => void
   /**
    * Re-captures a mask's frozen snapshot from the current canvas (the explicit
-   * Refresh action). Frees any live-clip mask too — a mask without a snapshot
-   * becomes frozen. Pushes ONE history entry; a no-op (mask/target missing or
-   * capture failing) pushes nothing.
+   * Refresh action) over the mask's own scene box. Frees any live-clip mask
+   * too — a mask without a snapshot becomes frozen. Pushes ONE history entry;
+   * a no-op (mask missing or capture failing) pushes nothing.
    */
   refreshMaskSnapshot: (maskId: string) => Promise<void>
+}
+
+/** Next available mask z-index: max over every element and mask z, plus one. */
+export function nextMaskZIndex(scene: Scene): number {
+  let max = -1
+  for (const list of [scene.devices, scene.textBoxes, scene.images, scene.shapes ?? [], scene.masks]) {
+    for (const entry of list) {
+      if (entry.zIndex > max) max = entry.zIndex
+    }
+  }
+  return max + 1
 }
 
 export const createMaskSlice: StateCreator<StoreState, [], [], MaskSlice> = (set, get) => ({
@@ -85,39 +88,6 @@ export const createMaskSlice: StateCreator<StoreState, [], [], MaskSlice> = (set
       return { scenes }
     }),
 
-  maskElement: (elementId, geometry) =>
-    set((state) => {
-      const scenes = [...state.scenes]
-      const scene = scenes[state.activeSceneIndex]
-      const mask: Mask = {
-        id: generateId(),
-        targetId: elementId,
-        shape: 'rectangle',
-        x: 0,
-        y: 0,
-        width: geometry.width,
-        height: geometry.height,
-        points: [],
-        inverted: false
-      }
-      scenes[state.activeSceneIndex] = {
-        ...scene,
-        masks: [...scene.masks, mask]
-      }
-      return { scenes }
-    }),
-
-  removeMaskFromElement: (elementId) =>
-    set((state) => {
-      const scenes = [...state.scenes]
-      const scene = scenes[state.activeSceneIndex]
-      scenes[state.activeSceneIndex] = {
-        ...scene,
-        masks: scene.masks.filter((m) => m.targetId !== elementId)
-      }
-      return { scenes }
-    }),
-
   reverseMask: (maskId) =>
     set((state) => {
       const scenes = [...state.scenes]
@@ -129,13 +99,13 @@ export const createMaskSlice: StateCreator<StoreState, [], [], MaskSlice> = (set
       return { scenes }
     }),
 
-  replaceTargetMasks: (targetId, masks) =>
+  replaceMasks: (masks) =>
     set((state) => {
       const scenes = [...state.scenes]
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = {
         ...scene,
-        masks: [...scene.masks.filter((m) => m.targetId !== targetId), ...masks]
+        masks
       }
       return { scenes }
     }),
@@ -156,13 +126,11 @@ export const createMaskSlice: StateCreator<StoreState, [], [], MaskSlice> = (set
     const scene = state.scenes[state.activeSceneIndex]
     const mask = scene.masks.find((m) => m.id === maskId)
     if (!mask) return
-    const target = findMaskTarget(scene, mask.targetId)
-    if (!target) return
     const snapshot = await captureMaskSnapshot({
-      x: target.x,
-      y: target.y,
-      width: target.width,
-      height: target.height
+      x: mask.x,
+      y: mask.y,
+      width: mask.width,
+      height: mask.height
     })
     if (!snapshot) return
     state.pushHistory('Refresh mask')

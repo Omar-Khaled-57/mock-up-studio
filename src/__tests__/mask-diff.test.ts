@@ -29,7 +29,7 @@ function square(x: number, y: number, width: number, height: number) {
 function mask(overrides: Partial<Mask> = {}): Mask {
   return {
     id: 'm1',
-    targetId: 'dev-1',
+    name: 'Mask 1',
     shape: 'rectangle',
     x: 0,
     y: 0,
@@ -37,6 +37,9 @@ function mask(overrides: Partial<Mask> = {}): Mask {
     height: 100,
     points: [],
     inverted: true,
+    zIndex: 0,
+    visible: true,
+    locked: false,
     ...overrides
   }
 }
@@ -82,7 +85,18 @@ describe('resolveUnmaskCommit', () => {
     expect(result).not.toBeNull()
     expect(result).toHaveLength(1)
     expect(result[0].id).not.toBe('a')
-    expect(result[0]).toMatchObject({ targetId: 'dev-1', shape: 'brush', inverted: true, x: 10, y: 10, width: 80, height: 80 })
+    expect(result[0]).toMatchObject({
+      shape: 'brush',
+      inverted: true,
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 80,
+      name: 'Mask 1',
+      zIndex: 0,
+      visible: true,
+      locked: false
+    })
     expect(result[0].holes).toHaveLength(1)
     expect(result[0].holes![0]).toHaveLength(4)
   })
@@ -99,6 +113,36 @@ describe('resolveUnmaskCommit', () => {
     const result = resolveUnmaskCommit([m], square(30, 30, 40, 40), 100, 100)!
     expect(result).toHaveLength(1)
     expect(result[0].snapshot).toEqual(snapshot)
+  })
+
+  it('carved residuals inherit the source mask layer fields', () => {
+    const m = mask({
+      id: 'a',
+      name: 'My Mask',
+      shape: 'rectangle',
+      x: 10,
+      y: 10,
+      width: 80,
+      height: 80,
+      zIndex: 5,
+      visible: true,
+      locked: false
+    })
+    const result = resolveUnmaskCommit([m], square(30, 30, 40, 40), 100, 100)!
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ name: 'My Mask', zIndex: 5, visible: true, locked: false })
+  })
+
+  it('never carves invisible masks (left untouched by reference)', () => {
+    const m = mask({ id: 'a', shape: 'rectangle', x: 0, y: 0, width: 100, height: 100, visible: false })
+    const result = resolveUnmaskCommit([m], square(25, 25, 50, 50), 100, 100)
+    expect(result).toBeNull()
+  })
+
+  it('never carves locked masks (left untouched by reference)', () => {
+    const m = mask({ id: 'a', shape: 'rectangle', x: 0, y: 0, width: 100, height: 100, locked: true })
+    const result = resolveUnmaskCommit([m], square(25, 25, 50, 50), 100, 100)
+    expect(result).toBeNull()
   })
 
   it('keeps a full-box punch carved by an edge-touching stroke (bay restore)', () => {

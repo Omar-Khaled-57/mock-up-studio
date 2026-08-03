@@ -4,25 +4,37 @@
  * How it works:
  *   1. Finds the `[data-scene-export]` DOM node (the Scene component).
  *   2. Deep-clones it, positions it offscreen (-99999px), and removes
- *      transient editor chrome (`data-watermark`, `data-guide`) that must
- *      never appear in exports.
+ *      transient editor chrome (`data-guide`, `data-transparent-checker`) that
+ *      must never appear in exports. The watermark is NOT editor chrome — it is
+ *      export-only content, so it is injected into the clone (when enabled)
+ *      rather than stripped.
  *   3. Applies background color override if "solid" or "transparent" mode.
  *   4. Appends the clone to `document.body` (required by modern-screenshot
  *      to resolve styles and compute layout).
  *   5. Calls `domToCanvas()` with the desired scale, then deterministically
- *      punches scene-mask holes into the canvas (the foreignObject capture
- *      drops `clip-path: polygon(… evenodd)` — probe-proven — so the masked
- *      transparency must be reproduced with canvas compositing).
+ *      reproduces z-aware scene-mask clipping on the raster (the foreignObject
+ *      capture drops `clip-path: polygon(… evenodd)` — probe-proven — so the
+ *      mask semantics must be rebuilt with canvas compositing).
  *   6. For solid exports, fills behind the punch with the requested color.
  *   7. Encodes the canvas to a Blob with the desired format and quality.
  *   8. Removes the clone in the `finally` block (always, even on error).
  *
  * Scale: 1x = 1:1 pixel mapping, 2x = double resolution, etc.
  * Quality: Only applies to JPEG and WebP (PNG is always lossless).
+ *
+ * Z-aware mask export: the editor renders masks as independent scene layers
+ * that preserve everything strictly below their z-index and punch out content
+ * at or above it (see Scene.tsx banding). To reproduce that on a raster,
+ * masked scenes are composited bottom-up from per-band captures: band 0
+ * (background + content < lowest mask z) is unclipped, band b is punched by
+ * every mask below it, and higher bands are punched by more masks — so the
+ * content beneath a mask survives inside its region. Frozen masks (snapshot)
+ * are painted back over their punched hole from their snapshot layer.
  */
 
 import { domToCanvas } from 'modern-screenshot'
-import { BACKGROUND_MASK_TARGET_ID, maskOuterRing } from '../services/mask-visualization'
+import { maskOuterRing } from '../services/mask-visualization'
+import { buildWatermarkStyle, isWatermarkEnabled } from './watermark'
 import type { Mask } from '@shared/types'
 
 export type ExportFormat = 'png' | 'jpeg' | 'webp'
@@ -66,7 +78,7 @@ function traceRing(ctx: CanvasRenderingContext2D, ring: { x: number; y: number }
 }
 
 /**
- * Punches scene/background-mask holes out of an exported scene canvas.
+ * Punches mask holes out of an exported scene canvas.
  *
  * The scene DOM clips masks with `clip-path: polygon(… evenodd)` wrappers,
  * which the foreignObject capture silently ignores (the shape inside a masked
@@ -74,10 +86,11 @@ function traceRing(ctx: CanvasRenderingContext2D, ring: { x: number; y: number }
  * itself: a `destination-out` fill with `fillRule: 'evenodd'` erases exactly
  * the masked region.
  *
- * Only background masks (target `__background__`) are punched. Element and
- * container masks clip only their own facade — reproducing their hidden
- * regions on the raster would require revealing content beneath them, which
- * CSS clip-path does not do either, so they are out of scope.
+ * Z-aware semantics: a mask punches out only content ABOVE it, so this punch
+ * is applied per z-band with exactly the masks below that band (see
+ * `exportScene`), and to frozen-mask snapshot layers before they are painted
+ * back over their hole. Callers pass the relevant mask subset — hidden masks
+ * and degenerate rings are skipped here.
  *
  * Hidden-region semantics (mirroring `buildMaskClipPath`):
  *   - inverted (punch): hidden = shape ∖ holes  → path = shape + holes
@@ -92,12 +105,12 @@ export function punchSceneMaskHoles(
   scale = 1
 ): void {
   if (!ctx) return
-  const bgMasks = masks.filter((m) => m.targetId === BACKGROUND_MASK_TARGET_ID)
-  if (bgMasks.length === 0) return
+  const visibleMasks = masks.filter((m) => m.visible)
+  if (visibleMasks.length === 0) return
 
   ctx.save()
   ctx.globalCompositeOperation = 'destination-out'
-  for (const mask of bgMasks) {
+  for (const mask of visibleMasks) {
     const outer = maskOuterRing(mask)
     if (outer.length === 0) continue
 
@@ -122,29 +135,23 @@ export function punchSceneMaskHoles(
 }
 
 /**
- * Captures just the scene's background layer (`[data-scene-background]`) so a
- * punched mask hole can reveal the content "under" the mask. The background
- * node is `position: absolute; inset: 0` and its renderers are full-size
- * absolute children, so the clone is re-homed inside a fixed, scene-sized
- * wrapper before capture. Returns null when the scene has no background layer
- * or the capture fails.
+ * Captures a detached DOM subtree by re-homing a clone inside a fixed,
+ * scene-sized wrapper (the node's own positioning is scene-absolute, so the
+ * wrapper supplies the containing block). Returns null on capture failure.
  */
-export async function captureSceneBackgroundNode(
-  sceneNode: HTMLElement,
+async function captureNodeIntoCanvas(
+  node: HTMLElement,
   width: number,
   height: number,
   scale = 1
 ): Promise<HTMLCanvasElement | null> {
-  const bg = sceneNode.querySelector('[data-scene-background]')
-  if (!bg) return null
-
   const wrapper = document.createElement('div')
   wrapper.style.position = 'fixed'
   wrapper.style.left = '-99999px'
   wrapper.style.top = '0'
   wrapper.style.width = `${width}px`
   wrapper.style.height = `${height}px`
-  wrapper.appendChild(bg.cloneNode(true))
+  wrapper.appendChild(node.cloneNode(true))
 
   document.body.appendChild(wrapper)
   try {
@@ -160,6 +167,24 @@ export async function captureSceneBackgroundNode(
   } finally {
     document.body.removeChild(wrapper)
   }
+}
+
+/**
+ * Captures one z-band of the scene (`[data-scene-band="b"]`) from the export
+ * clone, unclipped by any mask wrapper. Bands are independently capturable
+ * because foreignObject drops the mask clip-paths anyway — the clone's band
+ * subtree is the raw band content, which `exportScene` then punches itself.
+ */
+async function captureSceneBandNode(
+  sceneClone: HTMLElement,
+  bandIndex: number,
+  width: number,
+  height: number,
+  scale = 1
+): Promise<HTMLCanvasElement | null> {
+  const band = sceneClone.querySelector<HTMLElement>(`[data-scene-band="${bandIndex}"]`)
+  if (!band) return null
+  return captureNodeIntoCanvas(band, width, height, scale)
 }
 
 /**
@@ -185,8 +210,9 @@ export async function exportScene(options: ExportOptions): Promise<Blob | null> 
 
   document.body.appendChild(cloned)
 
-  // Transient editor chrome must never appear in exports.
-  cloned.querySelectorAll('[data-watermark], [data-guide], [data-transparent-checker]').forEach((el) => el.remove())
+  // Transient editor chrome must never appear in exports. The watermark is
+  // export-only content and is injected below, never present in the editor DOM.
+  cloned.querySelectorAll('[data-guide], [data-transparent-checker]').forEach((el) => el.remove())
 
   // For solid/transparent exports the scene's own background layer would
   // cover the override — remove it so the override shows through.
@@ -195,57 +221,107 @@ export async function exportScene(options: ExportOptions): Promise<Blob | null> 
   }
 
   try {
-    const canvas = await domToCanvas(cloned, {
-      scale: options.scale,
-      style: {
-        transform: 'none',
-        transformOrigin: '0 0'
-      }
-    })
-
-    // Scene masks must survive capture even though their evenodd clip-path
-    // wrappers do not: punch the transparency holes deterministically.
     const { useStore } = await import('../store')
     const { safeScene } = await import('../store/sceneSlice')
     const scene = safeScene(useStore.getState())
-    const bgMasks = scene.masks.filter((m) => m.targetId === BACKGROUND_MASK_TARGET_ID)
-    const ctx = canvas.getContext('2d')
-    punchSceneMaskHoles(ctx, bgMasks, scene.canvas.width, scene.canvas.height, options.scale)
+    const visibleMasks = scene.masks.filter((m) => m.visible)
 
-    if (options.background === 'scene' && bgMasks.length > 0) {
-      // A scene (canvas) mask preserves the area under it: the hole it punches
-      // must reveal the scene's own background layer — the content "under" the
-      // mask — instead of a transparent void (which reads as the app surface,
-      // black in dark mode / white in light mode, in preview and paste).
-      // The mask clip already hides everything above the background in the
-      // masked region; the background is composited beneath the punched capture
-      // so only the hole reveals it.
-      const bgCanvas = await captureSceneBackgroundNode(cloned, scene.canvas.width, scene.canvas.height, options.scale)
-      if (ctx && bgCanvas) {
-        ctx.save()
-        ctx.globalCompositeOperation = 'destination-over'
-        ctx.drawImage(bgCanvas, 0, 0)
-        ctx.restore()
+    // The watermark is export-only: it is never rendered in the editor, so it
+    // is injected into the clone here. The flat capture path below rasters it
+    // with the rest of the scene; the banded path captures it as its own layer.
+    const { watermark } = useStore.getState()
+    const watermarkOn = isWatermarkEnabled(watermark)
+    if (watermarkOn) {
+      const wm = document.createElement('div')
+      wm.setAttribute('data-watermark', '')
+      wm.textContent = watermark.text
+      Object.assign(wm.style, buildWatermarkStyle(watermark))
+      cloned.appendChild(wm)
+    }
+
+    const encode = (c: HTMLCanvasElement) =>
+      new Promise<Blob | null>((resolve) => {
+        c.toBlob(
+          (blob) => resolve(blob),
+          getMimeType(options.format),
+          options.format === 'png' ? undefined : options.quality / 100
+        )
+      })
+
+    const solidFill = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+      ctx.save()
+      ctx.globalCompositeOperation = 'destination-over'
+      ctx.fillStyle = options.backgroundColor
+      ctx.fillRect(0, 0, w, h)
+      ctx.restore()
+    }
+
+    // No masks: a single flat capture needs no band machinery.
+    if (visibleMasks.length === 0) {
+      const canvas = await domToCanvas(cloned, {
+        scale: options.scale,
+        style: {
+          transform: 'none',
+          transformOrigin: '0 0'
+        }
+      })
+      const ctx = canvas.getContext('2d')
+      if (options.background === 'solid' && ctx) {
+        solidFill(ctx, canvas.width, canvas.height)
       }
-    } else if (options.background === 'solid') {
-      // Solid exports: fill behind the punched holes (and any transparent
-      // region) with the requested color so the image is fully opaque.
-      if (ctx) {
-        ctx.save()
-        ctx.globalCompositeOperation = 'destination-over'
-        ctx.fillStyle = options.backgroundColor
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.restore()
+      return encode(canvas)
+    }
+
+    // Masked scenes: the foreignObject capture drops the masks' evenodd
+    // clip-path wrappers, so z-aware mask semantics must be rebuilt on the
+    // raster. The scene renders as z-bands (Scene.tsx): band b is punched by
+    // every mask BELOW it, so a mask punches out only content above it and the
+    // content beneath it survives inside its region. Bands are captured
+    // independently from the clone and composited bottom-up, each punched by
+    // its own mask subset.
+    const liveMasks = visibleMasks.filter((m) => !m.snapshot)
+    const frozenMasks = visibleMasks.filter((m) => m.snapshot)
+
+    const outCanvas = document.createElement('canvas')
+    outCanvas.width = scene.canvas.width * options.scale
+    outCanvas.height = scene.canvas.height * options.scale
+    const outCtx = outCanvas.getContext('2d')
+
+    for (let b = 0; b <= liveMasks.length; b++) {
+      const bandCanvas = await captureSceneBandNode(cloned, b, scene.canvas.width, scene.canvas.height, options.scale)
+      if (!bandCanvas) continue
+      const bandCtx = bandCanvas.getContext('2d')
+      punchSceneMaskHoles(bandCtx, liveMasks.slice(0, b), scene.canvas.width, scene.canvas.height, options.scale)
+      outCtx?.drawImage(bandCanvas, 0, 0)
+    }
+
+    // Frozen masks paint their snapshot layer back over their punched hole.
+    for (const mask of frozenMasks) {
+      if (outCtx) punchSceneMaskHoles(outCtx, [mask], scene.canvas.width, scene.canvas.height, options.scale)
+      const snapNode = cloned.querySelector<HTMLElement>(`[data-mask-snapshot-for="${mask.id}"]`)
+      if (snapNode) {
+        const snapCanvas = await captureNodeIntoCanvas(snapNode, scene.canvas.width, scene.canvas.height, options.scale)
+        if (snapCanvas) {
+          const snapCtx = snapCanvas.getContext('2d')
+          punchSceneMaskHoles(snapCtx, [mask], scene.canvas.width, scene.canvas.height, options.scale)
+          outCtx?.drawImage(snapCanvas, 0, 0)
+        }
       }
     }
 
-    return await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(
-        (blob) => resolve(blob),
-        getMimeType(options.format),
-        options.format === 'png' ? undefined : options.quality / 100
-      )
-    })
+    if (watermarkOn) {
+      const wmNode = cloned.querySelector<HTMLElement>('[data-watermark]')
+      if (wmNode) {
+        const wmCanvas = await captureNodeIntoCanvas(wmNode, scene.canvas.width, scene.canvas.height, options.scale)
+        if (wmCanvas) outCtx?.drawImage(wmCanvas, 0, 0)
+      }
+    }
+
+    if (options.background === 'solid' && outCtx) {
+      solidFill(outCtx, outCanvas.width, outCanvas.height)
+    }
+
+    return encode(outCanvas)
   } catch (err) {
     console.error('Export failed:', err)
     return null

@@ -212,6 +212,8 @@ export interface ShapeGradient {
   enabled: boolean
   colors: string[]
   angle: number
+  type?: 'linear' | 'radial' | 'conic'
+  radialShape?: 'circle' | 'ellipse'
 }
 
 export interface ShadowLayer {
@@ -241,12 +243,17 @@ export interface MaskPoint {
 }
 
 /**
- * A first-class, reusable mask applied to a target element as a CSS clip.
- * Geometry lives in the target element's LOCAL coordinate frame (0..target
- * width/height) so the clip rotates with the element. `x/y/width/height`
- * define the bounding box for rectangle/ellipse masks and the bounds of a
- * brush (freehand) mask; `points` carries the brush polygon. `inverted`
- * toggles punch (inverse) rendering via evenodd clip-path compositing.
+ * A first-class, reusable scene mask rendered as a clip layer over the canvas.
+ * Masks are independent layers (like devices/images/text boxes/shapes): they
+ * own a `name`, participate in z-order (`zIndex`), and honor `visible`/`locked`.
+ * A mask has NO target element — `x/y/width/height/points` are SCENE-space
+ * coordinates (canvas units), so the clip aligns with the canvas at render time.
+ *
+ * `x/y/width/height` define the bounding box for rectangle/ellipse masks and the
+ * bounds of a brush (freehand) mask; `points` carries the brush polygon.
+ * `inverted` toggles punch (inverse) rendering via evenodd clip-path
+ * compositing: an inverted mask hides its shape region, a non-inverted (reveal)
+ * mask hides the rest of its box.
  *
  * `holes` (restored areas) appears on brush masks after subtractive unmask
  * strokes: the punched region is `points` (the outer ring) minus `holes`
@@ -255,15 +262,15 @@ export interface MaskPoint {
  *
  * A mask may carry a `snapshot` — an immutable freeze stamp of the whole scene
  * captured at the moment the mask was created (or last refreshed). When
- * present, the mask is a "frozen" mask: instead of clipping the LIVE element
- * at render time (which lets later layer edits, reordering and new content
- * leak into the masked region), the element's clip layers render the captured
- * pixels. Only an explicit refresh/recreate rewrites the snapshot; every other
- * edit (move/resize/rotate/shape/unmask/delete) touches geometry alone.
+ * present, the mask is a "frozen" mask: instead of clipping the LIVE canvas at
+ * render time (which lets later layer edits, reordering and new content leak
+ * into the masked region), the clip layers render the captured pixels. Only an
+ * explicit refresh/recreate rewrites the snapshot; every other edit
+ * (move/resize/shape/unmask/delete) touches geometry alone.
  */
 export interface Mask {
   id: string
-  targetId: string
+  name: string
   shape: MaskShape
   x: number
   y: number
@@ -271,13 +278,16 @@ export interface Mask {
   height: number
   points: MaskPoint[]
   inverted: boolean
+  zIndex: number
+  visible: boolean
+  locked: boolean
   holes?: MaskPoint[][]
   /**
    * Immutable whole-scene freeze stamp. Present only on frozen masks. The
-   * image renders inside the element's clip layers with `background:
-   * transparent`, so the masked region shows exactly what the canvas looked
-   * like at capture time (including other layers, z-order and the scene
-   * background) — never the live canvas behind it.
+   * image renders inside the clip layers with `background: transparent`, so the
+   * masked region shows exactly what the canvas looked like at capture time
+   * (including other layers, z-order and the scene background) — never the live
+   * canvas behind it.
    */
   snapshot?: MaskSnapshot
 }

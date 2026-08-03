@@ -35,8 +35,10 @@ If neither backend yields a 2D context (e.g., headless jsdom without node-canvas
 |---|---|
 | `DestructiveBrushType` | `'blur' | 'eraser' | 'magic-eraser'` |
 | `DestructiveStrokeTarget` | `{ src: string, width: number, height: number }` |
-| `StrokeBrush` | `{ brushType, size, hardness, color, opacity, shape, mode }` |
+| `StrokeBrush` | `{ size, hardness, color, shape?: 'round' \| 'square', opacity?: number }` |
 | `StrokePoint` | `{ x, y, pressure }` |
+| `CropRegion` | `{ x, y, width, height }` — scene-space bounds of a paint layer bitmap |
+| `StrokeComposite` | `{ src, region }` — a rasterized stroke + the region it covers |
 
 ### Exported Functions
 
@@ -46,13 +48,13 @@ The **paint stroke compositor**. Called by the Paint Brush tool to rasterize a s
 
 **Algorithm:**
 1. If `points` is empty → `null`.
-2. Create a raster surface at `canvasW × canvasH` (full scene canvas).
-3. If `existingSrc` is provided, draw the existing bitmap onto the surface (composites over prior strokes).
-4. Call `drawStrokeSegments(ctx, points, brush)` to paint the new stroke.
-5. Compute the stroke's bounding box (with brush radius padding) via `strokeBounds`.
-6. If `existingRegion` is provided, expand bounds to cover both the stroke and the existing region.
-7. Crop the surface to bounds → `croppedCanvas`.
-8. Return `{ src: canvasToDataUrl(croppedCanvas, 'image/png'), region: bounds }`.
+2. Compute the stroke's bounding box from `points`, padded by the brush radius (`radius = max(0.25, size / 2)`).
+3. If `existingRegion` is provided, expand the bounds to cover both the stroke and the existing region.
+4. Clamp the bounds to `[0, canvasW] × [0, canvasH]`; if the resulting box has zero size (stroke entirely off-canvas) → `null`.
+5. Create a raster surface **at the cropped bounds size** (never the full canvas — a paint layer spans only its drawing).
+6. If `existingSrc` AND `existingRegion` are provided, draw the existing bitmap onto the surface at the region offset (composites over prior strokes).
+7. Translate the points by `−x, −y` and call `drawStrokeSegments(ctx, points, brush)`.
+8. Return `{ src: canvasToDataUrl(surface.canvas), region: bounds }`.
 
 **The `null` region parameter** (`compositeStrokeToRegion(null, null, points, brush, canvasW, canvasH)`) means: no existing layer, no existing region — always create a fresh cropped canvas. This is what `paint.ts` uses for per-stroke layers.
 
@@ -61,29 +63,34 @@ The **paint stroke compositor**. Called by the Paint Brush tool to rasterize a s
 The **destructive stroke applier**. Called by blur/eraser/magic-eraser tools.
 
 **Algorithm:**
-1. Load `target.src` as an `HTMLImageElement` via `loadImage` (Promise, `crossOrigin: 'anonymous'`).
+1. If `points` is empty → `null`.
 2. Create a raster surface at `target.width × target.height`.
-3. Draw the source image onto the surface.
-4. Dispatch to the brush-type-specific applier:
-   - `applyBlurStroke` — `ctx.filter = blur(Npx)`, blit-back bounds-cropped.
+3. Load `target.src` via `loadImage` (Promise → `HTMLImageElement | null`); a load failure → `null`.
+4. Draw the source image onto the surface.
+5. Dispatch to the private brush-type-specific applier:
+   - `applyBlurStroke` — bounds-cropped blur blit-back.
    - `applyEraseStroke` — `globalCompositeOperation = 'destination-out'`, draw stroke in black.
    - `applyMagicEraseStroke` — `floodFill` from first point, opaque→transparent.
-5. Return `canvasToDataUrl(surface, 'image/png')` or `null`.
+6. Return `canvasToDataUrl(surface.canvas)` or `null`.
 
-#### `applyBlurStroke(ctx, srcImg, points, brush, width, height)`
+#### `applyBlurStroke(surface, points, brush)` (private)
 
-Bounds-cropped blur. Computes `strokeBounds(points, radius)` (clamped to bitmap dimensions), crops to that region, applies `ctx.filter = blur(blurRadiusFromBrush(brush))`, and blits back to the original surface at the offset.
+Bounds-cropped blur. Computes `strokeBounds(points, radius)` with `radius = blurRadiusFromBrush(brush) + 1`, calls `blurRegionOnSurface(surface, box, null, radius)` — a region-sized temp canvas applies `ctx.filter = blur(Npx)` and blits the blurred copy back onto the surface at the offset.
 
-#### `applyEraseStroke(ctx, points, brush, width, height)`
+#### `applyEraseStroke(ctx, points, brush)` (private)
 
 Uses `destination-out` composite: draws the stroke segments in black with the brush's size/hardness/pressure, erasing pixels to transparent.
 
-#### `applyMagicEraseStroke(ctx, srcImg, points, brush, width, height)`
+#### `applyMagicEraseStroke(ctx, points, brush, width, height)` (private)
 
-1. Seeds at `points[0]` (first stroke point).
+1. Seeds at `points[0]` (first stroke point); an out-of-bounds seed (outside `width × height`) early-returns.
 2. Guards against transparent seeds (alpha 0 → early return, nothing to erase).
 3. `floodFill(imageData, seedX, seedY, tolerance, replacement)` replaces connected pixels matching the tolerance.
 4. `putImageData` back to the canvas.
+
+#### `applyBlurRegion(target, geometry, radius)`
+
+The **region blur applier**, used by the rect/ellipse/line blur region tools. Draws the target bitmap onto a fresh surface, resolves the shape to a clipped region via `resolveBlurGeometry` (rect/ellipse → plain shape path; line → a round-capped capsule outline built from `buildMaskStrokePolygon`), runs `blurRegionOnSurface(surface, bounds, path, radius)`, and returns the resulting data URL (or `null` without a 2d context / on load failure).
 
 **Tolerance** = `clamp01(hardness) * 0.25` — the `hardness` slider repurposed as the magic-eraser's tolerance control.
 
@@ -92,19 +99,10 @@ Uses `destination-out` composite: draws the stroke segments in black with the br
 Pure stroke geometry renderer. For each consecutive pair of points, draws a line segment with:
 - `lineWidth = max(0.25, size * (0.25 + 0.75 * pressure))`
 - `globalAlpha = (opacity ?? 1) * (0.15 + 0.85 * min(1, max(0, hardness)))`
-- Round caps and round joins
+- Caps/joins follow `shape`: `'square'` → square caps + miter joins; otherwise round caps + round joins
 - Color/stroke style from `brush.color`
 
-For single-point strokes (dots), calls `drawDot` which draws a filled circle of radius `size / 2`.
-
-#### `floodFill(imageData, seedX, seedY, tolerance, replacement)`
-
-**Pure function** (no DOM). Implements a BFS flood fill:
-1. Pre-allocated `Int32Array` queue (size = width × height — worst case).
-2. `Uint8Array` visited bitmap (same size).
-3. RGB-distance tolerance comparison.
-4. Seeds with the replacement RGBA, propagates to 4-connected neighbors within tolerance.
-5. Returns `ImageData` with filled pixels.
+For single-point strokes (dots), calls `drawDot` which fills a circle of radius `max(0.25, size / 2)` (or a `fillRect` of the same half-size for `shape: 'square'`).
 
 #### `floodFill(imageData, seedX, seedY, tolerance, replacement)`
 
@@ -117,15 +115,15 @@ For single-point strokes (dots), calls `drawDot` which draws a filled circle of 
 
 #### `loadImage(src)`
 
-Returns `Promise<HTMLImageElement | null>`. Sets `img.crossOrigin = 'anonymous'` (CORS-safe). Resolves on `onload`, rejects on `onerror` (returns null). Used by both destructive and paint engines.
+Returns `Promise<HTMLImageElement | null>`. Resolves with the image on `onload`, resolves with `null` on `onerror` (never rejects). **No `crossOrigin` is set** — all rasterized bitmaps are local data URLs (uploads, screenshots, paint layers), so CORS is never a concern. Used by both destructive and paint engines.
 
-#### `canvasToDataUrl(canvas, type, quality?)`
+#### `canvasToDataUrl(canvas)`
 
-Converts either a `HTMLCanvasElement` (via `toDataURL`) or an `OffscreenCanvas` (via `convertToBlob` + `FileReader`) to a data URL string. The `'toDataURL' in canvas` check dispatches between the two paths.
+Converts either an `HTMLCanvasElement` or an `OffscreenCanvas` to a **PNG** data URL string. The `'toDataURL' in canvas` check dispatches: `toDataURL('image/png')` for HTML canvas, `convertToBlob({ type: 'image/png' })` + `FileReader` for OffscreenCanvas (whose type lacks `toDataURL`). Takes no type/quality params — every rasterizer surface is PNG; compression happens at export time, not here.
 
-#### `blurRegionOnSurface` (internal)
+#### `blurRegionOnSurface(surface, bounds, path, radius)` (internal)
 
-Bounds-cropped `ctx.filter = blur(Npx)` blit-back. Region is clamped to the bitmap bounds so strokes near edges don't sample transparent pixels.
+Bounds-cropped `ctx.filter = blur(Npx)` blit-back: a region-sized temp canvas blurs the surface's region, then the result is composited back clipped to an optional shape `Path2D` (null = the region's full bounds). Region is clamped to the bitmap bounds so strokes near edges don't sample transparent pixels.
 
 ### Brush Radius Mapping
 
@@ -160,17 +158,22 @@ Renders the scene to a PNG/JPEG/WebP blob via DOM cloning + canvas rasterization
 
 The export engine has two entry points:
 
-1. **`exportScene(scene, options)`** — Captures a single scene to a canvas.
-2. **`exportAllScenes(scenes, options)`** — Iterates scenes (with double-rAF waits), captures each, and packages as a ZIP via JSZip (lazy-loaded).
+1. **`exportScene(options)`** — Renders the current `[data-scene-export]` DOM node (cloned offscreen) to a Blob.
+2. **`exportAllScenes(options)`** — Iterates scenes (with double-rAF waits), captures each, and packages as a ZIP via JSZip (lazy-loaded).
 
 Both call the same core pipeline:
 
 ```
-exportScene(scene, options)
-  → Scene.tsx renders scene into [data-scene-export] DOM node
-  → domToCanvas(clonedExportNode, { scale, style })     [modern-screenshot]
-  → punchSceneMaskHoles(ctx, masks, width, height, scale)  [mask holes]
-  → (background === 'solid') ? destination-over fill  : passthrough
+exportScene(options)
+  → clone [data-scene-export] node offscreen, strip editor chrome
+  → no masks?  domToCanvas(clone, { scale, style })            [single flat capture]
+  → masked?    for band b in 0..liveMasks.length:
+                 captureSceneBandNode(clone, b, w, h, scale)   [per-band capture]
+                 punchSceneMaskHoles(ctx_b, liveMasks.slice(0,b), w, h, scale)
+                 outCtx.drawImage(bandCanvas, 0, 0)            [bottom-up composite]
+               frozen masks: punch outCanvas, capture [data-mask-snapshot-for=id],
+                             punch, drawImage back
+  → background === 'solid' → destination-over fill backgroundColor
   → canvas.toBlob(mime, quality)
 ```
 
@@ -182,39 +185,46 @@ Before rasterization, the export engine **clones** `[data-scene-export]` and str
 |---|---|
 | `[data-watermark]` | Watermark is editor chrome |
 | `[data-guide]` | Snap guides are editor chrome |
+| `[data-transparent-checker]` | Transparent-canvas checkerboard is editor chrome |
 | `[data-scene-background]` (when `background !== 'scene'`) | Background override replaces the scene background |
 
 `[data-scene-export]` itself is never cloned — the overlay chrome (`OverlayRenderer`) sits as a sibling and is excluded from the capture.
 
 ### Mask Punch (`punchSceneMaskHoles`)
 
-Filters scene masks (`mask.targetId === BACKGROUND_MASK_TARGET_ID`) and punches each as a hole via canvas compositing:
+Masks are Z-AWARE scene layers: each mask punches out only the content ABOVE
+it (the content beneath it is preserved). Because foreignObject capture drops
+the masks' evenodd clip-path wrappers, `exportScene` rebuilds the semantics on
+the raster — it captures the scene's z-bands (Section 8.3 of mask-engine.md)
+independently and punches each band by exactly the masks below it:
 
 ```
-for each mask:
-  ctx.save()
-  ctx.globalCompositeOperation = 'destination-out'
-  ctx.fillStyle = 'black'
-  ctx.fill(maskPath, 'evenodd')    // evenodd = box ∩ holes
+for band b in 0..liveMasks.length:          // liveMasks sorted by zIndex
+  captureSceneBandNode(clone, b, ...)       // raw band content, unclipped
+  ctx.save(); gco = 'destination-out'
+  for mask in liveMasks.slice(0, b):        // masks BELOW this band only
+    ctx.fill(maskPath(mask), 'evenodd')
   ctx.restore()
-
-if background === 'solid':
-  ctx.globalCompositeOperation = 'destination-over'
-  ctx.fillStyle = options.backgroundColor
-  ctx.fillRect(0, 0, width, height)
+  outCtx.drawImage(bandCanvas, 0, 0)        // composite bottom-up
 ```
 
+- Band 0 (the background layer + everything at/below the lowest mask z) is
+  never punched — so a mask hole reveals the preserved background/elements
+  beneath it, matching the editor.
 - **Inverted mask** (punch): `polygon(box, shape, evenodd)` — hides the drawn region.
-- **Non-inverted mask** (reveal): `polygon(box, holes)` — the mask IS the hole; reveal semantics.
+- **Non-inverted mask** (reveal): `polygon(box, shape, holes)` — the mask IS the hole; reveal semantics.
 - **Degenerate rings** (zero area) are skipped.
+- Frozen (snapshot) masks repaint their snapshot over their hole: punch the
+  out-canvas, capture `[data-mask-snapshot-for={id}]`, punch it to the mask's
+  shape, `drawImage` back.
 
 ### Background Handling
 
 | `options.background` | Behavior |
 |---|---|
-| `'scene'` | Scene's own background renders; mask holes show transparency |
-| `'solid'` | `[data-scene-background]` stripped; hole punched, then filled with `options.backgroundColor` (destination-over) |
-| `'transparent'` | `[data-scene-background]` stripped; hole stays transparent (alpha 0) |
+| `'scene'` | Scene's own background stays in band 0 (never punched) — masked holes reveal the preserved scene background with no separate composite step |
+| `'solid'` | `[data-scene-background]` stripped; holes punched, then filled with `options.backgroundColor` (destination-over) |
+| `'transparent'` | `[data-scene-background]` stripped; holes stay transparent (alpha 0) |
 
 ### Export Formats
 
@@ -222,14 +232,14 @@ if background === 'solid':
 |---|---|---|---|
 | PNG | `image/png` | — | Default, lossless, supports alpha |
 | JPEG | `image/jpeg` | 0–100 (default 90) | No alpha → background fills black unless overridden |
-| WebP | `image/webp` | 0–100 (default 80) | Supports alpha, smaller than PNG |
+| WebP | `image/webp` | 0–100 (default 90) | Supports alpha, smaller than PNG |
 
 ### Multi-Scene Export
 
 `exportAllScenes`:
 1. For each scene: `setActiveSceneIndex(i)`, wait 2 rAFs (React commits + rasterizer stabilizes).
 2. Capture via `exportScene`.
-3. Name: `<sceneName>_<timestamp>.<ext>`.
+3. Name: `${sanitizeSceneName(scene.name)}-${i + 1}` + extension (e.g. `My Mockup-1.png`).
 4. Package all blobs into a ZIP (lazy `jszip` import — code-split).
 5. **Restores** the original `activeSceneIndex` in a `finally` block (even on error).
 
@@ -254,61 +264,68 @@ Stateful mouse-gesture sessions for drag-move and resize. Both follow the **live
 
 ```typescript
 interface DragSessionOptions {
-  element: ElementBounds
-  onDrag: (id, x, y) => void          // DOM mutation callback
-  onEnd: (id, x, y) => void            // commit callback (history push)
-  onPreview?: (id, x, y, w, h, rotation?) => void  // ghost preview
-  onGuidesChange?: (guides) => void
-  snapFn: (x, y, w, h) => SnapResult
-  multiDrag: MultiDragEntry[]          // followers for multi-select
+  zoom: number
+  element: ElementBounds                     // { id, x, y, width, height, rotation? }
+  el: HTMLElement                            // DOM node mutated live during the gesture
+  onStart?: (id: string) => void
+  onDrag: (id: string, x: number, y: number) => void   // commit callback (store write)
+  onEnd: (id: string) => void                // called BEFORE onDrag (history push wrapper)
+  snapFn?: (id, x, y, w, h) => { x, y }      // smart-guide snap, applied live + at end
+  onGuidesChange?: (guides: SnapGuides) => void        // cleared to [] on end/cancel
+  getMultiDrag?: () => MultiDragEntry[]      // lazy follower lookup for multi-select
+  onPreview?: (id, x, y, w, h, rotation?) => void       // ghost preview
 }
 
 interface ResizeSessionOptions {
+  zoom: number
   element: ElementBounds
-  handle: ResizeHandleName             // 'nw'|'n'|'ne'|'w'|'e'|'sw'|'s'|'se'
-  onResize: (id, x, y, w, h) => void   // commit callback
-  onEnd: (id) => void
+  el: HTMLElement
+  onResize: (id, x, y, w, h) => void         // commit callback (store write)
+  onEnd: (id: string) => void                // called BEFORE onResize (history push)
   onPreview?: (id, x, y, w, h, rotation?) => void
-  lockAspectRatio: boolean
+  lockAspectRatio?: boolean                  // proportional even without Shift
 }
+
+type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se'   // 4 corner handles only (geometry.ts)
 ```
+
+`ResizeHandleName` (tools/types.ts) is the same 4-value union — there are no edge-only (`n`/`e`/`s`/`w`) handles.
 
 ### `createDragSession(options)`
 
 **Lifecycle:**
 
-1. **`begin(pointer)`**: Stores `startX/Y` (from `ctx.scenePoint` via `pointerScenePos`), `el` (DOM element), `geom` (ElementBounds), `multiDrag` entries (followers). Calls `onEnd`'s wrapper setup.
-2. **`move(pointer)`**: Computes delta = `current - start`, applies `snapFn` for smart-guide snapping, sets `el.style.left/top` directly (DOM mutation only — no store writes), calls `onPreview` for ghost. Moves multi-drag followers by the same delta.
-3. **`end(pointer)`**: Calls `onEnd(id, finalX, finalY)` — the tool's callback pushes history and commits the store via `ctx.actions.updateElement`. The `onEnd` callback is responsible for nest/unnest decisions.
-4. **`cancel()`**: Restores `el.style.left/top` to the start position. No store commit. No `onEnd` call.
+1. **`begin(pointer)`**: Stores start client `X/Y`, `el` (DOM element), `geom` (ElementBounds), and resolves followers lazily via `getMultiDrag()`. Calls `onStart(id)`.
+2. **`move(pointer)`**: Computes delta = `(current − start) / zoom`, applies `snapFn` for smart-guide snapping, sets `el.style.left/top` directly (DOM mutation only — no store writes), moves multi-drag followers by the same delta, calls `onPreview` for the ghost.
+3. **`end(pointer)`**: Calls `onEnd(id)` — the tool's callback pushes history. Then recomputes the final snapped position, commits followers via their `commit(id, x, y)`, sets the final DOM position, clears guides, and calls `onDrag(id, finalX, finalY)` — the tool's callback commits the store via `ctx.actions.updateElement`. The nest/unnest decision runs in the tool's `onEnd` wrapper.
+4. **`cancel()`**: Restores `el.style.left/top` (and followers) to the start position, clears guides. No store commit, no `onEnd`/`onDrag` call.
 
-**Multi-drag**: When `multiDrag` has entries (e.g., 3 selected elements), the `begin`/`move`/`end` loop applies the same delta to each follower via its own `onDrag`. The primary element is handled separately.
+**Multi-drag**: `getMultiDrag()` returns the other selected entries; followers move by the same delta each `move`, and at `end` they are committed to their final (snap-adjusted) positions. The primary element is handled separately.
 
 ### `createResizeSession(options)`
 
 **Lifecycle:**
 
-1. **`begin(handle, pointer)`**: Stores start geometry + handle, reads `shiftKey` state.
-2. **`move(pointer, shiftKey)`**: Calls `computeToDom(bounds, handle, target, { shiftKey, lockAspectRatio, minW, minH })` → returns `{ width, height, left, top }`. Sets `el.style.width/height/left/top` directly. Calls `onPreview` for ghost.
-3. **`end(pointer, shiftKey)`**: Computes final dimensions, calls `onEnd(id)` (history push), then calls `onResize(id, x, y, w, h)` — the tool's callback commits the store via `ctx.actions.updateElement`.
+1. **`begin(handle, pointer)`**: Stores start geometry + handle, sets the handle cursor.
+2. **`move(pointer, shiftKey)`**: Calls `computeToDom(pointer, shiftKey)` — internally `computeResize({ handle, startX, startY, clientX, clientY, zoom, startElemX, startElemY, startWidth, startHeight, proportional: shiftKey || lockAspectRatio })` → `{ width, height, left, top }`. Sets `el.style.width/height/left/top` directly. Calls `onPreview` for ghost.
+3. **`end(pointer, shiftKey)`**: Calls `onEnd(id)` (history push), then computes final dimensions and calls `onResize(id, x, y, w, h)` — the tool's callback commits the store once via `ctx.actions.updateElement`. Mirrors the drag session's commit-on-end contract.
 4. **`cancel()`**: Restores start dimensions. No store commit.
 
-### `computeResize(bounds, pointer, handle, options)`
+### `computeResize(input: ResizeComputeInput)`
 
 The pure resize math (in `geometry.ts`):
 
 ```typescript
-function computeResize(bounds, pointer, handle, opts): { x, y, width, height }
+function computeResize(input: ResizeComputeInput): { x, y, width, height }
 ```
 
-- **Handle mapping**: Each handle constrains which edges move.
+- **Handle mapping** (4 corner handles only): each constrains which edges move and where `x`/`y` shift.
   - `se`: width grows right, height grows down.
+  - `sw`: width grows left (x shifts), height grows down.
+  - `ne`: width grows right, height grows up (y shifts).
   - `nw`: width grows left (x shifts), height grows up (y shifts).
-  - `n`: height grows up only.
-  - `e`: width grows right only.
-  - etc.
-- **Proportional mode**: `shiftKey || lockAspectRatio` — locks to the start aspect ratio. Width drives height: `newHeight = newWidth / startRat` (and vice versa).
-- **Min size**: Enforced as `Math.max(min, newWidth)` where `min` defaults to 20 (PropertiesPanel clamps to `< 20`).
+- **Proportional mode**: `proportional = shiftKey || lockAspectRatio` — locks to the start aspect ratio. The driven dimension derives from the changed one (`width / aspect`).
+- **Min size**: `Math.max(minSize ?? 20, newWidth/newHeight)`.
 
 ### Commit-on-End Contract
 
@@ -413,13 +430,13 @@ For vertex v with multiple outgoing candidates:
 
 ```
 Tool.commitMask (unmask mode)
-  → resolveUnmaskCommit(targetMasks, stroke, width, height)
-    → for each mask: compute hidden region
+  → resolveUnmaskCommit(scene.masks, stroke, canvasWidth, canvasHeight)
+    → for each mask: compute hidden region (scene-space)
     → if reveal mask touching stroke: remove entirely
     → if inverted mask: maskHiddenRegion(mask) ⊖ stroke via differenceRegion
     → drop box-covering residuals
     → regionToMask(residual) for each meaningful residual
-  → replaceTargetMasks(targetId, newMaskList)
+  → replaceMasks(newMaskList)          ← masks are scene layers; no target
 ```
 
 ---
@@ -438,9 +455,7 @@ Manages per-stroke raster paint layers. Each brush stroke becomes its own `Image
 |---|---|
 | `PAINT_LAYER_PREFIX = 'Paint '` | Name prefix for friendly paint layer names |
 | `PAINT_LAYER_NAME = '__paint_layer__'` | Legacy marker for pre-naming builds (load-time detection) |
-| `isPaintLayer(name)` | `name === PAINT_LAYER_NAME || name.startsWith(PAINT_LAYER_PREFIX)` |
-| `isPaintLayerImage(img)` | Same check against `ImageOverlay.name` |
-| `isPaintLayerId(id)` | (internal) checks the element's name |
+| `isPaintLayer(image: ImageOverlay)` | `image.name === PAINT_LAYER_NAME \|\| image.name.startsWith(PAINT_LAYER_PREFIX)` — the single source of truth |
 
 ### Key Functions
 
@@ -448,9 +463,9 @@ Manages per-stroke raster paint layers. Each brush stroke becomes its own `Image
 
 Counts existing paint layers across all element kinds and returns `Paint N` where N = count + 1. Uses the `isPaintLayer` prefix check as the single source of truth — one place recognizes paint layers, shared by the engine, Layers panel, Images panel filter, and import numbering.
 
-#### `createPaintLayer(scene, src, groupId?, region?): ImageOverlay`
+#### `createPaintLayer(scene, src, groupId, region, containerId?): ImageOverlay`
 
-Creates a new 64×64 unlocked `ImageOverlay` (not actually 64×64 — the `src` is a full-resolution PNG from the rasterizer). Named via `nextPaintLayerName`. `zIndex` = `nextPaintLayerZIndex(scene)` (max zIndex across all 4 kinds + 1). Accepts `groupId` for focus mode (registers in the focused group) and `region` (bounds metadata for export culling).
+Creates a new **unlocked** `ImageOverlay` sized to the region it covers (`x/y/width/height` = `region`, the stroke's cropped scene-space bounds). A paint layer is never 64×64 and never spans the whole canvas — it covers only the union of everything drawn on it. Named via `nextPaintLayerName`; `zIndex` = `nextPaintLayerZIndex(scene)` (max zIndex across all 4 kinds + 1). `groupId` passes through for focus mode (registers in the focused group); `containerId` (default `null`) passes through for container nesting.
 
 #### `resolvePaintCommit(scene, points, brush)`
 
@@ -491,7 +506,7 @@ Pre-allocated, allocation-free stroke point sampling with spatial simplification
 | `Point` | `{ x: number, y: number }` |
 | `StrokePoint` | `{ x, y, pressure: number }` |
 | `StrokeDescriptor` | `{ brushType, size, hardness, color, targetId, seed }` |
-| `StrokeRenderState` | `{ brush, strokeWidth, globalAlpha }` |
+| `StrokeRenderState` | `{ color, width, hardness, pressure, shape?, opacity? }` — resolved render snapshot per point |
 | `BrushType` | `'paint' | 'blur' | 'eraser' | 'magic-eraser'` |
 
 ### `StrokeSampler`
@@ -501,32 +516,32 @@ A class with **no per-point allocation** — uses pre-allocated `Float64Array` b
 | Method | Behavior |
 |---|---|
 | `begin(descriptor)` | Resets state, sets `length = 0`, stores descriptor |
-| `append(x, y, pressure = 1)` | Spatial simplification: skips if distance from last > `minDistance` (default 1.5px). Otherwise stores in buffer. |
+| `append(x, y, pressure = 1)` | Spatial simplification: **skips points closer than `minDistance`** (default 1.5px — `dx²+dy² < minDistance²`). Otherwise stores in buffer. |
 | `appendLast(x, y, pressure = 1)` | Force-accept (always stores, regardless of distance). Used for stroke endings. |
 | `forEach(callback)` | Iterates stored points |
 | `toPoints()` | Allocates a fresh `StrokePoint[]` (one call at commit) |
 | `length` | Current point count |
-| `full` | `length >= capacity` |
-| `capacity` | `DEFAULT_MAX_POINTS` (8192) |
-| `reset()` | Releases buffers (sets to null, allows GC) |
+| `full` | `length >= maxPoints` |
+| `maxPoints` (readonly) | `DEFAULT_MAX_POINTS` (8192) — constructor param |
+| `x(i)` / `y(i)` / `pressure(i)` | Indexed point accessors |
+| `reset()` | Releases the descriptor, resets length (buffers stay allocated for reuse) |
 
-**Spatial simplification**: `sqrt(dx² + dy²) < minDistance` → skip. This reduces point density for smooth strokes. The `minDistance` is configurable per tool (paint uses default 1.5; mask brush uses `BRUSH_MIN_DISTANCE_SQ = 2.25` → `minDistance = 1.5`).
+**Spatial simplification**: `dx² + dy² < minDistance²` → skip (a point too close to the last one adds nothing). This reduces point density for smooth strokes. `minDistance` is a constructor param (default `DEFAULT_MIN_DISTANCE` = 1.5; paint/blur/eraser use the default). The mask brush keeps its own squared-distance sampling via `BRUSH_MIN_DISTANCE_SQ` in `tools/tools/mask.ts` and `mask-brush.ts` — it does not use this sampler.
 
 ### Constants
 
 | Constant | Value | Purpose |
 |---|---|---|
-| `DEFAULT_MAX_POINTS` | 8192 | Max points before the sampler stops accepting (prevents memory exhaustion) |
-| `DEFAULT_MIN_DISTANCE` | 1.5 | Spatial simplification threshold |
-| `DEFAULT_MIN_DISTANCE_SQ` | 2.25 | Squared threshold (for fast distance check) |
+| `DEFAULT_MAX_POINTS` | 8192 | Constructor default `maxPoints` — the sampler stops accepting beyond this (prevents memory exhaustion) |
+| `DEFAULT_MIN_DISTANCE` | 1.5 | Constructor default `minDistance` — spatial simplification threshold |
 
 ### Lifecycle Contract
 
 ```
-1. sampler.begin({ brushType, size, hardness, color, targetId })
+1. sampler.begin({ brushType, size, hardness, color, targetId, seed })
 2. (per pointer-move) sampler.append(sceneX, sceneY, pressure)
 3. (on pointer-up) points = sampler.toPoints()
-4. sampler.reset() / sampler = null
+4. sampler.reset()
 ```
 
 ---
@@ -537,28 +552,30 @@ A class with **no per-point allocation** — uses pre-allocated `Float64Array` b
 
 ### Purpose
 
-A data-driven, imperative-canvas preview framework for live tool feedback. The ghost transform indicator, blur region indicators, and container drop ring all flow through a single `PreviewState` object rendered by `PreviewSurface.tsx`.
+A data-driven, imperative-canvas preview framework for live tool feedback. The ghost transform indicator and the blur region indicators flow through a single `PreviewState` object rendered by `PreviewSurface.tsx`. (The container drop ring is separate overlay chrome driven by the runtime `containerDropTarget`, not a `PreviewState`.)
 
 ### Types
 
 ```typescript
 interface PreviewStyle {
-  fill?: string
-  stroke?: string
-  strokeWidth?: number
-  lineDash?: number[]
-  hatch?: boolean      // diagonal hatch pattern
-  glow?: boolean       // soft shadow glow
+  fill: string            // 'none'/'transparent' disables the fill pass
+  stroke: string
+  strokeWidth: number
+  lineDash: number[] | null   // null = solid
+  hatch: boolean
+  glow: boolean
 }
 
 type PreviewGeometry =
-  | { type: 'rect'; source?: GhostBounds }
-  | { type: 'ellipse' }
-  | { type: 'line'; x, y, x2, y2 }
+  | { kind: 'rect'; x, y, width, height, source?: GhostBounds }
+  | { kind: 'ellipse'; x, y, width, height }
+  | { kind: 'line'; x1, y1, x2, y2, width }
 
-interface PreviewVisual extends PreviewGeometry { style?: PreviewStyle }
-interface PreviewState { style?: PreviewStyle; visuals: PreviewVisual[] }
+interface PreviewVisual extends PreviewGeometry { style?: Partial<PreviewStyle> }
+interface PreviewState { style?: Partial<PreviewStyle>; visuals: PreviewVisual[] }
 ```
+
+`resolveStyle(base, visual)` merges `DEFAULT_PREVIEW_STYLE → state.style → visual.style`. Note the discriminant field is `kind` (not `type`), and a `'line'` visual carries `x1/y1/x2/y2/width` (it strokes at its own width and has no interior).
 
 ### `GhostBounds`
 
@@ -583,17 +600,18 @@ The `id` field is critical: `resolveLiveGhost(preview, elementId)` uses it to fi
 Builds a semi-transparent dashed blue outline with glow at the element's (rotated) target bounds:
 ```typescript
 {
+  style: {
+    fill: 'rgba(59, 130, 246, 0.06)',
+    stroke: 'rgba(59, 130, 246, 0.9)',
+    strokeWidth: 1.5,
+    lineDash: [6, 4],
+    glow: true,
+    hatch: false
+  },
   visuals: [{
-    type: 'rect',
-    ...bounds,                  // x, y, width, height, rotation
-    source: bounds,             // carries id for resolveLiveGhost
-    style: {
-      fill: 'rgba(99, 102, 241, 0.05)',
-      stroke: 'rgba(99, 102, 241, 0.9)',
-      strokeWidth: 1,
-      lineDash: [6, 4],
-      glow: true,
-    }
+    kind: 'rect',
+    x, y, width, height,          // rotated AABB
+    source: bounds                // raw unrotated box + id
   }]
 }
 ```
@@ -613,16 +631,17 @@ The zustand selector returns stable `null` for non-targeted shapes, so only the 
 White translucent fill + hatch + glow (distinct from blue ghost):
 ```typescript
 {
+  style: {
+    fill: 'rgba(255, 255, 255, 0.2)',
+    stroke: 'rgba(255, 255, 255, 0.9)',
+    strokeWidth: 1.5,
+    lineDash: null,
+    hatch: true,
+    glow: true,
+  },
   visuals: [{
-    type: geometry.type,  // 'rect' | 'ellipse' | 'line'
+    kind: geometry.type,  // 'rect' | 'ellipse' | 'line'
     ...geometry,
-    style: {
-      fill: 'rgba(255, 255, 255, 0.2)',
-      stroke: 'rgba(255, 255, 255, 0.9)',
-      strokeWidth: 1,
-      hatch: true,
-      glow: true,
-    }
   }]
 }
 ```
@@ -634,17 +653,17 @@ The single geometry→canvas renderer. Draw pass:
 2. **Fill pass**: `beginPath` → `traceShape` → `fill`. If `hatch`, save → clip to shape → fill diagonal hatch lines → restore.
 3. **Outline pass**: stroke the path. For `'line'` visuals, skip fill and stroke at the visual's own width.
 
-`traceShape` dispatches on `visual.type`:
-- `'rect'` → `rect(x, y, w, h)` arc-rounded corners? No — just `ctx.rect`.
-- `'ellipse'` → `ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, 2π)`.
-- `'line'` → `moveTo(x, y)` → `lineTo(x2, y2)`.
+`traceShape` dispatches on `visual.kind`:
+- `'rect'` → `ctx.rect(x, y, w, h)`.
+- `'ellipse'` → `ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, 2π)`.
+- `'line'` → `moveTo(x1, y1)` → `lineTo(x2, y2)`.
 
 ### Two Preview Mechanisms
 
 | Mechanism | Host | Use case | Performance |
 |---|---|---|---|
 | `ctx.fastOverlay` (StrokeSurface) | Imperative canvas | Brush strokes (paint/eraser/blur) | 60fps, no React re-renders |
-| `runtime.preview` → PreviewSurface | Imperative canvas, store subscription | Ghost, blur regions, container drop ring | 60fps, subscribes to runtime store |
+| `runtime.preview` → PreviewSurface | Imperative canvas, store subscription | Ghost, blur regions | 60fps, subscribes to runtime store |
 
 Both render through imperative canvas — the `PreviewSurface` subscribes to the runtime store's `preview` field and draws directly in the subscription callback (no React state triggers a re-render). Only the `zoom`/`scene.canvas` change effects trigger a re-subscription.
 
