@@ -35,6 +35,11 @@ export function createMenu(mainWindow: BrowserWindow): void {
         },
         { type: 'separator' },
         {
+          label: 'Close Project',
+          click: () => send('close-project')
+        },
+        { type: 'separator' },
+        {
           label: 'Export…',
           accelerator: 'CmdOrCtrl+Shift+E',
           click: () => send('export')

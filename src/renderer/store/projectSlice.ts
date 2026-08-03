@@ -22,6 +22,7 @@ declare global {
       onRequestClose: (callback: () => void) => (() => void)
       confirmClose: () => void
       cancelClose: () => void
+      ackClose: () => void
       onOpenFile: (callback: (filePath: string) => void) => (() => void)
       openUserGuide: () => void
       checkForUpdatesNow: () => Promise<{ success: boolean; error?: string }>

@@ -63,6 +63,7 @@ describe('initial state', () => {
     expect(rt.brush).toEqual(DEFAULT_BRUSH_OPTIONS)
     expect(rt.exportModalOpen).toBe(false)
     expect(rt.toolbarToolsVisible).toBe(true)
+    expect(rt.savePrompt).toBeNull()
   })
 })
 
@@ -144,6 +145,45 @@ describe('resetRuntime', () => {
     expect(rt.activeToolId).toBe('paint')
     expect(rt.focusGroupId).toBe('group-1')
     expect(rt.marqueeRect).toBeNull()
+  })
+})
+
+describe('savePrompt', () => {
+  it('openSavePrompt/closeSavePrompt manage the blocking guard modal', () => {
+    const rt = useRuntimeStore.getState()
+    rt.openSavePrompt({
+      message: 'Do you want to save the changes made to "My Project" before closing?',
+      save: async () => true,
+      proceed: () => {},
+      cancel: () => {}
+    })
+    expect(useRuntimeStore.getState().savePrompt).not.toBeNull()
+    expect(useRuntimeStore.getState().savePrompt!.message).toContain('My Project')
+
+    useRuntimeStore.getState().closeSavePrompt()
+    expect(useRuntimeStore.getState().savePrompt).toBeNull()
+  })
+
+  it('survives transient resets (blocking modal is not in-flight gesture state)', () => {
+    useRuntimeStore.getState().openSavePrompt({
+      message: 'Save?',
+      save: async () => true,
+      proceed: () => {},
+      cancel: () => {}
+    })
+    resetRuntime('transient')
+    expect(useRuntimeStore.getState().savePrompt).not.toBeNull()
+  })
+
+  it('all reset clears it like the other full-reset chrome state', () => {
+    useRuntimeStore.getState().openSavePrompt({
+      message: 'Save?',
+      save: async () => true,
+      proceed: () => {},
+      cancel: () => {}
+    })
+    resetRuntime('all')
+    expect(useRuntimeStore.getState().savePrompt).toBeNull()
   })
 })
 

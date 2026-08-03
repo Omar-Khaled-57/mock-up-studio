@@ -18,8 +18,33 @@ import { withDirtySuppressed } from './store/dirtyTracking'
 import { useTheme } from './hooks/useTheme'
 import BottomToolbar from './components/toolbar/BottomToolbar'
 import ExportDialog from './components/sidebar/ExportDialog'
+import SaveChangesDialog from './components/shared/SaveChangesDialog'
+import { withSaveGuard } from './lib/save-guard'
 
 const STORAGE_KEY = 'mockup-studio-last-seen-version'
+
+async function openFileAtPath(filePath: string): Promise<void> {
+  const result = await window.api.openProjectByPath(filePath)
+  if (!result) return
+
+  const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
+
+  withDirtySuppressed(() =>
+    useStore.setState({
+      project: project as unknown as import('@shared/types').Project,
+      scenes: scenes as never[],
+      activeSceneIndex,
+      filePath: result.filePath,
+      dirty: false,
+      lastSaved: Date.now(),
+      undoStack: [],
+      redoStack: [],
+      selectedIds: [],
+      showSplash: false
+    })
+  )
+  resetRuntime('all')
+}
 
 // If the URL has ?guide=1, render just the UserGuide
 const isGuideMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('guide') === '1'
@@ -101,14 +126,17 @@ export default function App() {
           saveProjectAs()
           break
         case 'open-project':
-          openProject()
+          withSaveGuard('opening another project', () => openProject())
           break
-        case 'new-project': {
-          const isDirty = useStore.getState().dirty
-          if (isDirty && !confirm('Unsaved changes will be lost. Continue?')) return
-          newProject()
+        case 'new-project':
+          withSaveGuard('creating a new project', () => newProject())
           break
-        }
+        case 'close-project':
+          withSaveGuard('closing this project', () => {
+            newProject()
+            useStore.setState({ showSplash: true })
+          })
+          break
         case 'show-shortcuts':
           setShowShortcuts(true)
           break
@@ -169,17 +197,17 @@ export default function App() {
     if (!window.api?.onRequestClose) return
 
     const cleanup = window.api.onRequestClose(() => {
+      // Acknowledge immediately so the main-process safety timer is cancelled —
+      // we are alive and handling the request (the Save changes? dialog may stay
+      // open as long as the user needs). The timer only exists for a renderer
+      // that never acks (crash/hang).
+      window.api.ackClose()
       const currentDirty = useStore.getState().dirty
       if (!currentDirty) {
         window.api.confirmClose()
         return
       }
-      const choice = window.confirm('You have unsaved changes. Close without saving?')
-      if (choice) {
-        window.api.confirmClose()
-      } else {
-        window.api.cancelClose()
-      }
+      withSaveGuard('closing', () => window.api.confirmClose(), () => window.api.cancelClose())
     })
 
     return cleanup
@@ -190,28 +218,11 @@ export default function App() {
 
     const cleanup = window.api.onOpenFile(async (filePath: string) => {
       const { dirty } = useStore.getState()
-      if (dirty && !confirm('Unsaved changes will be lost. Continue?')) return
-
-      const result = await window.api.openProjectByPath(filePath)
-      if (!result) return
-
-      const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
-
-      withDirtySuppressed(() =>
-        useStore.setState({
-          project: project as unknown as import('@shared/types').Project,
-          scenes: scenes as never[],
-          activeSceneIndex,
-          filePath: result.filePath,
-          dirty: false,
-          lastSaved: Date.now(),
-          undoStack: [],
-          redoStack: [],
-          selectedIds: [],
-          showSplash: false
-        })
-      )
-      resetRuntime('all')
+      if (dirty) {
+        withSaveGuard('opening another project', () => void openFileAtPath(filePath))
+        return
+      }
+      await openFileAtPath(filePath)
     })
 
     return cleanup
@@ -264,6 +275,7 @@ export default function App() {
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
         <ExportDialog open={exportModalOpen} onClose={closeExportModal} />
+        <SaveChangesDialog />
         {downloadProgress !== null && (
           <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-2 bg-zinc-900 border-t border-zinc-700 px-4 py-2 text-xs text-zinc-400">
             <span>Downloading update… {Math.round(downloadProgress)}%</span>

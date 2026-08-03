@@ -48,6 +48,13 @@ const api = {
     ipcRenderer.send('close-canceled')
   },
 
+  /** Notify the main process that the renderer received the close request and is
+   *  handling it (Save changes? dialog open, save/save-as in flight). Cancels the
+   *  3s force-close safety timer — it only fires if this never arrives (crash/hang). */
+  ackClose: (): void => {
+    ipcRenderer.send('close-acknowledged')
+  },
+
   onOpenFile: (callback: (filePath: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, filePath: string): void => callback(filePath)
     ipcRenderer.on('open-file-path', handler)

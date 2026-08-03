@@ -7,6 +7,14 @@ import { initAutoUpdater } from './auto-updater'
 
 let isQuitting = false
 let pendingFilePath: string | null = null
+let closeSafetyTimer: NodeJS.Timeout | null = null
+
+function clearCloseSafetyTimer(): void {
+  if (closeSafetyTimer) {
+    clearTimeout(closeSafetyTimer)
+    closeSafetyTimer = null
+  }
+}
 
 function sendFilePathToRenderer(filePath: string): void {
   const win = BrowserWindow.getAllWindows()[0]
@@ -53,8 +61,12 @@ function createWindow(): void {
     e.preventDefault()
     mainWindow.webContents.send('request-close')
 
-    // Safety net: if renderer never responds (crash, hang), force-close after 3s.
-    setTimeout(() => {
+    // Safety net: if the renderer never acknowledges the close request (crash,
+    // hang), force-close after 3s. Any acknowledgement from the renderer —
+    // close-acknowledged (it is handling the request, e.g. a Save changes?
+    // dialog is open), close-confirmed, or close-canceled — clears the timer.
+    clearCloseSafetyTimer()
+    closeSafetyTimer = setTimeout(() => {
       if (!isQuitting && !mainWindow.isDestroyed()) {
         isQuitting = true
         mainWindow.destroy()
@@ -62,7 +74,15 @@ function createWindow(): void {
     }, 3000)
   })
 
+  ipcMain.on('close-acknowledged', () => {
+    // Renderer received the request and is handling it (showing the Save
+    // changes? dialog, running a Save/Save As, etc.). Never force-close while
+    // it is alive and responding — the user may take as long as they need.
+    clearCloseSafetyTimer()
+  })
+
   ipcMain.on('close-confirmed', () => {
+    clearCloseSafetyTimer()
     isQuitting = true
     const win = BrowserWindow.getAllWindows()[0]
     if (win && !win.isDestroyed()) win.destroy()
@@ -70,6 +90,7 @@ function createWindow(): void {
 
   ipcMain.on('close-canceled', () => {
     // User cancelled — do nothing, window stays open.
+    clearCloseSafetyTimer()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

@@ -4,6 +4,7 @@ import { safeScene } from '../store/sceneSlice'
 import { useRuntimeStore } from '../runtime/store'
 import { focusFilterFor } from '../services/focus'
 import { toolManager } from '../tools'
+import { withSaveGuard } from '../lib/save-guard'
 
 export function useKeyboardShortcuts() {
   const undo = useStore((s) => s.undo)
@@ -80,7 +81,6 @@ export function useKeyboardShortcuts() {
 
       const mod = e.ctrlKey || e.metaKey
       const selectedIds = useStore.getState().selectedIds
-      const dirty = useStore.getState().dirty
 
       // Save: Ctrl+S
       if (mod && e.key === 's' && !e.shiftKey) {
@@ -99,17 +99,14 @@ export function useKeyboardShortcuts() {
       // Open: Ctrl+O
       if (mod && e.key === 'o') {
         e.preventDefault()
-        openProject()
+        withSaveGuard('opening another project', () => openProject())
         return
       }
 
       // New: Ctrl+N
       if (mod && e.key === 'n') {
         e.preventDefault()
-        if (dirty) {
-          if (!confirm('Unsaved changes will be lost. Continue?')) return
-        }
-        newProject()
+        withSaveGuard('creating a new project', () => newProject())
         return
       }
 

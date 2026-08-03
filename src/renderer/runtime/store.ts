@@ -32,6 +32,10 @@ const TRANSIENT_RESET: Partial<RuntimeState> = {
   maskPreview: null,
   editing: null,
   contextMenu: null
+  // savePrompt is deliberately NOT in the transient reset: an in-flight
+  // gesture/undo must never dismiss the blocking "Save changes?" modal. It is
+  // cleared only by its own open/close actions and the full ('all') reset,
+  // which represents a brand-new project where no guard can be pending.
 }
 
 const FULL_RESET: Partial<RuntimeState> = {
@@ -46,7 +50,8 @@ const FULL_RESET: Partial<RuntimeState> = {
   canvasEmptyStateDismissed: false,
   propertiesSections: {},
   exportModalOpen: false,
-  toolbarToolsVisible: true
+  toolbarToolsVisible: true,
+  savePrompt: null
 }
 
 let fullResetHook: (() => void) | null = null

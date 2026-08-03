@@ -115,6 +115,27 @@ export interface RuntimeContextMenu {
   items: RuntimeContextMenuItem[]
 }
 
+/**
+ * savePrompt — the "Save changes?" modal shown before a destructive navigation
+ * (window close, close project, open another project, new project) while the
+ * document is dirty. The callbacks are runtime chrome exactly like
+ * `RuntimeContextMenuItem.action` — never serialized, never snapshotted.
+ *
+ * Contract:
+ *   - `save()` returns whether the save succeeded. On success the dialog's
+ *     Save button runs `proceed()`; on failure nothing happens (the original
+ *     action is aborted and the user stays in the app).
+ *   - `proceed()` runs after a successful save OR after "Don't Save".
+ *   - `cancel()` runs when the user cancels (Cancel button, backdrop, X, Esc).
+ */
+export interface SavePromptState {
+  /** Detail message (project name already interpolated). */
+  message: string
+  save: () => Promise<boolean>
+  proceed: () => void
+  cancel: () => void
+}
+
 export interface RuntimeState {
   activeToolId: string
   temporaryToolStack: TemporaryToolEntry[]
@@ -147,6 +168,8 @@ export interface RuntimeState {
   exportModalOpen: boolean
   /** Whether the bottom toolbar's tool-groups row + options are revealed. Session-scoped chrome state. */
   toolbarToolsVisible: boolean
+  /** The "Save changes?" guard modal shown before destructive navigation while dirty. */
+  savePrompt: SavePromptState | null
 }
 
 export const DEFAULT_TOOL_ID = 'select'
@@ -189,6 +212,8 @@ export interface RuntimeSlice extends RuntimeState {
   openExportModal: () => void
   closeExportModal: () => void
   toggleToolbarTools: () => void
+  openSavePrompt: (prompt: SavePromptState) => void
+  closeSavePrompt: () => void
 }
 
 export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice> = (set) => ({
@@ -217,6 +242,7 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   propertiesSections: {},
   exportModalOpen: false,
   toolbarToolsVisible: true,
+  savePrompt: null,
 
   setActiveTool: (toolId) => set({ activeToolId: toolId }),
 
@@ -282,5 +308,9 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
 
   closeExportModal: () => set({ exportModalOpen: false }),
 
-  toggleToolbarTools: () => set((state) => ({ toolbarToolsVisible: !state.toolbarToolsVisible }))
+  toggleToolbarTools: () => set((state) => ({ toolbarToolsVisible: !state.toolbarToolsVisible })),
+
+  openSavePrompt: (prompt) => set({ savePrompt: prompt }),
+
+  closeSavePrompt: () => set({ savePrompt: null })
 })
