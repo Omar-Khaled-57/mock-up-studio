@@ -54,7 +54,7 @@ const DOCS: DocSection[] = [
           { type: 'bullets', items: [
             'Windows 10+, macOS 11+, or Linux (x86_64)',
             '4 GB RAM (8 GB recommended)',
-            '100 MB free disk space'
+            '≈300 MB free disk space'
           ] }
         ]
       }

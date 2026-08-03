@@ -60,11 +60,9 @@ describe('buildMaskClipPath', () => {
     expect(clip).toBe('inset(30px 80px 20px 20px)')
   })
 
-  it('punches a rectangle via evenodd compositing', () => {
+  it('punches a rectangle via an opposite-wound path()', () => {
     const clip = buildMaskClipPath(rectMask('m', { x: 20, y: 30, width: 100, height: 50, inverted: true }), 200, 100)
-    expect(clip).toContain('evenodd')
-    expect(clip).toContain('0px 0px, 200px 0px, 200px 100px, 0px 100px')
-    expect(clip).toContain('20px 30px, 120px 30px, 120px 80px, 20px 80px')
+    expect(clip).toBe("path('M 0 0 L 200 0 L 200 100 L 0 100 Z M 20 80 L 120 80 L 120 30 L 20 30 Z')")
   })
 
   it('builds an ellipse() clip centered on the mask box', () => {
@@ -74,9 +72,8 @@ describe('buildMaskClipPath', () => {
 
   it('approximates an inverted ellipse hole with a 32-point polygon', () => {
     const clip = buildMaskClipPath(rectMask('m', { shape: 'ellipse', x: 0, y: 0, width: 200, height: 100, inverted: true }), 200, 100)
-    const inner = clip.replace(/^polygon\(evenodd, /, '')
-    const pairs = inner.split(', ').filter(Boolean)
-    expect(pairs).toHaveLength(4 + 32)
+    const coords = clip.match(/-?\d+(?:\.\d+)? -?\d+(?:\.\d+)?/g) ?? []
+    expect(coords).toHaveLength(4 + 32)
   })
 
   it('builds a polygon() clip from brush points', () => {
@@ -88,14 +85,13 @@ describe('buildMaskClipPath', () => {
     expect(clip).toBe('polygon(5px 5px, 50px 5px, 25px 40px)')
   })
 
-  it('punches a brush mask via evenodd compositing', () => {
+  it('punches a brush mask via an opposite-wound path()', () => {
     const clip = buildMaskClipPath(
       rectMask('m', { shape: 'brush', x: 0, y: 0, width: 0, height: 0, points: [{ x: 5, y: 5 }, { x: 50, y: 5 }], inverted: true }),
       200,
       100
     )
-    expect(clip).toContain('evenodd')
-    expect(clip).toContain('0px 0px, 200px 0px, 200px 100px, 0px 100px')
+    expect(clip).toBe("path('M 0 0 L 200 0 L 200 100 L 0 100 Z M 50 5 L 5 5 Z')")
   })
 })
 
@@ -212,7 +208,7 @@ describe('collectMaskVisuals', () => {
       rect: { x: 10, y: 10, width: 50, height: 50 }
     })
     expect(visuals[0].items[0].hiddenClipPath).toBe('inset(10px 1220px 660px 10px)')
-    expect(visuals[0].items[0].visibleClipPath).toContain('evenodd')
+    expect(visuals[0].items[0].visibleClipPath).toBe("path('M 0 0 L 1280 0 L 1280 720 L 0 720 Z M 10 60 L 60 60 L 60 10 L 10 10 Z')")
   })
 
   it('carries brush points through the visual items', () => {

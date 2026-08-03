@@ -55,10 +55,6 @@ function fmt(v: number): string {
   return `${Math.round(v * 100) / 100}px`
 }
 
-function invertedOuter(width: number, height: number): string {
-  return `0px 0px, ${fmt(width)} 0px, ${fmt(width)} ${fmt(height)}, 0px ${fmt(height)}`
-}
-
 function ellipseRingPoints(mask: Mask, count: number): { x: number; y: number }[] {
   const cx = mask.x + mask.width / 2
   const cy = mask.y + mask.height / 2
@@ -93,34 +89,42 @@ function formatRing(points: { x: number; y: number }[]): string {
  * Builds the CSS `clip-path` value that a mask applies to its target box of the
  * given local dimensions. Null is never returned for a well-formed mask.
  *
- * Masks with `holes` (restored areas carved out of a brush punch by a
- * subtractive unmask stroke) render as nested evenodd contours: every hole
- * ring contributes to the same `polygon(...)`, and evenodd compositing
- * subtracts them from the shape — so a reveal carved into a punch shows the
- * original content through the hole.
+ * MULTI-CONTOUR clips are emitted as `path()` with explicit winding (nonzero
+ * fill) — NOT `polygon(evenodd, …)`. Real-Chromium probes (Electron 33.4.11,
+ * `path-probe.cjs`) proved multi-contour evenodd polygons are broken: the
+ * vertex shared between the closing outer contour and the next inner contour
+ * gets sewn into one continuous path, corrupting the region (disjoint boxes
+ * render partial-dimmed). `path()` with explicit `M … Z` subpaths wound
+ * OPPOSITE to the base ring is the only verified-correct format:
+ *
+ * - inverted partial punch (`box ∖ (shape ∖ holes)`): box ring (base) + shape
+ *   ring (opposed) + hole rings (aligned). The nonzero fill keeps the box,
+ *   punches the shape out, and restores the holes inside it — so a reveal
+ *   carved into a punch shows the original content through the hole.
+ * - non-inverted mask with holes, and box-covering punches with holes
+ *   (`outer ∖ holes`): outer ring (base) + hole rings (opposed).
+ *
+ * Single-contour clips (rect `inset()`, ellipse `ellipse()`, plain
+ * `polygon()`) keep their native forms — with one contour there is nothing to
+ * join, so no corruption risk.
  *
  * A box-covering inverted mask (its outer contour already spans the whole
- * element box) emits the outer contour directly instead of the usual
- * `polygon(evenodd, box, shape)`: emitting both would be a self-cancelling
- * double contour (evenodd parity flips twice over the box) that renders as an
- * EMPTY clip — a whole-canvas mask must hide the box, not leave it exposed.
- *
- * The `evenodd` fill rule MUST lead the coordinate list (`polygon(evenodd, …)`).
- * The trailing form `polygon(…, evenodd)` is rejected by Chromium — the browser
- * drops the whole declaration (probe-proven in Electron 33), so an inverted
- * punch silently renders as NO clip.
+ * element box) emits the outer contour directly instead of pairing it with a
+ * second box contour: emitting both would be a self-cancelling double contour
+ * (evenodd parity flips twice over the box) that renders as an EMPTY clip — a
+ * whole-canvas mask must hide the box, not leave it exposed.
  */
 export function buildMaskClipPath(mask: Mask, width: number, height: number): string {
   const holes = mask.holes?.length ? mask.holes : undefined
-  const holeContours = (holes ?? []).map((h) => h.map((p) => `${fmt(p.x)} ${fmt(p.y)}`).join(', '))
   const outerRing = maskOuterRing(mask)
   const outer = formatRing(outerRing)
 
   if (mask.inverted) {
     if (ringCoversBox(outerRing, width, height)) {
-      return `polygon(evenodd, ${[outer, ...holeContours].join(', ')})`
+      if (holes) return nonzeroPath(outerRing, holes, [])
+      return `polygon(evenodd, ${outer})`
     }
-    return `polygon(evenodd, ${invertedOuter(width, height)}, ${[outer, ...holeContours].join(', ')})`
+    return nonzeroPath(boxRing(width, height), [outerRing], holes ?? [])
   }
 
   if (mask.shape === 'rectangle' && !holes) {
@@ -134,7 +138,7 @@ export function buildMaskClipPath(mask: Mask, width: number, height: number): st
     return `ellipse(${fmt(mask.width / 2)} ${fmt(mask.height / 2)} at ${fmt(cx)} ${fmt(cy)})`
   }
   if (!holes) return `polygon(${outer})`
-  return `polygon(evenodd, ${[outer, ...holeContours].join(', ')})`
+  return nonzeroPath(outerRing, holes, [])
 }
 
 /** Clip-path of the transparent region of a mask (the inverted complement). */
@@ -327,6 +331,35 @@ function orientRing(ring: { x: number; y: number }[], wantSign: 1 | -1): { x: nu
 function pathRing(ring: { x: number; y: number }[]): string {
   const pts = ring.map((c) => `${Math.round(c.x * 100) / 100} ${Math.round(c.y * 100) / 100}`)
   return `M ${pts.join(' L ')} Z`
+}
+
+/** The target box as a ring (matches the focus-dim canvas ring winding). */
+function boxRing(width: number, height: number): { x: number; y: number }[] {
+  return [
+    { x: 0, y: 0 },
+    { x: width, y: 0 },
+    { x: width, y: height },
+    { x: 0, y: height }
+  ]
+}
+
+/**
+ * Nonzero `path()` clip built from a base ring plus wound contours: `opposed`
+ * rings are wound OPPOSITE to the base (the nonzero fill punches them out),
+ * `aligned` rings are wound the same as the base (their interior is kept
+ * through a punch, restoring it). This is the probe-verified multi-contour
+ * form — evenodd `polygon()` with multiple contours is corrupted by Chromium.
+ */
+function nonzeroPath(
+  base: { x: number; y: number }[],
+  opposed: { x: number; y: number }[][],
+  aligned: { x: number; y: number }[][]
+): string {
+  const baseSign = ringSign(base)
+  const subpaths: string[] = [pathRing(base)]
+  for (const ring of opposed) subpaths.push(pathRing(orientRing(ring, baseSign === 1 ? -1 : 1)))
+  for (const ring of aligned) subpaths.push(pathRing(orientRing(ring, baseSign)))
+  return `path('${subpaths.join(' ')}')`
 }
 
 /**

@@ -80,11 +80,13 @@ function traceRing(ctx: CanvasRenderingContext2D, ring: { x: number; y: number }
 /**
  * Punches mask holes out of an exported scene canvas.
  *
- * The scene DOM clips masks with `clip-path: polygon(evenodd, …)` wrappers,
- * but the foreignObject capture is not relied on to reproduce evenodd clip
- * compositing (a shape inside a masked region must not render). This
- * reproduces the transparency hole on the raster itself: a `destination-out`
- * fill with `fillRule: 'evenodd'` erases exactly the masked region.
+ * The scene DOM clips masks with `clip-path` wrappers (single-contour
+ * `polygon()`/`inset()`/`ellipse()`, or opposite-wound `path()` for
+ * multi-contour punches), but the foreignObject capture is not relied on to
+ * reproduce evenodd clip compositing (a shape inside a masked region must not
+ * render). This reproduces the transparency hole on the raster itself: a
+ * `destination-out` fill with `fillRule: 'evenodd'` erases exactly the masked
+ * region.
  *
  * Z-aware semantics: a mask punches out only content ABOVE it, so this punch
  * is applied per z-band with exactly the masks below that band (see

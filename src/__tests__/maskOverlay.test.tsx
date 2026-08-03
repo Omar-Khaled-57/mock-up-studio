@@ -98,7 +98,7 @@ describe('MaskOverlay checkerboard', () => {
     expect(container.querySelector('[data-mask-preview-highlight]')).not.toBeNull()
   })
 
-  it('emits nested evenodd contours for a brush mask with holes', () => {
+  it('emits opposite-wound path() contours for a brush mask with holes', () => {
     const clip = buildMaskClipPath(
       {
         id: 'm',
@@ -128,9 +128,7 @@ describe('MaskOverlay checkerboard', () => {
       100,
       100
     )
-    expect(clip).toContain('evenodd')
-    expect(clip).toContain('0px 0px, 100px 0px, 100px 100px, 0px 100px')
-    expect(clip).toContain('25px 25px, 75px 25px, 75px 75px, 25px 75px')
+    expect(clip).toBe("path('M 0 0 L 100 0 L 100 100 L 0 100 Z M 25 75 L 75 75 L 75 25 L 25 25 Z')")
   })
 
   it('renders the brush outline plus one ring per hole for a mask with holes', () => {
@@ -380,12 +378,10 @@ describe('MaskOverlay checkerboard', () => {
     expect(clip!.querySelector('[data-element-id="shp-1"]')).not.toBeNull()
     // The clip is the inverted punch (box minus the drawn rect), which in real
     // Chromium hides the shape inside the masked region. (jsdom's cssstyle
-    // drops evenodd polygon values from inline styles, so the value is asserted
+    // strips some clip-path values from inline styles, so the value is asserted
     // through the pure builder used to generate the clipPath attribute.)
     const clipPath = buildMaskClipPath(mask, 1280, 720)
-    expect(clipPath).toContain('evenodd')
-    expect(clipPath).toContain('0px 0px, 1280px 0px, 1280px 720px, 0px 720px')
-    expect(clipPath).toContain('300px 300px, 500px 300px, 500px 400px, 300px 400px')
+    expect(clipPath).toBe("path('M 0 0 L 1280 0 L 1280 720 L 0 720 Z M 300 400 L 500 400 L 500 300 L 300 300 Z')")
   })
 
   it('end-to-end: a mask drawn over the default hero text box still commits a full-canvas scene mask', () => {

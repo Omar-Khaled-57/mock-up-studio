@@ -233,12 +233,9 @@ describe('resolveUnmaskCommit', () => {
     const m = mask({ id: 'a', shape: 'rectangle', x: 10, y: 10, width: 80, height: 80 })
     const result = resolveUnmaskCommit([m], square(30, 30, 40, 40), 100, 100)!
     const clip = buildMaskClipPath(result[0], 100, 100)
-    expect(clip).toContain('evenodd')
-    expect(clip).toContain('0px 0px, 100px 0px, 100px 100px, 0px 100px')
-    expect(clip).toContain('10px 10px, 90px 10px, 90px 90px, 10px 90px')
-    // The residual hole ring is the carve, normalized CCW from an interior
-    // clip (stored starting at its bottom-right vertex).
-    expect(clip).toContain('70px 70px, 30px 70px, 30px 30px, 70px 30px')
+    // Opposite-wound path(): box base, outer ring opposed (punched), the
+    // residual hole ring (the carve) aligned (restored through the punch).
+    expect(clip).toBe("path('M 0 0 L 100 0 L 100 100 L 0 100 Z M 10 90 L 90 90 L 90 10 L 10 10 Z M 70 70 L 30 70 L 30 30 L 70 30 Z')")
   })
 
   it('renders a full-bounds reveal as an inset(0) clip that hides nothing', () => {
@@ -278,10 +275,10 @@ describe('buildMaskClipPath box-covering punches', () => {
       holes: [square(25, 25, 50, 50)]
     })
     const clip = buildMaskClipPath(m, 100, 100)
-    expect(clip).toBe('polygon(evenodd, 0px 0px, 100px 0px, 100px 100px, 0px 100px, 25px 25px, 75px 25px, 75px 75px, 25px 75px)')
+    expect(clip).toBe("path('M 0 0 L 100 0 L 100 100 L 0 100 Z M 25 75 L 75 75 L 75 25 L 25 25 Z')")
   })
 
-  it('keeps the nested evenodd form for a partial brush punch', () => {
+  it('keeps the opposite-wound path() form for a partial brush punch', () => {
     const m = mask({
       id: 'a',
       shape: 'brush',
@@ -293,6 +290,6 @@ describe('buildMaskClipPath box-covering punches', () => {
       inverted: true
     })
     const clip = buildMaskClipPath(m, 100, 100)
-    expect(clip).toBe('polygon(evenodd, 0px 0px, 100px 0px, 100px 100px, 0px 100px, 10px 10px, 90px 10px, 90px 90px, 10px 90px)')
+    expect(clip).toBe("path('M 0 0 L 100 0 L 100 100 L 0 100 Z M 10 90 L 90 90 L 90 10 L 10 10 Z')")
   })
 })
