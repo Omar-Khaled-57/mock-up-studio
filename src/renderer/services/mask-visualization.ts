@@ -17,6 +17,7 @@
 import { Mask, MaskPoint, MaskShape, Scene } from '@shared/types'
 import { buildMaskStrokePolygon } from './mask-brush'
 import { ringCoversBox } from './mask-diff'
+import { differenceRegion, Region, ringArea } from './polygon-clip'
 import { MaskPreviewState } from '../runtime/runtimeSlice'
 
 export interface MaskVisualItem {
@@ -100,9 +101,14 @@ function formatRing(points: { x: number; y: number }[]): string {
  *
  * A box-covering inverted mask (its outer contour already spans the whole
  * element box) emits the outer contour directly instead of the usual
- * `polygon(box, shape, evenodd)`: emitting both would be a self-cancelling
+ * `polygon(evenodd, box, shape)`: emitting both would be a self-cancelling
  * double contour (evenodd parity flips twice over the box) that renders as an
  * EMPTY clip — a whole-canvas mask must hide the box, not leave it exposed.
+ *
+ * The `evenodd` fill rule MUST lead the coordinate list (`polygon(evenodd, …)`).
+ * The trailing form `polygon(…, evenodd)` is rejected by Chromium — the browser
+ * drops the whole declaration (probe-proven in Electron 33), so an inverted
+ * punch silently renders as NO clip.
  */
 export function buildMaskClipPath(mask: Mask, width: number, height: number): string {
   const holes = mask.holes?.length ? mask.holes : undefined
@@ -112,9 +118,9 @@ export function buildMaskClipPath(mask: Mask, width: number, height: number): st
 
   if (mask.inverted) {
     if (ringCoversBox(outerRing, width, height)) {
-      return `polygon(${[outer, ...holeContours].join(', ')}, evenodd)`
+      return `polygon(evenodd, ${[outer, ...holeContours].join(', ')})`
     }
-    return `polygon(${invertedOuter(width, height)}, ${[outer, ...holeContours].join(', ')}, evenodd)`
+    return `polygon(evenodd, ${invertedOuter(width, height)}, ${[outer, ...holeContours].join(', ')})`
   }
 
   if (mask.shape === 'rectangle' && !holes) {
@@ -128,7 +134,7 @@ export function buildMaskClipPath(mask: Mask, width: number, height: number): st
     return `ellipse(${fmt(mask.width / 2)} ${fmt(mask.height / 2)} at ${fmt(cx)} ${fmt(cy)})`
   }
   if (!holes) return `polygon(${outer})`
-  return `polygon(${[outer, ...holeContours].join(', ')}, evenodd)`
+  return `polygon(evenodd, ${[outer, ...holeContours].join(', ')})`
 }
 
 /** Clip-path of the transparent region of a mask (the inverted complement). */
@@ -260,6 +266,117 @@ export function rotatedBoxCorners(
  * Evenodd punch clip for the focus scrim: the whole canvas minus a rotated
  * target box. Null when the canvas is degenerate.
  */
+/**
+ * A single focus-scope member box fed to the dim punch.
+ */
+export interface DimBox {
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation?: number
+}
+
+/** A member box as a simple (convex) polygon region. */
+function dimBoxRegion(b: DimBox): Region {
+  return { outer: rotatedBoxCorners(b.x, b.y, b.width, b.height, b.rotation ?? 0), holes: [] }
+}
+
+/**
+ * Disjoint regions covering the UNION of the member boxes. The dim punch MUST
+ * emit non-overlapping contours: evenodd is an XOR, so overlapping contours
+ * re-darken the overlap while leaving the non-overlapping lobes lit (the
+ * "ribbon triangles"). Built by successively subtracting every already-kept
+ * region out of each incoming box, so the residuals are interior-disjoint by
+ * construction and their evenodd parity is exactly 1 across the whole union.
+ */
+export function unionDimBoxes(boxes: DimBox[]): Region[] {
+  const result: Region[] = []
+  for (const box of boxes) {
+    let residuals: Region[] = [dimBoxRegion(box)]
+    for (const acc of result) {
+      const rings = [acc.outer, ...acc.holes]
+      const next: Region[] = []
+      for (const res of residuals) {
+        let cur: Region[] = [res]
+        for (const ring of rings) {
+          const pass: Region[] = []
+          for (const subj of cur) pass.push(...differenceRegion(subj, ring))
+          cur = pass
+        }
+        next.push(...cur)
+      }
+      residuals = next
+    }
+    result.push(...residuals)
+  }
+  return result
+}
+
+/** Signed shoelace winding of a ring (+1 with the canvas ring's winding). */
+function ringSign(ring: { x: number; y: number }[]): 1 | -1 {
+  return ringArea(ring) >= 0 ? 1 : -1
+}
+
+/** Returns the ring in the requested winding, reversing only when needed. */
+function orientRing(ring: { x: number; y: number }[], wantSign: 1 | -1): { x: number; y: number }[] {
+  return ringSign(ring) === wantSign ? ring : [...ring].reverse()
+}
+
+/** A closed `M … L … Z` subpath (unitless, matching the Electron-verified form). */
+function pathRing(ring: { x: number; y: number }[]): string {
+  const pts = ring.map((c) => `${Math.round(c.x * 100) / 100} ${Math.round(c.y * 100) / 100}`)
+  return `M ${pts.join(' L ')} Z`
+}
+
+/**
+ * Nonzero punch clip for the focus scrim: the whole canvas minus the UNION of
+ * the exact (rotated) boxes of every visible scope member. Emitted as a CSS
+ * `path()` with the canvas ring wound one way and every region contour wound
+ * the OPPOSITE way, so the nonzero fill-rule punches the union out of the
+ * scrim.
+ *
+ * This is REQUIRED, not cosmetic. Real-Chromium probes (Electron 33.4.11,
+ * `path-probe.cjs`) proved `polygon(evenodd, …)` with multiple contours is
+ * broken: the vertex shared between the closing outer contour and the next
+ * inner contour gets sewn into one continuous path, corrupting the region
+ * (disjoint boxes render partial-dimmed). `path()` with explicit closed
+ * subpaths and opposite winding is the only verified-correct format. The
+ * member boxes are still pre-merged via `unionDimBoxes` so contours never
+ * overlap (an evenodd XOR would re-darken overlaps into "ribbon triangles").
+ * Null when the canvas is degenerate or no boxes remain.
+ */
+export function buildFocusDimPunch(
+  canvasWidth: number,
+  canvasHeight: number,
+  boxes: DimBox[]
+): string | null {
+  if (canvasWidth <= 0 || canvasHeight <= 0 || boxes.length === 0) return null
+  const regions = unionDimBoxes(boxes)
+  if (regions.length === 0) return null
+  const canvasRing = [
+    { x: 0, y: 0 },
+    { x: canvasWidth, y: 0 },
+    { x: canvasWidth, y: canvasHeight },
+    { x: 0, y: canvasHeight }
+  ]
+  const canvasSign = ringSign(canvasRing)
+  const subpaths: string[] = [pathRing(canvasRing)]
+  for (const region of regions) {
+    // Region outers oppose the canvas ring → nonzero fill punches them out.
+    subpaths.push(pathRing(orientRing(region.outer, canvasSign === 1 ? -1 : 1)))
+    // Region holes match the canvas ring → their interior stays dim (not punched).
+    for (const hole of region.holes) {
+      subpaths.push(pathRing(orientRing(hole, canvasSign)))
+    }
+  }
+  return `path('${subpaths.join(' ')}')`
+}
+
+/**
+ * Single-box focus punch (kept for compatibility; delegates to the multi-box
+ * builder so the two can never drift).
+ */
 export function buildSceneDimPunch(
   canvasWidth: number,
   canvasHeight: number,
@@ -269,10 +386,5 @@ export function buildSceneDimPunch(
   height: number,
   rotation: number
 ): string | null {
-  if (canvasWidth <= 0 || canvasHeight <= 0) return null
-  const outer = `0px 0px, ${fmt(canvasWidth)} 0px, ${fmt(canvasWidth)} ${fmt(canvasHeight)}, 0px ${fmt(canvasHeight)}`
-  const inner = rotatedBoxCorners(x, y, width, height, rotation)
-    .map((c) => `${fmt(c.x)} ${fmt(c.y)}`)
-    .join(', ')
-  return `polygon(${outer}, ${inner}, evenodd)`
+  return buildFocusDimPunch(canvasWidth, canvasHeight, [{ x, y, width, height, rotation }])
 }

@@ -38,7 +38,7 @@ export default function App() {
   const cutSelected = useStore((s) => s.cutSelected)
   const pasteClipboard = useStore((s) => s.pasteClipboard)
   const selectAll = useStore((s) => s.selectAll)
-  const { isLight } = useTheme()
+  const { clsx, isLight, bg } = useTheme()
 
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [updateVersion, setUpdateVersion] = useState<ChangelogVersion | null>(null)
@@ -46,6 +46,9 @@ export default function App() {
   const setDownloadProgress = useStore((s) => s.setDownloadProgress)
   const exportModalOpen = useRuntimeStore((s) => s.exportModalOpen)
   const closeExportModal = useRuntimeStore((s) => s.closeExportModal)
+  const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
+  const focusElementId = useRuntimeStore((s) => s.focusElementId)
+  const exitFocus = useRuntimeStore((s) => s.exitFocus)
 
   const toggleShortcuts = useCallback(() => setShowShortcuts((v) => !v), [])
 
@@ -231,9 +234,25 @@ export default function App() {
           useStore.getState().setSidebarPanelWidth(Math.max(160, Math.min(400, current + delta)))
         }} />
         <ErrorBoundary label="Canvas">
-          <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex flex-col flex-1 min-w-0 relative">
             <CanvasChromeBar />
             <Canvas />
+            {(focusGroupId || focusElementId) && (
+              <button
+                type="button"
+                data-focus-esc-hint
+                aria-label="Exit focus mode"
+                onClick={exitFocus}
+                className={clsx(
+                  "absolute top-10 right-3 z-40 flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border cursor-pointer transition-opacity hover:opacity-80",
+                  bg.danger
+                )}
+              >
+                Press
+                <kbd className="px-1 py-0.5 rounded bg-black/20 text-[10px] font-semibold">Esc</kbd>
+                to exit focus
+              </button>
+            )}
             <BottomToolbar />
           </div>
         </ErrorBoundary>

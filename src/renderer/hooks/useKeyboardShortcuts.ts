@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useStore } from '../store'
 import { safeScene } from '../store/sceneSlice'
 import { useRuntimeStore } from '../runtime/store'
-import { focusFilterFor, isContainer } from '../services/focus'
+import { focusFilterFor } from '../services/focus'
 import { toolManager } from '../tools'
 
 export function useKeyboardShortcuts() {
@@ -231,9 +231,6 @@ export function useKeyboardShortcuts() {
             if (match) {
               e.preventDefault()
               useRuntimeStore.getState().enterFocus(match.id)
-            } else if (sel.length === 1 && isContainer(scene, sel[0])) {
-              e.preventDefault()
-              useRuntimeStore.getState().enterElementFocus(sel[0])
             }
           }
           break

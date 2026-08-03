@@ -1,15 +1,16 @@
 import { Tool } from '../types'
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
-import { findSceneElement, getFocusPath, isContainer, isInFocusScope } from '../../services/focus'
+import { findSceneElement, getFocusPath, isInFocusScope } from '../../services/focus'
 
 /**
  * Focus tool — picks a scope to enter focus mode. Clicking an element inside
- * a group enters that group's focus (M9); clicking a container element
- * (anything with children) enters element focus so its children become
- * editable and its clip is lifted. Clicking again drills into a container
- * within the current scope; dimmed (out-of-scope) elements are rejected so
- * the tool can never escape the focused scope.
+ * a group enters that group's focus (M9); clicking any other element enters
+ * element focus — a container so its children become editable and its clip is
+ * lifted, or a childless element as the entry point to building inside it
+ * (drag-to-nest becomes available against the focused element). Clicking again
+ * drills into an element within the current scope; dimmed (out-of-scope)
+ * elements are rejected so the tool can never escape the focused scope.
  */
 export const focusTool: Tool = {
   id: 'focus',
@@ -41,8 +42,6 @@ export const focusTool: Tool = {
       return
     }
 
-    if (isContainer(scene, hitId)) {
-      rt.enterElementFocus(hitId)
-    }
+    rt.enterElementFocus(hitId)
   }
 }

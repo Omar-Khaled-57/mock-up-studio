@@ -10,7 +10,8 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { createToolManager, toolRegistry } from '../renderer/tools'
-import { buildMaskClipPath, collectMaskVisuals } from '../renderer/services/mask-visualization'
+import { buildFocusDimPunch, buildMaskClipPath, buildSceneDimPunch, collectMaskVisuals, unionDimBoxes } from '../renderer/services/mask-visualization'
+import { pointInRegion, regionArea } from '../renderer/services/polygon-clip'
 import { nextMaskZIndex } from '../renderer/store/maskSlice'
 import { serializeProject, deserializeProject } from '../renderer/lib/project-serialization'
 import { resetStore, makeDevice } from './helpers'
@@ -73,7 +74,7 @@ describe('buildMaskClipPath', () => {
 
   it('approximates an inverted ellipse hole with a 32-point polygon', () => {
     const clip = buildMaskClipPath(rectMask('m', { shape: 'ellipse', x: 0, y: 0, width: 200, height: 100, inverted: true }), 200, 100)
-    const inner = clip.replace(/^polygon\(/, '').split(', evenodd)')[0]
+    const inner = clip.replace(/^polygon\(evenodd, /, '')
     const pairs = inner.split(', ').filter(Boolean)
     expect(pairs).toHaveLength(4 + 32)
   })
@@ -95,6 +96,85 @@ describe('buildMaskClipPath', () => {
     )
     expect(clip).toContain('evenodd')
     expect(clip).toContain('0px 0px, 200px 0px, 200px 100px, 0px 100px')
+  })
+})
+
+describe('buildSceneDimPunch', () => {
+  it('builds a full-canvas nonzero scrim punched out by the target box', () => {
+    const clip = buildSceneDimPunch(1280, 720, 100, 100, 200, 80, 0)
+    expect(clip).toBe(
+      "path('M 0 0 L 1280 0 L 1280 720 L 0 720 Z M 100 180 L 300 180 L 300 100 L 100 100 Z')"
+    )
+  })
+
+  it('returns null for a degenerate canvas', () => {
+    expect(buildSceneDimPunch(0, 720, 0, 0, 10, 10, 0)).toBeNull()
+    expect(buildSceneDimPunch(1280, 0, 0, 0, 10, 10, 0)).toBeNull()
+  })
+})
+
+describe('buildFocusDimPunch', () => {
+  it('punches every member box as its own contour (no union ribbon)', () => {
+    const clip = buildFocusDimPunch(500, 300, [
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: 300, y: 200, width: 50, height: 50 }
+    ])
+    expect(clip).toBe(
+      "path('M 0 0 L 500 0 L 500 300 L 0 300 Z " +
+        'M 0 100 L 100 100 L 100 0 L 0 0 Z ' +
+        'M 300 250 L 350 250 L 350 200 L 300 200 Z\')'
+    )
+  })
+
+  it('punches rotated member boxes at their rotated corners', () => {
+    const clip = buildFocusDimPunch(200, 200, [{ x: 0, y: 0, width: 200, height: 100, rotation: 90 }])
+    expect(clip).toBe(
+      "path('M 0 0 L 200 0 L 200 200 L 0 200 Z M 50 -50 L 50 150 L 150 150 L 150 -50 Z')"
+    )
+  })
+
+  it('returns null without boxes or on a degenerate canvas', () => {
+    expect(buildFocusDimPunch(200, 200, [])).toBeNull()
+    expect(buildFocusDimPunch(0, 200, [{ x: 0, y: 0, width: 10, height: 10 }])).toBeNull()
+  })
+})
+
+describe('unionDimBoxes', () => {
+  const p = (x: number, y: number) => ({ x, y })
+  const area = (regions: { outer: { x: number; y: number }[]; holes: { x: number; y: number }[][] }[]) =>
+    regions.reduce((sum, r) => sum + regionArea(r), 0)
+
+  it('unions overlapping boxes into interior-disjoint regions (no evenodd XOR)', () => {
+    const regions = unionDimBoxes([
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: 50, y: 50, width: 100, height: 100 }
+    ])
+    expect(area(regions)).toBeCloseTo(17500, 0)
+    const inCount = (pt: { x: number; y: number }) => regions.filter((r) => pointInRegion(pt, [r.outer])).length
+    expect(inCount(p(10, 10))).toBe(1) // box1-only lobe
+    expect(inCount(p(75, 75))).toBe(1) // overlap region
+    expect(inCount(p(125, 125))).toBe(1) // box2-only lobe
+    expect(inCount(p(75, 140))).toBe(1) // box2 bottom strip
+    expect(inCount(p(200, 200))).toBe(0) // outside
+  })
+
+  it('drops a member box fully contained by an earlier one (container + child)', () => {
+    const regions = unionDimBoxes([
+      { x: 0, y: 0, width: 200, height: 150 },
+      { x: 40, y: 30, width: 80, height: 60 }
+    ])
+    expect(regions).toHaveLength(1)
+    expect(area(regions)).toBeCloseTo(30000, 0)
+  })
+
+  it('emits a single-box contour when children are fully inside their container', () => {
+    const clip = buildFocusDimPunch(400, 400, [
+      { x: 0, y: 0, width: 200, height: 150 },
+      { x: 40, y: 30, width: 80, height: 60 }
+    ])
+    expect(clip).toBe(
+      "path('M 0 0 L 400 0 L 400 400 L 0 400 Z M 0 150 L 200 150 L 200 0 L 0 0 Z')"
+    )
   })
 })
 

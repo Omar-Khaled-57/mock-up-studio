@@ -93,6 +93,17 @@ describe('resolveContainerDropTarget', () => {
     expect(resolveContainerDropTarget(scene, 'dragged', at(10, 10), NO_FOCUS)).toBe('low')
   })
 
+  it('resolves a nested child through its composed rect under a translated parent', () => {
+    const scene = sceneWith({
+      devices: [
+        makeDevice({ id: 'parent', x: 100, y: 100, width: 400, height: 300, zIndex: 1 }),
+        makeDevice({ id: 'child', containerId: 'parent', x: 20, y: 20, width: 100, height: 100, zIndex: 9 })
+      ]
+    })
+    expect(resolveContainerDropTarget(scene, 'dragged', at(130, 130), NO_FOCUS)).toBe('child')
+    expect(resolveContainerDropTarget(scene, 'dragged', at(150, 350), NO_FOCUS)).toBe('parent')
+  })
+
   it('never returns the dragged element itself or its descendants', () => {
     const scene = sceneWith({
       devices: [makeDevice({ id: 'parent', x: 0, y: 0, width: 200, height: 200, zIndex: 1 })],

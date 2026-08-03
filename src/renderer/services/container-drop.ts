@@ -24,6 +24,7 @@
 
 import { Scene } from '@shared/types'
 import { isInFocusScope } from './focus'
+import { getSceneRect } from './parent-transform'
 
 export interface ContainerDropFocus {
   focusGroupId: string | null
@@ -74,52 +75,16 @@ interface DropCandidate {
 }
 
 function collectElements(scene: Scene): DropCandidate[] {
-  return [
-    ...scene.devices.map((d) => ({
-      id: d.id,
-      containerId: d.containerId,
-      zIndex: d.zIndex,
-      x: d.x,
-      y: d.y,
-      width: d.width,
-      height: d.height,
-      visible: d.visible,
-      locked: d.locked
-    })),
-    ...scene.textBoxes.map((t) => ({
-      id: t.id,
-      containerId: t.containerId,
-      zIndex: t.zIndex,
-      x: t.x,
-      y: t.y,
-      width: t.width,
-      height: t.height,
-      visible: t.visible,
-      locked: t.locked
-    })),
-    ...scene.images.map((i) => ({
-      id: i.id,
-      containerId: i.containerId,
-      zIndex: i.zIndex,
-      x: i.x,
-      y: i.y,
-      width: i.width,
-      height: i.height,
-      visible: i.visible,
-      locked: i.locked
-    })),
-    ...scene.shapes.map((s) => ({
-      id: s.id,
-      containerId: s.containerId,
-      zIndex: s.zIndex,
-      x: s.x,
-      y: s.y,
-      width: s.width,
-      height: s.height,
-      visible: s.visible,
-      locked: s.locked
-    }))
+  const elements: Array<{ id: string; containerId: string | null; zIndex: number; visible: boolean; locked: boolean }> = [
+    ...scene.devices.map((d) => ({ id: d.id, containerId: d.containerId, zIndex: d.zIndex, visible: d.visible, locked: d.locked })),
+    ...scene.textBoxes.map((t) => ({ id: t.id, containerId: t.containerId, zIndex: t.zIndex, visible: t.visible, locked: t.locked })),
+    ...scene.images.map((i) => ({ id: i.id, containerId: i.containerId, zIndex: i.zIndex, visible: i.visible, locked: i.locked })),
+    ...scene.shapes.map((s) => ({ id: s.id, containerId: s.containerId, zIndex: s.zIndex, visible: s.visible, locked: s.locked }))
   ]
+  return elements.flatMap((el) => {
+    const r = getSceneRect(scene, el.id)
+    return [{ ...el, x: r.x, y: r.y, width: r.width, height: r.height }]
+  })
 }
 
 function contains(candidate: DropCandidate, point: { x: number; y: number }): boolean {

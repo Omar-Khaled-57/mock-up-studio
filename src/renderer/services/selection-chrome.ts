@@ -11,6 +11,7 @@
 import { Scene } from '@shared/types'
 import { ElementLike, Rect, unionBounds } from './geometry'
 import { SceneElementKind } from './hit-test'
+import { getComposedBox } from './parent-transform'
 
 export interface SelectionChromeItem {
   id: string
@@ -31,14 +32,16 @@ export interface ElementGeometry extends ElementLike {
 }
 
 export function getElementGeometry(scene: Scene, id: string): ElementGeometry | null {
+  const box = getComposedBox(scene, id)
+  if (!box) return null
   const d = scene.devices.find((el) => el.id === id)
-  if (d) return { id: d.id, kind: 'device', x: d.x, y: d.y, width: d.width, height: d.height, rotation: d.rotation, visible: d.visible, locked: d.locked, groupId: d.groupId }
+  if (d) return { id: d.id, kind: 'device', x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation, visible: d.visible, locked: d.locked, groupId: d.groupId }
   const t = scene.textBoxes.find((el) => el.id === id)
-  if (t) return { id: t.id, kind: 'textBox', x: t.x, y: t.y, width: t.width, height: t.height, visible: t.visible, locked: t.locked, groupId: t.groupId }
+  if (t) return { id: t.id, kind: 'textBox', x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation, visible: t.visible, locked: t.locked, groupId: t.groupId }
   const i = scene.images.find((el) => el.id === id)
-  if (i) return { id: i.id, kind: 'image', x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation, visible: i.visible, locked: i.locked, groupId: i.groupId }
+  if (i) return { id: i.id, kind: 'image', x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation, visible: i.visible, locked: i.locked, groupId: i.groupId }
   const s = scene.shapes.find((el) => el.id === id)
-  if (s) return { id: s.id, kind: 'shape', x: s.x, y: s.y, width: s.width, height: s.height, rotation: s.rotation, visible: s.visible, locked: s.locked, groupId: s.groupId }
+  if (s) return { id: s.id, kind: 'shape', x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation, visible: s.visible, locked: s.locked, groupId: s.groupId }
   return null
 }
 

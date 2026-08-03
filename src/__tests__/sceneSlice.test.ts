@@ -725,3 +725,51 @@ describe('addToGroup', () => {
     expect(useStore.getState().scenes[0].groups[0].childIds).toEqual([])
   })
 })
+
+// ---------- rescaleChildren ----------
+
+describe('rescaleChildren', () => {
+  it('scales every direct child by the parent aspect delta', () => {
+    const parent = makeDevice({ id: 'par', x: 100, y: 100, width: 400, height: 300, zIndex: 0 })
+    const child = makeTextBox({ id: 'kid', x: 40, y: 50, width: 100, height: 80, zIndex: 1, containerId: 'par' })
+    useStore.setState({
+      scenes: [{ ...useStore.getState().scenes[0], devices: [parent], textBoxes: [child] }]
+    })
+
+    useStore.getState().rescaleChildren('par', 500, 400)
+
+    const tb = useStore.getState().scenes[0].textBoxes[0]
+    expect(tb.x).toBe(50)
+    expect(tb.y).toBe(66.67)
+    expect(tb.width).toBe(125)
+    expect(tb.height).toBe(106.67)
+    expect(tb.containerId).toBe('par')
+  })
+
+  it('leaves non-children and the container itself untouched', () => {
+    const parent = makeDevice({ id: 'par', x: 100, y: 100, width: 400, height: 300, zIndex: 0 })
+    const child = makeTextBox({ id: 'kid', x: 40, y: 50, width: 100, height: 80, zIndex: 1, containerId: 'par' })
+    const other = makeTextBox({ id: 'other', x: 7, y: 9, width: 33, height: 44, zIndex: 2 })
+    useStore.setState({
+      scenes: [{ ...useStore.getState().scenes[0], devices: [parent], textBoxes: [child, other] }]
+    })
+
+    useStore.getState().rescaleChildren('par', 800, 600)
+
+    const scene = useStore.getState().scenes[0]
+    expect(scene.devices[0].width).toBe(400)
+    expect(scene.devices[0].height).toBe(300)
+    expect(scene.textBoxes.find((t) => t.id === 'other')).toMatchObject({ x: 7, y: 9, width: 33, height: 44 })
+  })
+
+  it('is a no-op for an unknown container or a childless container', () => {
+    const parent = makeDevice({ id: 'par', x: 0, y: 0, width: 400, height: 300, zIndex: 0 })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [parent] }] })
+
+    useStore.getState().rescaleChildren('missing', 800, 600)
+    useStore.getState().rescaleChildren('par', 800, 600)
+
+    expect(useStore.getState().scenes[0].devices[0].width).toBe(400)
+    expect(useStore.getState().scenes[0].devices[0].height).toBe(300)
+  })
+})

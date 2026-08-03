@@ -16,6 +16,10 @@ export interface MultiDragEntry {
   startElemY: number
   el: HTMLElement
   commit: (id: string, x: number, y: number) => void
+  /** Maps a composed scene point to the entry's stored (parent-local) frame. */
+  toStored?: (x: number, y: number) => { x: number; y: number }
+  /** Descendant already moving with a dragged ancestor: skip DOM write + commit. */
+  skipCommit?: boolean
 }
 
 export interface Follower {
@@ -24,6 +28,8 @@ export interface Follower {
   startY: number
   el: HTMLElement
   commit: (id: string, x: number, y: number) => void
+  toStored?: (x: number, y: number) => { x: number; y: number }
+  skipCommit?: boolean
 }
 
 export interface DragSessionOptions {
@@ -38,6 +44,12 @@ export interface DragSessionOptions {
   getMultiDrag?: () => MultiDragEntry[]
   /** Live-preview emitter for the moving element's target bounds (ghost). */
   onPreview?: (id: string, x: number, y: number, width: number, height: number, rotation?: number) => void
+  /**
+   * Maps a composed scene point to the element's STORED (parent-local) frame,
+   * used for live DOM writes during move/end/cancel. Undefined = identity
+   * (root elements whose stored coordinates ARE scene coordinates).
+   */
+  toStored?: (x: number, y: number) => { x: number; y: number }
 }
 
 export interface DragSession {
@@ -73,7 +85,9 @@ export function createDragSession(options: DragSessionOptions): DragSession {
         startX: entry.startElemX,
         startY: entry.startElemY,
         el: entry.el,
-        commit: entry.commit
+        commit: entry.commit,
+        toStored: entry.toStored,
+        skipCommit: entry.skipCommit
       })
     }
     active = {
@@ -104,12 +118,15 @@ export function createDragSession(options: DragSessionOptions): DragSession {
       newY = snapped.y
     }
 
-    s.el.style.left = `${newX}px`
-    s.el.style.top = `${newY}px`
+    const primary = options.toStored ? options.toStored(newX, newY) : { x: newX, y: newY }
+    s.el.style.left = `${primary.x}px`
+    s.el.style.top = `${primary.y}px`
 
     for (const f of s.followers) {
-      f.el.style.left = `${f.startX + dx}px`
-      f.el.style.top = `${f.startY + dy}px`
+      if (f.skipCommit) continue
+      const p = f.toStored ? f.toStored(f.startX + dx, f.startY + dy) : { x: f.startX + dx, y: f.startY + dy }
+      f.el.style.left = `${p.x}px`
+      f.el.style.top = `${p.y}px`
     }
 
     options.onPreview?.(s.id, newX, newY, s.elemWidth, s.elemHeight, options.element.rotation)
@@ -133,24 +150,29 @@ export function createDragSession(options: DragSessionOptions): DragSession {
       const sDx = finalX - s.startElemX
       const sDy = finalY - s.startElemY
       for (const f of s.followers) {
+        if (f.skipCommit) continue
         const ex = f.startX + sDx
         const ey = f.startY + sDy
-        f.el.style.left = `${ex}px`
-        f.el.style.top = `${ey}px`
-        f.commit(f.id, Math.round(ex), Math.round(ey))
+        const p = f.toStored ? f.toStored(ex, ey) : { x: ex, y: ey }
+        f.el.style.left = `${p.x}px`
+        f.el.style.top = `${p.y}px`
+        f.commit(f.id, Math.round(p.x), Math.round(p.y))
       }
     } else {
       for (const f of s.followers) {
+        if (f.skipCommit) continue
         const ex = f.startX + dx
         const ey = f.startY + dy
-        f.el.style.left = `${ex}px`
-        f.el.style.top = `${ey}px`
-        f.commit(f.id, Math.round(ex), Math.round(ey))
+        const p = f.toStored ? f.toStored(ex, ey) : { x: ex, y: ey }
+        f.el.style.left = `${p.x}px`
+        f.el.style.top = `${p.y}px`
+        f.commit(f.id, Math.round(p.x), Math.round(p.y))
       }
     }
 
-    s.el.style.left = `${finalX}px`
-    s.el.style.top = `${finalY}px`
+    const finalPoint = options.toStored ? options.toStored(finalX, finalY) : { x: finalX, y: finalY }
+    s.el.style.left = `${finalPoint.x}px`
+    s.el.style.top = `${finalPoint.y}px`
 
     options.onGuidesChange?.({ verticalGuides: [], horizontalGuides: [] })
     options.onDrag(s.id, finalX, finalY)
@@ -160,11 +182,14 @@ export function createDragSession(options: DragSessionOptions): DragSession {
   function cancel(): void {
     const s = active
     if (!s) return
-    s.el.style.left = `${s.startElemX}px`
-    s.el.style.top = `${s.startElemY}px`
+    const primary = options.toStored ? options.toStored(s.startElemX, s.startElemY) : { x: s.startElemX, y: s.startElemY }
+    s.el.style.left = `${primary.x}px`
+    s.el.style.top = `${primary.y}px`
     for (const f of s.followers) {
-      f.el.style.left = `${f.startX}px`
-      f.el.style.top = `${f.startY}px`
+      if (f.skipCommit) continue
+      const p = f.toStored ? f.toStored(f.startX, f.startY) : { x: f.startX, y: f.startY }
+      f.el.style.left = `${p.x}px`
+      f.el.style.top = `${p.y}px`
     }
     options.onGuidesChange?.({ verticalGuides: [], horizontalGuides: [] })
     active = null
@@ -183,6 +208,12 @@ export interface ResizeSessionOptions {
   onPreview?: (id: string, x: number, y: number, width: number, height: number, rotation?: number) => void
   /** When true the element's aspect ratio is preserved even without Shift. */
   lockAspectRatio?: boolean
+  /**
+   * Maps a composed scene point to the element's STORED (parent-local) frame,
+   * used for live DOM writes during move/end/cancel. Undefined = identity
+   * (root elements whose stored coordinates ARE scene coordinates).
+   */
+  toStored?: (x: number, y: number) => { x: number; y: number }
 }
 
 export interface ResizeSession {
@@ -224,8 +255,9 @@ export function createResizeSession(options: ResizeSessionOptions): ResizeSessio
     })
     s.el.style.width = `${result.width}px`
     s.el.style.height = `${result.height}px`
-    s.el.style.left = `${result.x}px`
-    s.el.style.top = `${result.y}px`
+    const pos = options.toStored ? options.toStored(result.x, result.y) : { x: result.x, y: result.y }
+    s.el.style.left = `${pos.x}px`
+    s.el.style.top = `${pos.y}px`
     return result
   }
 
@@ -269,8 +301,9 @@ export function createResizeSession(options: ResizeSessionOptions): ResizeSessio
     if (!s) return
     s.el.style.width = `${s.startWidth}px`
     s.el.style.height = `${s.startHeight}px`
-    s.el.style.left = `${s.startElemX}px`
-    s.el.style.top = `${s.startElemY}px`
+    const pos = options.toStored ? options.toStored(s.startElemX, s.startElemY) : { x: s.startElemX, y: s.startElemY }
+    s.el.style.left = `${pos.x}px`
+    s.el.style.top = `${pos.y}px`
     s.el.style.cursor = ''
     active = null
   }

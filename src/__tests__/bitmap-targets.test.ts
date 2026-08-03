@@ -126,6 +126,19 @@ describe('bitmap-targets', () => {
     expect(resolveElementGeometry(scene, hit('tb-1', 'textBox'))).toBeNull()
   })
 
+  it('resolveElementGeometry composes a nested element through its parent chain', () => {
+    const scene = createDefaultScene()
+    scene.devices.push(makeDevice({ id: 'par-1', x: 100, y: 50, width: 200, height: 100, rotation: 90 }))
+    scene.images.push(makeImage({ id: 'img-n', x: 30, y: 20, width: 100, height: 100, containerId: 'par-1' }))
+    const geo = resolveElementGeometry(scene, hit('img-n', 'image'))!
+    expect(geo.id).toBe('img-n')
+    expect(geo.x).toBeCloseTo(130, 10)
+    expect(geo.y).toBeCloseTo(30, 10)
+    expect(geo.width).toBe(100)
+    expect(geo.height).toBe(100)
+    expect(geo.rotation).toBeCloseTo(90, 10)
+  })
+
   it('toLocalPoint translates scene points into bitmap-local coordinates', () => {
     const element = { id: 'img-1', x: 100, y: 50, width: 300, height: 200, rotation: 0 }
     const target = { originX: 0, originY: 0 }

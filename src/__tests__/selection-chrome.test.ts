@@ -86,6 +86,25 @@ describe('collectSelectionChrome', () => {
     expect(items[0].rotation).toBe(0)
     expect(items[0].bounds).toEqual({ x: 10, y: 20, width: 100, height: 50 })
   })
+
+  it('composes chrome bounds for a nested element under a translated parent', () => {
+    const parent = makeDevice({ id: 'par-1', x: 100, y: 100, width: 400, height: 300 })
+    const child = makeDevice({ id: 'ch-1', x: 20, y: 20, width: 100, height: 100, containerId: 'par-1' })
+    const items = collectSelectionChrome(sceneWith({ devices: [parent, child] }), ['ch-1'])
+    expect(items[0].bounds).toEqual({ x: 120, y: 120, width: 100, height: 100 })
+    expect(items[0].rotation).toBe(0)
+  })
+
+  it('composes chrome bounds and total rotation for a child of a rotated parent', () => {
+    const parent = makeDevice({ id: 'par-1', x: 100, y: 50, width: 200, height: 100, rotation: 90 })
+    const child = makeDevice({ id: 'ch-1', x: 30, y: 20, width: 100, height: 100, containerId: 'par-1' })
+    const items = collectSelectionChrome(sceneWith({ devices: [parent, child] }), ['ch-1'])
+    expect(items[0].rotation).toBe(90)
+    expect(items[0].bounds.x).toBeCloseTo(130, 10)
+    expect(items[0].bounds.y).toBeCloseTo(30, 10)
+    expect(items[0].bounds.width).toBe(100)
+    expect(items[0].bounds.height).toBe(100)
+  })
 })
 
 describe('selectionUnionBounds', () => {

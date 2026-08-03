@@ -1,7 +1,8 @@
 /**
  * Phase 3 — render-time container clipping. Unit tests for the
  * `buildContainerClip` service and Scene.tsx integration tests asserting the
- * clip wrappers, focus skip, nesting, and no-double-render guarantees.
+ * clip wrappers, the clip-lift while element-focused, nesting, and
+ * no-double-render guarantees.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
@@ -130,7 +131,7 @@ describe('Scene container clipping', () => {
     expect(wrapper!.querySelector('[data-element-id="img-child"]')).not.toBeNull()
   })
 
-  it('focusing the container skips its clip so children render fully editable', () => {
+  it('element focus lifts the container clip so children are fully visible; exiting reapplies it', () => {
     const scene = emptyScene()
     const container = makeDevice({ id: 'dev-c', name: 'Container', x: 100, y: 100, width: 600, height: 400, zIndex: 5 })
     scene.devices = [container]
@@ -138,11 +139,34 @@ describe('Scene container clipping', () => {
     setScene(scene)
     act(() => useRuntimeStore.getState().enterElementFocus('dev-c'))
 
-    const { container: root } = render(<Scene />)
-    expect(wrapperFor('dev-c')).toBeNull()
+    const { container: root, rerender } = render(<Scene />)
+    const wrapper = wrapperFor('dev-c')
+    expect(wrapper).not.toBeNull()
+    expect(wrapper!.style.overflow).toBe('visible')
     const child = root.querySelector('[data-element-id="tb-child"]')
     expect(child).not.toBeNull()
+    expect(wrapper!.contains(child)).toBe(true)
     expect(root.querySelectorAll('[data-element-id="tb-child"]')).toHaveLength(1)
+
+    act(() => useRuntimeStore.getState().exitFocus())
+    rerender(<Scene />)
+    expect(wrapperFor('dev-c')!.style.overflow).toBe('hidden')
+  })
+
+  it('element focus lifts a shape container outline clip too', () => {
+    const scene = emptyScene()
+    const container = makeShape({ id: 'shp-c', kind: 'circle', name: 'Circle Container', x: 200, y: 200, width: 120, height: 120, zIndex: 5 })
+    scene.shapes = [container]
+    scene.images = [makeImage({ id: 'img-child', x: 210, y: 210, zIndex: 1, containerId: 'shp-c' })]
+    setScene(scene)
+    act(() => useRuntimeStore.getState().enterElementFocus('shp-c'))
+
+    render(<Scene />)
+    const wrapper = wrapperFor('shp-c')
+    expect(wrapper).not.toBeNull()
+    expect(wrapper!.style.clipPath).toBe('')
+    expect(wrapper!.style.overflow).toBe('visible')
+    expect(wrapper!.querySelector('[data-element-id="img-child"]')).not.toBeNull()
   })
 
   it('nested containers clip through every unfocused ancestor', () => {

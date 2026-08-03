@@ -87,9 +87,15 @@ export default function Scene() {
    * Flat render tree with container clipping. Every element that has children
    * (a `containerId` parent) renders through a clip wrapper positioned at the
    * container's box: rect boxes clip via overflow, shape parents clip to their
-   * exact outline. When the container is the active `focusElementId` its clip
-   * is skipped so the children render in full (fully editable), and nested
-   * containers stay clipped whenever they sit inside an unfocused ancestor.
+   * exact outline. Children store PARENT-LOCAL coordinates (offsets in the
+   * container's own un-rotated frame), so they render directly inside the
+   * wrapper, which carries the container's stored x/y + rotation — nested
+   * containers compose the scene transform through the nesting chain.
+   * While element focus is active ON the container itself, the clip is LIFTED
+   * (overflow + outline dropped) so its children are fully visible and freely
+   * editable; exiting focus reapplies the clip. A container focused as a GROUP
+   * member keeps clipping, and nested containers stay clipped whenever they sit
+   * inside an ancestor.
    */
   const renderNodes = useMemo(() => {
     const sorted = buildSortedEntries(scene)
@@ -102,11 +108,10 @@ export default function Scene() {
       else childMap.set(cid, [entry])
     }
 
-    // Children of clipped (non-focused) containers render only inside their
-    // parent's wrapper — never in the flat list (prevents double-render).
+    // Children of containers render only inside their parent's wrapper —
+    // never in the flat list (prevents double-render).
     const handledInWrapper = new Set<string>()
-    for (const [cid, children] of childMap) {
-      if (cid === focusElementId) continue
+    for (const [, children] of childMap) {
       for (const child of children) handledInWrapper.add(child.data.id)
     }
 
@@ -116,24 +121,17 @@ export default function Scene() {
       for (const entry of entries) {
         if (rendered.has(entry.data.id)) continue
         rendered.add(entry.data.id)
+        nodes.push({ kind: 'element', entry })
         const children = childMap.get(entry.data.id)
-        if (children && entry.data.id !== focusElementId) {
-          nodes.push({ kind: 'element', entry })
+        if (children) {
           nodes.push({ kind: 'clip', container: entry, children: build(children) })
-        } else {
-          nodes.push({ kind: 'element', entry })
-          // A focused container is fully editable: its children render
-          // unclipped directly after it instead of inside a clip wrapper.
-          if (children && entry.data.id === focusElementId) {
-            nodes.push(...build(children))
-          }
         }
       }
       return nodes
     }
 
     return build(sorted.filter((e) => !handledInWrapper.has(e.data.id)))
-  }, [scene, focusElementId])
+  }, [scene])
 
   const [selectedGuideId, setSelectedGuideId] = useState<string | null>(null)
 
@@ -272,23 +270,19 @@ export default function Scene() {
     const container = node.container
     const d = container.data
     const clip = buildContainerClip(buildClipInput(container))
+    const rotation = 'rotation' in d ? (d.rotation ?? 0) : 0
+    // While element focus is on the container itself, lift the clip so its
+    // children render fully (overflow visible, no shape outline) and can be
+    // moved freely; the wrapper still positions/rotates them via their stored
+    // parent-local coords. Exiting focus reapplies overflow + outline.
+    const clipLifted = focusElementId === d.id
 
-    // Counter-translate layer: wrapper box starts at the container's corner,
-    // so children (positioned in scene coordinates) shift back to scene space.
-    const translateLayer = (
-      <div
-        style={{
-          position: 'absolute',
-          left: -d.x,
-          top: -d.y,
-          width: scene.canvas.width,
-          height: scene.canvas.height
-        }}
-      >
-        {node.children.map(renderNode)}
-      </div>
-    )
-
+    // Children store PARENT-LOCAL coordinates (offsets in the container's own
+    // un-rotated frame), so they render directly inside the wrapper at their
+    // stored x/y — no counter-translate layer. The wrapper itself sits at the
+    // container's stored x/y and rotates by its stored rotation; for a nested
+    // container both are relative to the enclosing wrapper, so the full scene
+    // transform composes automatically through the nesting chain.
     return (
       <div
         key={`clip-${d.id}`}
@@ -300,11 +294,12 @@ export default function Scene() {
           width: d.width,
           height: d.height,
           zIndex: container.zIndex,
-          overflow: 'hidden',
-          ...(clip.shapeClip ? { clipPath: clip.shapeClip } : {})
+          overflow: clipLifted ? 'visible' : 'hidden',
+          ...(rotation ? { transform: `rotate(${rotation}deg)`, transformOrigin: 'center' } : {}),
+          ...(!clipLifted && clip.shapeClip ? { clipPath: clip.shapeClip } : {})
         }}
       >
-        {translateLayer}
+        {node.children.map(renderNode)}
       </div>
     )
   }

@@ -1,5 +1,6 @@
 import { Scene } from '@shared/types'
 import { ElementLike, getRotatedBounds } from './geometry'
+import { getComposedBox } from './parent-transform'
 
 export type SceneElementKind = 'device' | 'textBox' | 'image' | 'shape'
 
@@ -17,70 +18,45 @@ export interface HitTestResult {
   locked: boolean
 }
 
+/**
+ * Maps a per-kind element array to composed scene-space hit elements. Children
+ * (elements with a `containerId`) resolve through `getComposedBox`, so their
+ * box reflects the whole parent chain and `getRotatedBounds` on the result is
+ * the true composed AABB.
+ */
+function composedHitElements(
+  scene: Scene,
+  kind: SceneElementKind,
+  elements: { id: string; zIndex: number; locked: boolean; visible: boolean }[]
+): HitTestElement[] {
+  return elements
+    .filter((el) => el.visible)
+    .sort((a, b) => a.zIndex - b.zIndex)
+    .flatMap((el) => {
+      const box = getComposedBox(scene, el.id)
+      if (!box) return []
+      return [
+        {
+          id: el.id,
+          kind,
+          x: box.x,
+          y: box.y,
+          width: box.width,
+          height: box.height,
+          rotation: box.rotation,
+          zIndex: el.zIndex,
+          locked: el.locked,
+          visible: true
+        }
+      ]
+    })
+}
+
 export function collectSceneElements(scene: Scene): HitTestElement[] {
-  const devices: HitTestElement[] = scene.devices
-    .filter((d) => d.visible)
-    .sort((a, b) => a.zIndex - b.zIndex)
-    .map((d) => ({
-      id: d.id,
-      kind: 'device' as const,
-      x: d.x,
-      y: d.y,
-      width: d.width,
-      height: d.height,
-      rotation: d.rotation,
-      zIndex: d.zIndex,
-      locked: d.locked,
-      visible: true
-    }))
-
-  const textBoxes: HitTestElement[] = scene.textBoxes
-    .filter((t) => t.visible)
-    .sort((a, b) => a.zIndex - b.zIndex)
-    .map((t) => ({
-      id: t.id,
-      kind: 'textBox' as const,
-      x: t.x,
-      y: t.y,
-      width: t.width,
-      height: t.height,
-      zIndex: t.zIndex,
-      locked: t.locked,
-      visible: true
-    }))
-
-  const images: HitTestElement[] = scene.images
-    .filter((i) => i.visible)
-    .sort((a, b) => a.zIndex - b.zIndex)
-    .map((i) => ({
-      id: i.id,
-      kind: 'image' as const,
-      x: i.x,
-      y: i.y,
-      width: i.width,
-      height: i.height,
-      rotation: i.rotation,
-      zIndex: i.zIndex,
-      locked: i.locked,
-      visible: true
-    }))
-
-  const shapes: HitTestElement[] = scene.shapes
-    .filter((s) => s.visible)
-    .sort((a, b) => a.zIndex - b.zIndex)
-    .map((s) => ({
-      id: s.id,
-      kind: 'shape' as const,
-      x: s.x,
-      y: s.y,
-      width: s.width,
-      height: s.height,
-      rotation: s.rotation,
-      zIndex: s.zIndex,
-      locked: s.locked,
-      visible: true
-    }))
-
+  const devices = composedHitElements(scene, 'device', scene.devices)
+  const textBoxes = composedHitElements(scene, 'textBox', scene.textBoxes)
+  const images = composedHitElements(scene, 'image', scene.images)
+  const shapes = composedHitElements(scene, 'shape', scene.shapes)
   return [...devices, ...textBoxes, ...images, ...shapes].sort((a, b) => a.zIndex - b.zIndex)
 }
 

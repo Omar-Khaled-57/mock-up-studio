@@ -13,8 +13,8 @@
  *      to resolve styles and compute layout).
  *   5. Calls `domToCanvas()` with the desired scale, then deterministically
  *      reproduces z-aware scene-mask clipping on the raster (the foreignObject
- *      capture drops `clip-path: polygon(… evenodd)` — probe-proven — so the
- *      mask semantics must be rebuilt with canvas compositing).
+ *      capture cannot be relied on to reproduce evenodd clip compositing, so
+ *      the mask semantics are rebuilt with canvas compositing instead).
  *   6. For solid exports, fills behind the punch with the requested color.
  *   7. Encodes the canvas to a Blob with the desired format and quality.
  *   8. Removes the clone in the `finally` block (always, even on error).
@@ -80,11 +80,11 @@ function traceRing(ctx: CanvasRenderingContext2D, ring: { x: number; y: number }
 /**
  * Punches mask holes out of an exported scene canvas.
  *
- * The scene DOM clips masks with `clip-path: polygon(… evenodd)` wrappers,
- * which the foreignObject capture silently ignores (the shape inside a masked
- * region still renders). This reproduces the transparency hole on the raster
- * itself: a `destination-out` fill with `fillRule: 'evenodd'` erases exactly
- * the masked region.
+ * The scene DOM clips masks with `clip-path: polygon(evenodd, …)` wrappers,
+ * but the foreignObject capture is not relied on to reproduce evenodd clip
+ * compositing (a shape inside a masked region must not render). This
+ * reproduces the transparency hole on the raster itself: a `destination-out`
+ * fill with `fillRule: 'evenodd'` erases exactly the masked region.
  *
  * Z-aware semantics: a mask punches out only content ABOVE it, so this punch
  * is applied per z-band with exactly the masks below that band (see
@@ -272,11 +272,11 @@ export async function exportScene(options: ExportOptions): Promise<Blob | null> 
       return encode(canvas)
     }
 
-    // Masked scenes: the foreignObject capture drops the masks' evenodd
-    // clip-path wrappers, so z-aware mask semantics must be rebuilt on the
-    // raster. The scene renders as z-bands (Scene.tsx): band b is punched by
-    // every mask BELOW it, so a mask punches out only content above it and the
-    // content beneath it survives inside its region. Bands are captured
+    // Masked scenes: the masks' evenodd clip-path wrappers are not relied on
+    // in the foreignObject capture, so z-aware mask semantics must be rebuilt
+    // on the raster. The scene renders as z-bands (Scene.tsx): band b is punched
+    // by every mask BELOW it, so a mask punches out only content above it and
+    // the content beneath it survives inside its region. Bands are captured
     // independently from the clone and composited bottom-up, each punched by
     // its own mask subset.
     const liveMasks = visibleMasks.filter((m) => !m.snapshot)

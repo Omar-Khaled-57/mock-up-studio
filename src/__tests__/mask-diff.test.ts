@@ -263,7 +263,7 @@ describe('buildMaskClipPath box-covering punches', () => {
   it('emits a single-contour polygon for a box-covering punch (no self-cancelling double contour)', () => {
     const m = mask({ id: 'a', shape: 'rectangle', x: 0, y: 0, width: 100, height: 100 })
     const clip = buildMaskClipPath(m, 100, 100)
-    expect(clip).toBe('polygon(0px 0px, 100px 0px, 100px 100px, 0px 100px, evenodd)')
+    expect(clip).toBe('polygon(evenodd, 0px 0px, 100px 0px, 100px 100px, 0px 100px)')
   })
 
   it('subtracts restored holes from a box-covering punch', () => {
@@ -278,7 +278,7 @@ describe('buildMaskClipPath box-covering punches', () => {
       holes: [square(25, 25, 50, 50)]
     })
     const clip = buildMaskClipPath(m, 100, 100)
-    expect(clip).toBe('polygon(0px 0px, 100px 0px, 100px 100px, 0px 100px, 25px 25px, 75px 25px, 75px 75px, 25px 75px, evenodd)')
+    expect(clip).toBe('polygon(evenodd, 0px 0px, 100px 0px, 100px 100px, 0px 100px, 25px 25px, 75px 25px, 75px 75px, 25px 75px)')
   })
 
   it('keeps the nested evenodd form for a partial brush punch', () => {
@@ -293,6 +293,6 @@ describe('buildMaskClipPath box-covering punches', () => {
       inverted: true
     })
     const clip = buildMaskClipPath(m, 100, 100)
-    expect(clip).toBe('polygon(0px 0px, 100px 0px, 100px 100px, 0px 100px, 10px 10px, 90px 10px, 90px 90px, 10px 90px, evenodd)')
+    expect(clip).toBe('polygon(evenodd, 0px 0px, 100px 0px, 100px 100px, 0px 100px, 10px 10px, 90px 10px, 90px 90px, 10px 90px)')
   })
 })

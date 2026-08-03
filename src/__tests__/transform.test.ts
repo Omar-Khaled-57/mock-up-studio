@@ -193,6 +193,57 @@ describe('drag session', () => {
     expect(onDrag).toHaveBeenCalledTimes(1)
     expect(el.style.left).toBe('5px')
   })
+
+  it('maps follower positions through toStored for DOM writes and commits', () => {
+    const el = makeEl()
+    const fEl = makeEl()
+    const commit = vi.fn()
+    const session = createDragSession({
+      zoom: 1,
+      element: { id: 'a', x: 10, y: 10, width: 10, height: 10 },
+      el,
+      onDrag: vi.fn(),
+      onEnd: vi.fn(),
+      getMultiDrag: () => [
+        {
+          id: 'b',
+          startElemX: 100,
+          startElemY: 200,
+          el: fEl,
+          commit,
+          toStored: (x, y) => ({ x: x - 40, y: y + 60 })
+        }
+      ]
+    })
+    session.begin({ clientX: 0, clientY: 0 })
+    session.move({ clientX: 30, clientY: 40 })
+    // scene b = (130, 240); stored = (90, 300)
+    expect(fEl.style.left).toBe('90px')
+    expect(fEl.style.top).toBe('300px')
+    session.end({ clientX: 30, clientY: 40 })
+    expect(commit).toHaveBeenCalledWith('b', 90, 300)
+  })
+
+  it('skips followers flagged skipCommit (no DOM writes, no commit)', () => {
+    const el = makeEl()
+    const fEl = makeEl()
+    const commit = vi.fn()
+    const session = createDragSession({
+      zoom: 1,
+      element: { id: 'a', x: 10, y: 10, width: 10, height: 10 },
+      el,
+      onDrag: vi.fn(),
+      onEnd: vi.fn(),
+      getMultiDrag: () => [{ id: 'b', startElemX: 100, startElemY: 200, el: fEl, commit, skipCommit: true }]
+    })
+    session.begin({ clientX: 0, clientY: 0 })
+    session.move({ clientX: 30, clientY: 40 })
+    expect(fEl.style.left).toBe('')
+    expect(fEl.style.top).toBe('')
+    session.end({ clientX: 30, clientY: 40 })
+    expect(commit).not.toHaveBeenCalled()
+    expect(fEl.style.left).toBe('')
+  })
 })
 
 describe('resize session', () => {
@@ -351,6 +402,29 @@ describe('resize session', () => {
     expect(el.style.width).toBe('100px')
     expect(el.style.height).toBe('100px')
     expect(el.style.cursor).toBe('')
+    expect(onResize).not.toHaveBeenCalled()
+  })
+
+  it('maps resize DOM writes through toStored while the store commit stays scene-space', () => {
+    const el = makeEl()
+    const onResize = vi.fn()
+    const session = createResizeSession({
+      zoom: 1,
+      element: { id: 'a', x: 10, y: 10, width: 100, height: 100 },
+      el,
+      onResize,
+      onEnd: vi.fn(),
+      toStored: (x, y) => ({ x: x + 5, y: y - 5 })
+    })
+    session.begin('se', { clientX: 0, clientY: 0 })
+    session.move({ clientX: 50, clientY: 30 }, false)
+    expect(el.style.left).toBe('15px')
+    expect(el.style.top).toBe('5px')
+    expect(onResize).not.toHaveBeenCalled()
+    session.cancel()
+    expect(el.style.left).toBe('15px')
+    expect(el.style.top).toBe('5px')
+    expect(el.style.width).toBe('100px')
     expect(onResize).not.toHaveBeenCalled()
   })
 })

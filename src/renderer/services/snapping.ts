@@ -8,6 +8,7 @@
 import { Scene } from '@shared/types'
 import { SNAP_THRESHOLD } from '../lib/constants'
 import { snapAxis } from './geometry'
+import { getSceneRect } from './parent-transform'
 
 export interface SnapInput {
   id: string
@@ -32,17 +33,20 @@ export interface SnapResult {
 }
 
 /**
- * Collects left/center/right and top/center/bottom from all elements in the
- * scene except the one being dragged (identified by `excludeId`).
+ * Collects left/center/right and top/center/bottom (scene-space AABB edges)
+ * from all elements in the scene except the one being dragged (identified by
+ * `excludeId`). Children resolve through the composed transform, so snap
+ * targets stay correct once an element is nested under a moved/rotated parent.
  */
 function gatherSnapTargets(scene: Scene, excludeId: string) {
   const verticals: number[] = []
   const horizontals: number[] = []
 
-  const addElement = (el: { id: string; x: number; y: number; width: number; height: number }) => {
+  const addElement = (el: { id: string }) => {
     if (el.id === excludeId) return
-    verticals.push(el.x, el.x + el.width / 2, el.x + el.width)
-    horizontals.push(el.y, el.y + el.height / 2, el.y + el.height)
+    const r = getSceneRect(scene, el.id)
+    verticals.push(r.x, r.x + r.width / 2, r.x + r.width)
+    horizontals.push(r.y, r.y + r.height / 2, r.y + r.height)
   }
 
   for (const d of scene.devices) addElement(d)

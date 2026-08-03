@@ -10,6 +10,7 @@ import { StateCreator } from 'zustand'
 import { Shape, ShapeKind } from '@shared/types'
 import { StoreState } from './index'
 import { generateId } from '../lib/id'
+import { applyFocusParent } from './sceneSlice'
 
 const DEFAULT_SHAPE_SIZE = 120
 
@@ -56,7 +57,7 @@ export const createShapeSlice: StateCreator<StoreState, [], [], ShapeSlice> = (s
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = {
         ...scene,
-        shapes: [...scene.shapes, shape]
+        shapes: [...scene.shapes, applyFocusParent(scene, shape)]
       }
       return { scenes }
     }),

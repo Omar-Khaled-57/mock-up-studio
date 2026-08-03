@@ -13,6 +13,7 @@
 
 import { Device, Scene } from '@shared/types'
 import { HitTestResult } from './hit-test'
+import { getComposedBox } from './parent-transform'
 
 export interface BitmapTarget {
   elementId: string
@@ -145,24 +146,17 @@ export function resolveBitmapTarget(scene: Scene, hit: HitTestResult): BitmapTar
   return null
 }
 
-/** Resolves the scene-space geometry of the hit element. */
+/**
+ * Resolves the composed scene-space geometry of the hit element. Children
+ * (elements with a `containerId`) resolve through `getComposedBox`, so the
+ * returned box + total rotation position `toLocalPoint` correctly even under
+ * a moved/rotated parent chain. textBox returns null (not a bitmap target).
+ */
 export function resolveElementGeometry(scene: Scene, hit: HitTestResult): ElementGeometry | null {
-  if (hit.kind === 'device') {
-    const d = scene.devices.find((el) => el.id === hit.id)
-    if (!d) return null
-    return { id: d.id, x: d.x, y: d.y, width: d.width, height: d.height, rotation: d.rotation }
-  }
-  if (hit.kind === 'image') {
-    const i = scene.images.find((el) => el.id === hit.id)
-    if (!i) return null
-    return { id: i.id, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation }
-  }
-  if (hit.kind === 'shape') {
-    const s = scene.shapes.find((el) => el.id === hit.id)
-    if (!s) return null
-    return { id: s.id, x: s.x, y: s.y, width: s.width, height: s.height, rotation: s.rotation }
-  }
-  return null
+  if (hit.kind !== 'device' && hit.kind !== 'image' && hit.kind !== 'shape') return null
+  const box = getComposedBox(scene, hit.id)
+  if (!box) return null
+  return { id: box.id, x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation ?? 0 }
 }
 
 /**

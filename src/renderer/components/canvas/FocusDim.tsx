@@ -3,13 +3,19 @@
  * the export node). Renders a translucent scrim over the entire canvas and a
  * highlight ring around the focused scope's bounds (a group subtree or a
  * container element + its children). Non-focus content stays visible but
- * dimmed — never hidden — so the document remains visually continuous and
- * exports are unaffected (this layer lives in the overlay).
+ * dimmed — never hidden — while the focused scope itself is punched out of
+ * the scrim (evenodd clip), so the element under focus stays fully lit. The
+ * punch subtracts the EXACT rotated box of every visible scope member (not a
+ * union AABB), so the lit region hugs the focused content instead of leaving
+ * a ribbon of un-dimmed canvas around it. Exports are unaffected (this layer
+ * lives in the overlay).
  */
 import { useStore } from '../../store'
 import { safeScene } from '../../store/sceneSlice'
 import { useRuntimeStore } from '../../runtime/store'
-import { getFocusScopeBounds } from '../../services/focus'
+import { getFocusScopeBounds, getFocusScopeIds } from '../../services/focus'
+import { ElementGeometry, getElementGeometry } from '../../services/selection-chrome'
+import { buildFocusDimPunch } from '../../services/mask-visualization'
 
 export default function FocusDim() {
   const focusGroupId = useRuntimeStore((s) => s.focusGroupId)
@@ -18,6 +24,15 @@ export default function FocusDim() {
 
   if (!focusGroupId && !focusElementId) return null
 
+  const scopeIds = getFocusScopeIds(scene, focusGroupId, focusElementId)
+  const geometries = scopeIds
+    .map((id) => getElementGeometry(scene, id))
+    .filter((el): el is ElementGeometry => !!el && el.visible)
+  const dimPunch = buildFocusDimPunch(
+    scene.canvas.width,
+    scene.canvas.height,
+    geometries.map((el) => ({ x: el.x, y: el.y, width: el.width, height: el.height, rotation: el.rotation ?? 0 }))
+  )
   const bounds = getFocusScopeBounds(scene, focusGroupId, focusElementId)
 
   return (
@@ -28,6 +43,7 @@ export default function FocusDim() {
           position: 'absolute',
           inset: 0,
           background: 'rgba(9, 9, 11, 0.45)',
+          clipPath: dimPunch ?? undefined,
           pointerEvents: 'none'
         }}
       />

@@ -26,6 +26,44 @@ import { generateId } from '../lib/id'
 import { resetRuntime, useRuntimeStore } from '../runtime/store'
 import { createDeviceElement, createTextBoxElement, buildImageOverlay, readImageFile } from '../lib/element-factories'
 import { isPaintLayer } from '../services/paint-layers'
+import { rescaleChildGeometry, sceneToLocal } from '../services/parent-transform'
+import { ElementLike } from '../services/geometry'
+
+/** Minimal element shape shared by the four kinds so focus parenting stays generic. */
+export interface FocusParentable {
+  containerId: string | null
+  x: number
+  y: number
+}
+
+function round2(v: number): number {
+  return Math.round(v * 100) / 100
+}
+
+/**
+ * Element-focus auto-parenting.
+ *
+ * When element focus is active on a container in the ACTIVE scene and an
+ * incoming element is parentless, it is nested into the focused container: its
+ * scene-space `x/y` is converted into the container's parent-local frame
+ * (offsets in its unrotated frame), so the child travels with the container and
+ * composes through the transform chain. Returns the element unchanged when
+ * there is no element focus, the focused container is missing from the active
+ * scene, or the element already carries a `containerId`.
+ */
+export function applyFocusParent<T extends FocusParentable>(scene: Scene, el: T): T {
+  if (el.containerId) return el
+  const focusElementId = useRuntimeStore.getState().focusElementId
+  if (!focusElementId) return el
+  const containerExists =
+    scene.devices.some((d) => d.id === focusElementId) ||
+    scene.textBoxes.some((t) => t.id === focusElementId) ||
+    scene.images.some((i) => i.id === focusElementId) ||
+    scene.shapes.some((s) => s.id === focusElementId)
+  if (!containerExists) return el
+  const local = sceneToLocal(scene, focusElementId, { x: el.x, y: el.y })
+  return { ...el, containerId: focusElementId, x: round2(local.x), y: round2(local.y) }
+}
 
 /**
  * Returns the current active scene, or a fresh default if the scenes array
@@ -243,6 +281,14 @@ export interface SceneSlice {
   makeParentGroup: (groupId: string, targetGroupId: string) => void
   reverseNesting: (groupA: string, groupB: string) => void
   addToGroup: (groupId: string, elementId: string) => void
+  /**
+   * Scales every direct child of a container by `(newWidth/newHeight) / (oldWidth/oldHeight)`
+   * about the container's local origin. Reads the container's CURRENT (pre-resize)
+   * box, so it must run BEFORE the container's own `update*` commits new
+   * dimensions. Callers own the history entry (resize gestures push before the
+   * container commit).
+   */
+  rescaleChildren: (containerId: string, newWidth: number, newHeight: number) => void
   addScene: () => void
   duplicateScene: (index: number) => void
   deleteScene: (index: number) => void
@@ -303,7 +349,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = {
         ...scene,
-        devices: [...scene.devices, device]
+        devices: [...scene.devices, applyFocusParent(scene, device)]
       }
       return { scenes }
     }),
@@ -336,7 +382,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = {
         ...scene,
-        textBoxes: [...scene.textBoxes, textBox]
+        textBoxes: [...scene.textBoxes, applyFocusParent(scene, textBox)]
       }
       return { scenes }
     }),
@@ -369,7 +415,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
       const scene = scenes[state.activeSceneIndex]
       scenes[state.activeSceneIndex] = {
         ...scene,
-        images: [...scene.images, image]
+        images: [...scene.images, applyFocusParent(scene, image)]
       }
       return { scenes }
     }),
@@ -873,6 +919,45 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
         )
       }
       return { scenes }
+    }),
+
+  /**
+   * Rescales every direct child of `containerId` proportionally to the parent's
+   * new box. Must run BEFORE the container's own dimension commit so the
+   * current (old) width/height are read. No-op when the container or its
+   * children are missing. Callers own the history entry.
+   */
+  rescaleChildren: (containerId, newWidth, newHeight) =>
+    set((state) => {
+      const scene = state.scenes[state.activeSceneIndex]
+      if (!scene) return {}
+      const parent =
+        scene.devices.find((d) => d.id === containerId) ??
+        scene.textBoxes.find((t) => t.id === containerId) ??
+        scene.images.find((i) => i.id === containerId) ??
+        scene.shapes.find((s) => s.id === containerId)
+      if (!parent) return {}
+      const hasChildren =
+        scene.devices.some((d) => d.containerId === containerId) ||
+        scene.textBoxes.some((t) => t.containerId === containerId) ||
+        scene.images.some((i) => i.containerId === containerId) ||
+        scene.shapes.some((s) => s.containerId === containerId)
+      if (!hasChildren) return {}
+      const scaled = <T extends ElementLike>(child: T): T =>
+        ({ ...child, ...rescaleChildGeometry(child, parent.width, parent.height, newWidth, newHeight) })
+      return {
+        scenes: state.scenes.map((sc, i) =>
+          i !== state.activeSceneIndex
+            ? sc
+            : {
+                ...sc,
+                devices: sc.devices.map((d) => (d.containerId === containerId ? scaled(d) : d)),
+                textBoxes: sc.textBoxes.map((t) => (t.containerId === containerId ? scaled(t) : t)),
+                images: sc.images.map((i) => (i.containerId === containerId ? scaled(i) : i)),
+                shapes: sc.shapes.map((s) => (s.containerId === containerId ? scaled(s) : s))
+              }
+        )
+      }
     }),
 
   addScene: () => {

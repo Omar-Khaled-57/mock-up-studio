@@ -74,4 +74,24 @@ describe('hitTest', () => {
     expect(hitTest(scene, { x: 60, y: 60 })?.kind).toBe('textBox')
     expect(hitTest(scene, { x: 20, y: 20 })?.kind).toBe('image')
   })
+
+  it('hits a child at its composed position under a translated parent', () => {
+    scene.devices = [
+      makeDevice({ id: 'par', x: 100, y: 100, width: 400, height: 300, zIndex: 0 }),
+      makeDevice({ id: 'child', x: 20, y: 20, width: 100, height: 100, zIndex: 1, containerId: 'par' })
+    ]
+    expect(hitTest(scene, { x: 120, y: 120 })?.id).toBe('child')
+    expect(hitTest(scene, { x: 150, y: 350 })?.id).toBe('par')
+  })
+
+  it('hits a child of a rotated parent through its composed AABB', () => {
+    scene.devices = [
+      makeDevice({ id: 'par', x: 100, y: 50, width: 200, height: 100, rotation: 90, zIndex: 0 }),
+      makeDevice({ id: 'child', x: 30, y: 20, width: 100, height: 100, zIndex: 1, containerId: 'par' })
+    ]
+    // composed AABB of the child = { x: 130, y: 30, width: 100, height: 100 }
+    expect(hitTest(scene, { x: 131, y: 31 })?.id).toBe('child')
+    // inside the raw local box (30,20,100,100) but outside the composed AABB → miss
+    expect(hitTest(scene, { x: 35, y: 25 })).toBeNull()
+  })
 })

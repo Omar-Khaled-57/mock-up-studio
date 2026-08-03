@@ -5,9 +5,9 @@ import { createDragSession, createResizeSession, DragSession, ResizeSession } fr
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
 import { safeScene } from '../../store/sceneSlice'
-import { isContainer } from '../../services/focus'
 import { getMultiDragEntries } from '../../lib/multi-drag'
 import { resolveContainerDrop, resolveContainerDropTarget } from '../../services/container-drop'
+import { scenePointToStored } from '../../services/parent-transform'
 import { buildGhostPreview } from '../../services/preview'
 import { RuntimeContextMenuItem } from '../../runtime/runtimeSlice'
 import type { Scene } from '@shared/types'
@@ -18,6 +18,16 @@ function emitGhost(
   bounds: { id: string; x: number; y: number; width: number; height: number; rotation?: number } | null
 ): void {
   useRuntimeStore.getState().setPreview(bounds ? buildGhostPreview(bounds) : null)
+}
+
+/**
+ * Parent-local write conversion for a gesture on `id`: maps a composed scene
+ * point to the element's STORED frame (identity for root elements). Reads the
+ * current scene at call time so nest/un-nest decisions made in `onEnd` are
+ * reflected by the follow-up `onDrag` commit.
+ */
+function toStoredFor(id: string): (x: number, y: number) => { x: number; y: number } {
+  return (x, y) => scenePointToStored(safeScene(useStore.getState()), id, { x, y })
 }
 
 interface PendingDrag {
@@ -96,16 +106,25 @@ export const selectTool: Tool = {
             zoom: ctx.actions.getViewport().zoom,
             element: bounds,
             el,
-            onResize: (id, x, y, w, h) =>
+            onResize: (id, x, y, w, h) => {
+              const scene = safeScene(useStore.getState())
+              const stored = scenePointToStored(scene, id, { x, y })
+              const nw = Math.round(w)
+              const nh = Math.round(h)
+              // Children scale proportionally with their container. Runs before
+              // the container commit so it reads the OLD width/height.
+              useStore.getState().rescaleChildren(id, nw, nh)
               ctx.actions.updateElement(id, {
-                x: Math.round(x),
-                y: Math.round(y),
-                width: Math.round(w),
-                height: Math.round(h)
-              }),
+                x: Math.round(stored.x),
+                y: Math.round(stored.y),
+                width: nw,
+                height: nh
+              })
+            },
             onEnd: () => {},
             onPreview: (id, x, y, w, h, rotation) => emitGhost({ id, x, y, width: w, height: h, rotation }),
-            lockAspectRatio: bounds.lockAspectRatio ?? false
+            lockAspectRatio: bounds.lockAspectRatio ?? false,
+            toStored: toStoredFor(hit.id)
           })
           session.begin(ctx.resizeHandle as ResizeHandleName, { clientX: e.clientX, clientY: e.clientY })
           pendingResize = { pointerId: e.pointerId, session }
@@ -134,8 +153,10 @@ export const selectTool: Tool = {
         element: bounds,
         el,
         onStart: () => {},
-        onDrag: (id, x, y) =>
-          ctx.actions.updateElement(id, { x: Math.round(x), y: Math.round(y) }),
+        onDrag: (id, x, y) => {
+          const p = scenePointToStored(safeScene(useStore.getState()), id, { x, y })
+          ctx.actions.updateElement(id, { x: Math.round(p.x), y: Math.round(p.y) })
+        },
         onEnd: (id) => {
           const drop = pendingDrop
           pendingDrop = null
@@ -163,7 +184,8 @@ export const selectTool: Tool = {
         },
         onGuidesChange: (guides) => rt.setSnapGuides(guides),
         getMultiDrag: () => getMultiDragEntries(hit.id),
-        onPreview: (id, x, y, w, h, rotation) => emitGhost({ id, x, y, width: w, height: h, rotation })
+        onPreview: (id, x, y, w, h, rotation) => emitGhost({ id, x, y, width: w, height: h, rotation }),
+        toStored: toStoredFor(hit.id)
       })
       session.begin({ clientX: e.clientX, clientY: e.clientY })
       pendingDrag = {
@@ -325,12 +347,6 @@ export const selectTool: Tool = {
         { label: 'Duplicate', action: () => { state.pushHistory('Duplicate'); state.duplicateSelected([id]) } },
         { label: 'Delete', danger: true, action: () => { state.pushHistory('Delete'); state.deleteSelected([id]) } }
       ]
-      if (isContainer(scene, id)) {
-        items.unshift(
-          { label: 'Enter Focus', action: () => { useRuntimeStore.getState().enterElementFocus(id) } },
-          { divider: true, label: '', action: () => {} }
-        )
-      }
       if (groupId) {
         items.splice(5, 0, { label: '', divider: true, action: () => {} })
         items.splice(5, 0, { label: 'Ungroup', action: () => { state.pushHistory('Ungroup'); state.ungroup(groupId); state.clearSelection() } })

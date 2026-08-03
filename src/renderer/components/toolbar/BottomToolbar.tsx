@@ -125,7 +125,7 @@ export default function BottomToolbar() {
               aria-label="Exit focus mode"
               title="Exit focus mode (Esc)"
               onClick={exitFocus}
-              className={clsx("ml-1 w-4 h-4 flex items-center justify-center rounded transition-colors", bg.hover, text.muted)}
+              className={clsx("ml-0.5 w-4 h-4 flex items-center justify-center rounded transition-colors", bg.hover, text.muted)}
             >
               <X size={ICON.micro} />
             </button>

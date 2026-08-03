@@ -1,14 +1,16 @@
 /**
  * focus tool — left-click on an element inside a group enters that group's
- * focus; clicking again drills into a subgroup within the focused scope;
- * dimmed (out-of-scope) elements are rejected so focus can never escape the
- * focused subtree. Driven through the tool manager against the real stores.
+ * focus; clicking any other element (device, text box, image, shape) enters
+ * element focus; clicking again drills into an element within the focused
+ * scope; dimmed (out-of-scope) elements are rejected so focus can never
+ * escape the focused subtree. Driven through the tool manager against the
+ * real stores.
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useStore } from '../renderer/store'
 import { useRuntimeStore } from '../renderer/runtime/store'
 import { createToolManager, toolRegistry } from '../renderer/tools'
-import { resetStore, makeDevice } from './helpers'
+import { resetStore, makeDevice, makeTextBox, makeImage, makeShape } from './helpers'
 
 type Ptr = {
   pointerId: number
@@ -104,8 +106,11 @@ describe('focus tool', () => {
     expect(useRuntimeStore.getState().focusGroupId).toBe('g-1')
   })
 
-  it('does nothing when clicking an ungrouped element', () => {
-    sceneWithGroups([])
+  it('clicking an ungrouped element enters element focus', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{ ...scene, devices: [makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400 })] }]
+    })
 
     const manager = createToolManager(toolRegistry)
     manager.setActiveTool('focus')
@@ -113,7 +118,32 @@ describe('focus tool', () => {
 
     tool.onPointerDown?.(focusContext(manager, 'dev-1'), evt({}))
 
+    expect(useRuntimeStore.getState().focusElementId).toBe('dev-1')
     expect(useRuntimeStore.getState().focusGroupId).toBeNull()
+  })
+
+  it('enters element focus on any element kind (device, textBox, image, shape)', () => {
+    const scene = useStore.getState().scenes[0]
+    useStore.setState({
+      scenes: [{
+        ...scene,
+        devices: [makeDevice({ id: 'dev-1' })],
+        textBoxes: [makeTextBox({ id: 'tb-1' })],
+        images: [makeImage({ id: 'img-1' })],
+        shapes: [makeShape({ id: 'shp-1' })]
+      }]
+    })
+
+    const manager = createToolManager(toolRegistry)
+    manager.setActiveTool('focus')
+    const tool = manager.getActiveTool()
+
+    for (const id of ['dev-1', 'tb-1', 'img-1', 'shp-1']) {
+      tool.onPointerDown?.(focusContext(manager, id), evt({}))
+      expect(useRuntimeStore.getState().focusElementId).toBe(id)
+      expect(useRuntimeStore.getState().focusGroupId).toBeNull()
+      useRuntimeStore.getState().exitFocus()
+    }
   })
 
   it('does nothing on empty canvas (no hit)', () => {

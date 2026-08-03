@@ -710,39 +710,6 @@ describe('select tool', () => {
     ])
   })
 
-  it('context menu on a container offers Enter Focus', () => {
-    const container = makeDevice({ id: 'cont-1', x: 100, y: 100, width: 600, height: 400 })
-    const child = makeTextBox({ id: 'tb-child', containerId: 'cont-1' })
-    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [container], textBoxes: [child] }] })
-
-    const manager = createToolManager(toolRegistry)
-    const tool = manager.getActiveTool()
-
-    const ctx = manager.buildContext({ scenePoint: point(150, 150), hitResult: { id: container.id, kind: 'device', zIndex: 0, locked: false } })
-    tool.onContextMenu?.(ctx, mouse({ clientX: 150, clientY: 150 }))
-
-    const menu = useRuntimeStore.getState().contextMenu
-    expect(menu).not.toBeNull()
-    expect(menu!.items[0].label).toBe('Enter Focus')
-
-    menu!.items[0].action()
-    expect(useRuntimeStore.getState().focusElementId).toBe('cont-1')
-    expect(useRuntimeStore.getState().focusGroupId).toBeNull()
-  })
-
-  it('context menu on a non-container does not offer Enter Focus', () => {
-    const lonely = makeDevice({ id: 'lonely-1', x: 100, y: 100, width: 600, height: 400 })
-    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [lonely] }] })
-
-    const manager = createToolManager(toolRegistry)
-    const tool = manager.getActiveTool()
-
-    tool.onContextMenu?.(manager.buildContext({ scenePoint: point(150, 150), hitResult: { id: lonely.id, kind: 'device', zIndex: 0, locked: false } }), mouse({ clientX: 150, clientY: 150 }))
-
-    const menu = useRuntimeStore.getState().contextMenu
-    expect(menu!.items[0].label).toBe('Bring to Front')
-  })
-
   it('empty-canvas context menu with 2+ selected offers grouping', () => {
     const dev1 = makeDevice({ id: 'dev-1', x: 100, y: 100, width: 600, height: 400 })
     const dev2 = makeDevice({ id: 'dev-2', x: 900, y: 100, width: 600, height: 400 })
@@ -915,5 +882,101 @@ describe('select tool', () => {
     expect(scene.devices.find((d) => d.id === 'dev-1')?.containerId).toBeNull()
     expect(scene.devices.find((d) => d.id === 'dev-2')?.containerId).toBeNull()
     expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move device')
+  })
+
+  it('dragging a nested child commits parent-local coordinates', () => {
+    const parent = makeDevice({ id: 'par', x: 100, y: 200, width: 400, height: 300, zIndex: 0 })
+    const child = makeTextBox({ id: 'kid', x: 50, y: 60, width: 100, height: 50, zIndex: 1, containerId: 'par' })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [parent], textBoxes: [child] }] })
+    mountElement('kid', 'textBox')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(170, 270), hitResult: { id: 'kid', kind: 'textBox', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 170, clientY: 270 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(200, 290), toolId: 'select' }),
+      evt({ clientX: 200, clientY: 290 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(200, 290), toolId: 'select' }),
+      evt({ clientX: 200, clientY: 290 })
+    )
+
+    const tb = useStore.getState().scenes[0].textBoxes[0]
+    expect(tb.x).toBe(80)
+    expect(tb.y).toBe(80)
+    expect(tb.containerId).toBe('par')
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move text box')
+  })
+
+  it('dragging a nested child to empty canvas un-nests it in scene coordinates', () => {
+    const parent = makeDevice({ id: 'par', x: 100, y: 200, width: 400, height: 300, zIndex: 0 })
+    const child = makeTextBox({ id: 'kid', x: 50, y: 60, width: 100, height: 50, zIndex: 1, containerId: 'par' })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [parent], textBoxes: [child] }] })
+    mountElement('kid', 'textBox')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({ scenePoint: point(170, 270), hitResult: { id: 'kid', kind: 'textBox', zIndex: 1, locked: false }, toolId: 'select' }),
+      evt({ clientX: 170, clientY: 270 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(200, 290), toolId: 'select' }),
+      evt({ clientX: 200, clientY: 290 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(900, 900), toolId: 'select' }),
+      evt({ clientX: 200, clientY: 290 })
+    )
+
+    const tb = useStore.getState().scenes[0].textBoxes[0]
+    expect(tb.containerId).toBeNull()
+    expect(tb.x).toBe(180)
+    expect(tb.y).toBe(280)
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Move out of container')
+  })
+
+  it('resizing a container rescales its children proportionally', () => {
+    const parent = makeDevice({ id: 'par', x: 100, y: 100, width: 400, height: 300, zIndex: 0 })
+    const child = makeTextBox({ id: 'kid', x: 40, y: 50, width: 100, height: 80, zIndex: 1, containerId: 'par' })
+    useStore.setState({ scenes: [{ ...useStore.getState().scenes[0], devices: [parent], textBoxes: [child] }] })
+    mountElement('par', 'device')
+
+    const manager = createToolManager(toolRegistry)
+    const tool = manager.getActiveTool()
+
+    tool.onPointerDown?.(
+      manager.buildContext({
+        scenePoint: point(520, 420),
+        hitResult: { id: 'par', kind: 'device', zIndex: 0, locked: false },
+        resizeHandle: 'se',
+        toolId: 'select'
+      }),
+      evt({ clientX: 520, clientY: 420 })
+    )
+    tool.onPointerMove?.(
+      manager.buildContext({ scenePoint: point(620, 520), toolId: 'select' }),
+      evt({ clientX: 620, clientY: 520 })
+    )
+    tool.onPointerUp?.(
+      manager.buildContext({ scenePoint: point(620, 520), toolId: 'select' }),
+      evt({ clientX: 620, clientY: 520 })
+    )
+
+    const scene = useStore.getState().scenes[0]
+    expect(scene.devices[0].width).toBe(500)
+    expect(scene.devices[0].height).toBe(400)
+    const tb = scene.textBoxes[0]
+    expect(tb.x).toBe(50)
+    expect(tb.y).toBe(66.67)
+    expect(tb.width).toBe(125)
+    expect(tb.height).toBe(106.67)
+    expect(useStore.getState().undoStack.at(-1)?.label).toBe('Resize device')
   })
 })

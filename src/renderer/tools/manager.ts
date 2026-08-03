@@ -4,6 +4,7 @@ import { safeScene } from '../store/sceneSlice'
 import { hitTest, HitTestResult } from '../services/hit-test'
 import { focusFilterFor, isInFocusScope } from '../services/focus'
 import { getFastOverlayHost } from '../services/stroke-host'
+import { getComposedBox } from '../services/parent-transform'
 import { pickImageFile } from '../lib/file-upload'
 import {
   CapabilitySet,
@@ -89,15 +90,20 @@ const documentActions: DocumentActions = {
   },
   selectDirect: (id) => useStore.getState().selectDirect(id),
   getElementBounds: (id) => {
+    // Composed scene-space box: children resolve through their parent chain so
+    // drag/resize sessions move/scale them in scene coordinates and commit the
+    // result back into the parent-local stored frame.
     const scene = safeScene(useStore.getState())
+    const box = getComposedBox(scene, id)
+    if (!box) return null
     const d = scene.devices.find((el) => el.id === id)
-    if (d) return { id: d.id, kind: 'device' as const, x: d.x, y: d.y, width: d.width, height: d.height, rotation: d.rotation ?? 0, lockAspectRatio: d.lockAspectRatio ?? false }
+    if (d) return { id: d.id, kind: 'device' as const, x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation ?? 0, lockAspectRatio: d.lockAspectRatio ?? false }
     const t = scene.textBoxes.find((el) => el.id === id)
-    if (t) return { id: t.id, kind: 'textBox' as const, x: t.x, y: t.y, width: t.width, height: t.height }
+    if (t) return { id: t.id, kind: 'textBox' as const, x: box.x, y: box.y, width: box.width, height: box.height }
     const i = scene.images.find((el) => el.id === id)
-    if (i) return { id: i.id, kind: 'image' as const, x: i.x, y: i.y, width: i.width, height: i.height, rotation: i.rotation ?? 0, lockAspectRatio: i.lockAspectRatio ?? false }
+    if (i) return { id: i.id, kind: 'image' as const, x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation ?? 0, lockAspectRatio: i.lockAspectRatio ?? false }
     const s = scene.shapes.find((el) => el.id === id)
-    if (s) return { id: s.id, kind: 'shape' as const, x: s.x, y: s.y, width: s.width, height: s.height, rotation: s.rotation ?? 0, lockAspectRatio: s.lockAspectRatio ?? false }
+    if (s) return { id: s.id, kind: 'shape' as const, x: box.x, y: box.y, width: box.width, height: box.height, rotation: box.rotation ?? 0, lockAspectRatio: s.lockAspectRatio ?? false }
     return null
   },
   updateElement: (id, patch) => {

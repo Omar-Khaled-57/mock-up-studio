@@ -133,26 +133,7 @@ describe('useKeyboardShortcuts — tool domain', () => {
     expect(useRuntimeStore.getState().focusGroupId).toBeNull()
   })
 
-  it('Enter enters element focus when a container is selected', () => {
-    render(<Harness />)
-    const container = { id: 'cont-1', x: 0, y: 0, width: 200, height: 100, containerId: null }
-    const child = { id: 'tb-1', x: 10, y: 10, containerId: 'cont-1' }
-    useStore.setState({
-      scenes: [{
-        ...useStore.getState().scenes[0],
-        devices: [container],
-        textBoxes: [child]
-      }],
-      selectedIds: ['cont-1'],
-      selectionMode: 'single'
-    })
-
-    press('Enter')
-    expect(useRuntimeStore.getState().focusGroupId).toBeNull()
-    expect(useRuntimeStore.getState().focusElementId).toBe('cont-1')
-  })
-
-  it('Enter does not enter element focus when a non-container is selected', () => {
+  it('Enter does not enter element focus for a single non-group element', () => {
     render(<Harness />)
     const lonely = { id: 'lonely-1', x: 0, y: 0, width: 200, height: 100, containerId: null }
     useStore.setState({
@@ -165,6 +146,7 @@ describe('useKeyboardShortcuts — tool domain', () => {
     })
 
     press('Enter')
+    expect(useRuntimeStore.getState().focusGroupId).toBeNull()
     expect(useRuntimeStore.getState().focusElementId).toBeNull()
   })
 
