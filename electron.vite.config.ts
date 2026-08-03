@@ -35,6 +35,7 @@ export default defineConfig({
     root: resolve(__dirname, 'src/renderer'),
     publicDir: resolve(__dirname, 'public'),
     build: {
+      assetsInlineLimit: 100000,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/renderer/index.html')

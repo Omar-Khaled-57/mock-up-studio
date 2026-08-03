@@ -142,8 +142,8 @@ src/
         EffectsEditor.tsx
       masks/
         MaskRenderer.tsx, MaskSnapshotLayer.tsx
-      primitives/              Design-system primitives (14 components + index.ts)
-        Button.tsx, IconButton.tsx, Modal.tsx, Menu.tsx, NumberInput.tsx, SliderInput.tsx,
+      primitives/              Design-system primitives (13 components + index.ts)
+        Button.tsx, IconButton.tsx, Modal.tsx, Menu.tsx, NumberInput.tsx,
         SegmentedControl.tsx, AccordionSection.tsx, Badge.tsx, Kbd.tsx, Field.tsx,
         Tooltip.tsx, ChromeStrip.tsx, ResponsiveButtonGroup.tsx, index.ts
       sidebar/

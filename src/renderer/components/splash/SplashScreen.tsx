@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import { loadProjectFromZipResult } from '../../lib/project-serialization'
 import { withDirtySuppressed } from '../../store/dirtyTracking'
+import splashLogo from '../../assets/splash-logo.png'
 
 interface RecentEntry {
   path: string
@@ -67,7 +68,7 @@ export default function SplashScreen() {
     <div className={clsx("fixed inset-0 z-50 flex items-center justify-center", isLight ? "bg-white" : "bg-zinc-950")}>
       <div className="w-full max-w-lg space-y-8 px-6">
         <div className="text-center space-y-3">
-          <img src="./logo.png" alt="Mockup Studio" className="w-16 h-16 mx-auto" />
+          <img src={splashLogo} alt="Mockup Studio" className="w-22 h-22 mx-auto" />
           <div className="space-y-1">
             <h1 className={clsx("text-4xl font-bold tracking-tight", isLight ? "text-zinc-900" : "text-zinc-100")}>Mockup Studio</h1>
             <p className={clsx("text-base", isLight ? "text-zinc-700" : "text-zinc-300")}>Desktop device mockup scene builder</p>
