@@ -5,6 +5,40 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-04
+
+Polish release. Native Electron dialogs are replaced with styled in-app modals, the auto-update flow gains visible feedback end to end, and the Keyboard Shortcuts reference gets clearer section headings.
+
+### Styled Dialogs
+
+- **About Mockup Studio** — now a styled modal (app name, tagline, version, creator, GitHub + portfolio links) instead of a native system dialog
+- **Auto-update prompts** — update-available, ready-to-restart, and update-failed states render as styled in-app dialogs driven by the runtime store
+- **Live update checks** — Help → Check for Updates shows a "checking…" spinner state immediately
+- **Up-to-date confirmation** — when no newer release exists, the prompt resolves to a "You're running the latest version" dialog instead of silently closing
+- **Network-timeout guard** — the update check races a 25-second timer, so a blocked/slow network surfaces a clear error ("The update server did not respond in time…") rather than hanging silently
+- **Download progress bars** — update download progress renders as a live percentage bar in the toolbar footer and the canvas chrome bar
+- **Escape semantics** — pressing Escape on an available-update prompt defers the download (equivalent to Later)
+
+### Keyboard Shortcuts
+
+- **Section dividers** — hairline separators now sit between the File, Edit, and Canvas sections of the shortcuts reference modal
+- **Section titles** — File / Edit / Canvas render at full contrast (white in dark mode, black in light mode) so they read clearly as headings rather than shortcuts
+
+### Internal Improvements
+
+- The updater no longer sends IPC after a promise resolves (no stale "available" frames after the renderer has moved on); the renderer owns the modal lifecycle
+- `respondToUpdate('download' | 'later' | 'restart')` bridges prompt actions over IPC to the main process (download + progress bar, clear progress, quit-and-install)
+- Unpackaged (dev) builds return a friendly "update checks only run in the packaged app" message instead of dialogs
+
+### Quality
+
+- 1091 tests / 74 files passing
+- ESLint zero errors / zero warnings
+- TypeScript strict mode clean
+- Production build clean (pre-existing dynamic-import warnings only)
+
+---
+
 ## [0.3.0] - 2026-08-04
 
 A major release overhauling the tool system, adding the complete mask engine, brush tools, visual feedback layer, and the v0.3.0 redesign foundation. The editor moves from inline element handlers to a centralized Tool Manager pattern, introduces first-class masking with polygon boolean clipping, and adds paint/eraser/blur/focus tools. The UI gets a bottom toolbar, contextual Properties panel, canvas chrome bar, and export modal.

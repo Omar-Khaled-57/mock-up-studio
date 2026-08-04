@@ -1,6 +1,39 @@
 {
   "versions": [
     {
+      "version": "0.3.1",
+      "date": "2026-08-04",
+      "title": "Styled Dialogs & Update UX",
+      "origin": "Polish release. Native Electron dialogs are replaced with styled in-app modals (About, auto-update prompts), the update flow gains a live checking state, an up-to-date confirmation, a network-timeout error dialog, and visible download progress bars, and the Keyboard Shortcuts reference gets clearer section headings.",
+      "sections": [
+        {
+          "heading": "Styled Dialogs",
+          "items": [
+            "About Mockup Studio is now a styled modal (logo, version, creator, links) instead of a native system dialog",
+            "Auto-update prompts render as styled in-app dialogs (Update available / Ready to restart / Update failed)",
+            "Update checks show a live 'checking…' state with spinner",
+            "'You're up to date' confirmation when no newer version exists",
+            "Network-timeout guard (25s) so a blocked update check shows a clear error instead of hanging silently",
+            "Update download progress bars in the toolbar footer and canvas chrome bar"
+          ]
+        },
+        {
+          "heading": "Keyboard Shortcuts",
+          "items": [
+            "Section dividers between File / Edit / Canvas groups",
+            "Section titles use full-contrast theme colors (white in dark mode, black in light mode) so they read as headings, not shortcuts"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "1091 tests passing across 74 files",
+            "Lint, typecheck, and production build clean"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.3.0",
       "date": "2026-08-04",
       "title": "Tool System & Masking Engine",

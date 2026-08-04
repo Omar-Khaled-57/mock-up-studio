@@ -71,7 +71,8 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Auto-save recovery** — Crash recovery with periodic snapshots
 - **File association** — Double-click `.mockup` files to open them directly
 - **Unsaved changes guard** — Prompts before closing with unsaved work
-- **Auto-update** — GitHub Releases integration (production builds)
+- **Auto-update** — GitHub Releases integration (production builds) with styled in-app prompts (checking / available / up-to-date / failed), a 25s network-timeout guard, and download progress bars
+- **Styled dialogs** — About and all update prompts render as in-app modals instead of native system dialogs
 - **Keyboard shortcuts** — Full shortcut suite with reference modal (Ctrl+/)
 - **Watermark** — Optional text watermark excluded from exports
 - **Color extraction** — Extract dominant colors from device screens
@@ -163,7 +164,7 @@ src/
     elements/      ElementFacade (presentational wrapper, mask application)
     components/    canvas, devices, text, images, shapes, backgrounds,
                    effects, masks, primitives, sidebar, shared, splash, toolbar
-  __tests__/       Vitest + Testing Library suites (72 test files)
+    __tests__/       Vitest + Testing Library suites (74 test files)
 docs/              Architecture documentation (see docs/index.md)
 public/            Icons + in-app changelog.json
 release/           electron-builder output
@@ -222,7 +223,7 @@ assets/                Device screens, images, thumbnails (base64 in manifest)
 
 ## Testing
 
-1074 tests across 72 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
+1091 tests across 74 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
 
 ## License
 
