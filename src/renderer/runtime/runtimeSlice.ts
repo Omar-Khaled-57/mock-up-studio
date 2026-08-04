@@ -20,6 +20,7 @@
 
 import { StateCreator } from 'zustand'
 import type { PreviewState } from '../services/preview'
+import type { UpdatePromptPayload } from '@shared/types'
 
 export type ResetScope = 'all' | 'transient'
 export type TemporaryToolUntil = 'keyup' | 'pointerup'
@@ -170,6 +171,12 @@ export interface RuntimeState {
   toolbarToolsVisible: boolean
   /** The "Save changes?" guard modal shown before destructive navigation while dirty. */
   savePrompt: SavePromptState | null
+  /**
+   * The styled auto-update prompt ('available' | 'ready' | 'failed') sent from
+   * the main process. Like savePrompt, it is modal chrome that must never be
+   * dismissed by a transient reset.
+   */
+  updatePrompt: UpdatePromptPayload | null
 }
 
 export const DEFAULT_TOOL_ID = 'select'
@@ -214,6 +221,8 @@ export interface RuntimeSlice extends RuntimeState {
   toggleToolbarTools: () => void
   openSavePrompt: (prompt: SavePromptState) => void
   closeSavePrompt: () => void
+  setUpdatePrompt: (prompt: UpdatePromptPayload | null) => void
+  closeUpdatePrompt: () => void
 }
 
 export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice> = (set) => ({
@@ -243,6 +252,7 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   exportModalOpen: false,
   toolbarToolsVisible: true,
   savePrompt: null,
+  updatePrompt: null,
 
   setActiveTool: (toolId) => set({ activeToolId: toolId }),
 
@@ -312,5 +322,9 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
 
   openSavePrompt: (prompt) => set({ savePrompt: prompt }),
 
-  closeSavePrompt: () => set({ savePrompt: null })
+  closeSavePrompt: () => set({ savePrompt: null }),
+
+  setUpdatePrompt: (prompt) => set({ updatePrompt: prompt }),
+
+  closeUpdatePrompt: () => set({ updatePrompt: null })
 })

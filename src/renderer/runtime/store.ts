@@ -51,7 +51,11 @@ const FULL_RESET: Partial<RuntimeState> = {
   propertiesSections: {},
   exportModalOpen: false,
   toolbarToolsVisible: true,
-  savePrompt: null
+  savePrompt: null,
+  // updatePrompt is deliberately NOT in the transient reset (same contract as
+  // savePrompt): an in-flight gesture/undo must never dismiss the styled update
+  // prompt. It is cleared by closeUpdatePrompt and the full ('all') reset.
+  updatePrompt: null
 }
 
 let fullResetHook: (() => void) | null = null

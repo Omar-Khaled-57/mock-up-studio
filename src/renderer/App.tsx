@@ -7,6 +7,8 @@ import SplashScreen from './components/splash/SplashScreen'
 import ShortcutsModal from './components/shared/ShortcutsModal'
 import ErrorBoundary from './components/shared/ErrorBoundary'
 import UpdateModal from './components/shared/UpdateModal'
+import AboutDialog from './components/shared/AboutDialog'
+import UpdatePromptDialog from './components/shared/UpdatePromptDialog'
 import ResizeHandle from './components/shared/ResizeHandle'
 import UserGuide from './components/shared/UserGuide'
 import type { ChangelogVersion } from './components/shared/UpdateModal'
@@ -66,6 +68,7 @@ export default function App() {
   const { clsx, isLight, bg } = useTheme()
 
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
   const [updateVersion, setUpdateVersion] = useState<ChangelogVersion | null>(null)
   const downloadProgress = useStore((s) => s.downloadProgress)
   const setDownloadProgress = useStore((s) => s.setDownloadProgress)
@@ -161,13 +164,24 @@ export default function App() {
         case 'open-user-guide':
           window.api?.openUserGuide?.()
           break
-        case 'check-for-updates':
+        case 'about':
+          setShowAbout(true)
+          break
+        case 'check-for-updates': {
+          useRuntimeStore.getState().setUpdatePrompt({ kind: 'checking' })
           window.api?.checkForUpdatesNow?.().then((result) => {
+            const rt = useRuntimeStore.getState()
             if (!result.success) {
-              alert('Update Check Failed\n\nCould not check for updates. No release has been published yet.\n\nMake sure you are connected to the internet and try again.')
+              rt.setUpdatePrompt({
+                kind: 'failed',
+                message: result.error ?? 'No release has been published yet. Make sure you are connected to the internet and try again.'
+              })
+            } else if (rt.updatePrompt?.kind === 'checking') {
+              rt.setUpdatePrompt({ kind: 'uptodate' })
             }
           })
           break
+        }
         case 'export':
           useRuntimeStore.getState().openExportModal()
           break
@@ -192,6 +206,16 @@ export default function App() {
 
     return cleanup
   }, [setDownloadProgress])
+
+  useEffect(() => {
+    if (!window.api?.onUpdatePrompt) return
+
+    const cleanup = window.api.onUpdatePrompt((prompt) => {
+      useRuntimeStore.getState().setUpdatePrompt(prompt)
+    })
+
+    return cleanup
+  }, [])
 
   useEffect(() => {
     if (!window.api?.onRequestClose) return
@@ -274,8 +298,10 @@ export default function App() {
         <PropertiesPanel />
         {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
+        <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
         <ExportDialog open={exportModalOpen} onClose={closeExportModal} />
         <SaveChangesDialog />
+        <UpdatePromptDialog />
         {downloadProgress !== null && (
           <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-2 bg-zinc-900 border-t border-zinc-700 px-4 py-2 text-xs text-zinc-400">
             <span>Downloading update… {Math.round(downloadProgress)}%</span>

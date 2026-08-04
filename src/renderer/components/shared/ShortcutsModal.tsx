@@ -61,10 +61,10 @@ export default function ShortcutsModal({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className={clsx("rounded-xl shadow-2xl w-[480px] max-h-[80vh] overflow-y-auto p-6", isLight ? "bg-white border border-zinc-200" : "bg-zinc-900 border border-zinc-700")}
+        className={clsx("rounded-xl shadow-2xl w-[480px] max-h-[85vh] overflow-y-auto px-4 py-3", isLight ? "bg-white border border-zinc-200" : "bg-zinc-900 border border-zinc-700")}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between mb-2.5">
           <h2 className={clsx("text-sm font-semibold", isLight ? "text-zinc-800" : "text-zinc-200")}>Keyboard Shortcuts</h2>
           <button
             onClick={onClose}
@@ -74,17 +74,23 @@ export default function ShortcutsModal({ onClose }: Props) {
           </button>
         </div>
 
-        <div className="space-y-5">
-          {SECTIONS.map((section) => (
+        <div className="space-y-2">
+          {SECTIONS.map((section, i) => (
             <div key={section.title}>
-              <h3 className={clsx("text-[10px] font-semibold uppercase tracking-wider mb-2", isLight ? "text-zinc-700" : "text-zinc-400")}>
+              {i > 0 && (
+                <div
+                  aria-hidden="true"
+                  className={clsx("mb-2 h-px", isLight ? "bg-zinc-200" : "bg-zinc-800")}
+                />
+              )}
+              <h3 className={clsx("text-[10px] font-semibold uppercase tracking-wider mb-0.5", isLight ? "text-black" : "text-white")}>
                 {section.title}
               </h3>
-              <div className="space-y-1">
+              <div className="space-y-[3px]">
                 {section.shortcuts.map((s) => (
-                  <div key={s.action} className="flex items-center justify-between py-1">
+                  <div key={s.action} className="flex items-center justify-between">
                     <span className={clsx("text-xs", isLight ? "text-zinc-600" : "text-zinc-400")}>{s.action}</span>
-                    <kbd className={clsx("px-1.5 py-0.5 text-[10px] font-mono rounded", isLight ? "text-zinc-700 bg-zinc-100 border border-zinc-200" : "text-zinc-300 bg-zinc-800 border border-zinc-700")}>
+                    <kbd className={clsx("px-1.5 text-[10px] font-mono rounded", isLight ? "text-zinc-700 bg-zinc-100 border border-zinc-200" : "text-zinc-300 bg-zinc-800 border border-zinc-700")}>
                       {s.keys}
                     </kbd>
                   </div>

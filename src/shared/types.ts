@@ -339,3 +339,20 @@ export interface Shape {
   /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
   lockAspectRatio?: boolean
 }
+
+/**
+ * Update prompt payload sent from the main process to the renderer so the
+ * auto-updater can render styled in-app prompts instead of native OS dialogs.
+ * - `checking` — a check is in flight (renderer-initiated "Check for Updates").
+ * - `available` — a new version can be downloaded (user chooses Download/Later).
+ * - `ready` — the update is downloaded (user chooses Restart Now/Later).
+ * - `failed` — the check or download failed (informational, one OK button).
+ * - `uptodate` — the check succeeded and no newer version exists (informational).
+ */
+export interface UpdatePromptPayload {
+  kind: 'available' | 'ready' | 'failed' | 'checking' | 'uptodate'
+  /** The incoming version string, present on `available`. */
+  version?: string
+  /** Error detail from the updater, present on `failed`. */
+  message?: string
+}

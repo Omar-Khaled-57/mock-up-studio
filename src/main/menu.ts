@@ -1,4 +1,4 @@
-import { Menu, BrowserWindow, dialog, shell } from 'electron'
+import { Menu, BrowserWindow } from 'electron'
 
 export function createMenu(mainWindow: BrowserWindow): void {
   const isMac = process.platform === 'darwin'
@@ -91,22 +91,11 @@ export function createMenu(mainWindow: BrowserWindow): void {
         { type: 'separator' },
         {
           label: 'About Mockup Studio',
-          click: async () => {
-            const result = await dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'About Mockup Studio',
-              message: 'Mockup Studio',
-              detail: 'Desktop device mockup scene builder.\n\nVersion 0.3.0\n\nCreated by Omar Khaled\nGitHub: @Omar-Khaled-57\nPortfolio: omar-el-khouly.vercel.app',
-              buttons: ['Close', 'View Repository', 'View Portfolio'],
-              defaultId: 0,
-              cancelId: 0
-            })
-            if (result.response === 1) {
-              shell.openExternal('https://github.com/Omar-Khaled-57/mock-up-studio')
-            } else if (result.response === 2) {
-              shell.openExternal('https://omar-el-khouly.vercel.app')
-            }
-          }
+          // Rendered as a styled in-app modal (AboutDialog) — not a native OS
+          // dialog. The renderer opens the repository/portfolio links externally
+          // via anchor tags; main's setWindowOpenHandler forwards them to the
+          // system browser.
+          click: () => send('about')
         },
         {
           label: 'Check for Updates…',

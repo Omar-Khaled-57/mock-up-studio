@@ -19,7 +19,7 @@
  *     the recent list up to date.
  */
 
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import { writeFile } from 'fs/promises'
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
@@ -32,6 +32,9 @@ import {
   writeMockupZip,
   readMockupZip
 } from './file-system'
+
+/** Upper bound for a single update check — a blocked/slow network must fail fast instead of hanging. */
+const UPDATE_CHECK_TIMEOUT_MS = 25_000
 
 export function registerIpcHandlers(): void {
   /**
@@ -210,13 +213,31 @@ export function registerIpcHandlers(): void {
   /**
    * Triggers electron-updater's built-in check (which shows native dialogs).
    * Used by Help → "Check for Updates…" menu item.
+   *
+   * In unpackaged builds (dev / `npm start`) electron-updater silently skips
+   * the check and resolves null — that must surface as a failure so the
+   * renderer shows the styled "update check failed" prompt.
    */
   ipcMain.handle('check-for-updates-now', async () => {
     try {
-      await autoUpdater.checkForUpdates()
+      if (!app.isPackaged) {
+        return {
+          success: false,
+          error: 'Update checks are only available in packaged builds of Mockup Studio.'
+        }
+      }
+      const result = await Promise.race([
+        autoUpdater.checkForUpdates(),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('The update server did not respond in time. Check your connection and try again.')), UPDATE_CHECK_TIMEOUT_MS).unref()
+        })
+      ])
+      if (!result) {
+        return { success: false, error: 'No update source was found.' }
+      }
       return { success: true }
-    } catch {
-      return { success: false }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 }

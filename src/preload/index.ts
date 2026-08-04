@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { UpdatePromptPayload } from '../shared/types'
 
 const api = {
   saveProject: (filePath: string, projectJSON: string, assetsJson: string): Promise<{ success: boolean; error?: string }> =>
@@ -72,6 +73,17 @@ const api = {
     const handler = (_event: Electron.IpcRendererEvent, percent: number): void => callback(percent)
     ipcRenderer.on('download-progress', handler)
     return () => ipcRenderer.removeListener('download-progress', handler)
+  },
+
+  onUpdatePrompt: (callback: (prompt: UpdatePromptPayload) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, prompt: UpdatePromptPayload): void => callback(prompt)
+    ipcRenderer.on('update-prompt', handler)
+    return () => ipcRenderer.removeListener('update-prompt', handler)
+  },
+
+  /** Reply to a styled update prompt: 'download' | 'later' | 'restart'. */
+  respondToUpdate: (action: 'download' | 'later' | 'restart'): void => {
+    ipcRenderer.send('update-response', action)
   }
 }
 

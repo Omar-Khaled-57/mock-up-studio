@@ -37,6 +37,7 @@ function seedTransientState() {
   rt.setBrush({ size: 40, hardness: 0.8, color: '#ff0000' })
   rt.openExportModal()
   rt.toggleToolbarTools()
+  rt.setUpdatePrompt({ kind: 'available', version: '9.9.9' })
 }
 
 describe('initial state', () => {
@@ -64,6 +65,7 @@ describe('initial state', () => {
     expect(rt.exportModalOpen).toBe(false)
     expect(rt.toolbarToolsVisible).toBe(true)
     expect(rt.savePrompt).toBeNull()
+    expect(rt.updatePrompt).toBeNull()
   })
 })
 
@@ -117,6 +119,7 @@ describe('resetRuntime', () => {
     expect(rt.maskMode).toBe('unmask')
     expect(rt.exportModalOpen).toBe(true)
     expect(rt.toolbarToolsVisible).toBe(false)
+    expect(rt.updatePrompt).toEqual({ kind: 'available', version: '9.9.9' })
   })
 
   it('all reset restores the default tool and clears focus and temporary stack', () => {
@@ -135,6 +138,7 @@ describe('resetRuntime', () => {
     expect(rt.maskMode).toBe('mask')
     expect(rt.exportModalOpen).toBe(false)
     expect(rt.toolbarToolsVisible).toBe(true)
+    expect(rt.updatePrompt).toBeNull()
   })
 
   it('default scope is transient', () => {
@@ -184,6 +188,31 @@ describe('savePrompt', () => {
     })
     resetRuntime('all')
     expect(useRuntimeStore.getState().savePrompt).toBeNull()
+  })
+})
+
+describe('updatePrompt', () => {
+  it('setUpdatePrompt/closeUpdatePrompt manage the styled update modal', () => {
+    useRuntimeStore.getState().setUpdatePrompt({ kind: 'available', version: '0.4.0' })
+    expect(useRuntimeStore.getState().updatePrompt).toEqual({ kind: 'available', version: '0.4.0' })
+
+    useRuntimeStore.getState().setUpdatePrompt({ kind: 'failed', message: 'offline' })
+    expect(useRuntimeStore.getState().updatePrompt).toEqual({ kind: 'failed', message: 'offline' })
+
+    useRuntimeStore.getState().closeUpdatePrompt()
+    expect(useRuntimeStore.getState().updatePrompt).toBeNull()
+  })
+
+  it('survives transient resets (the modal is not in-flight gesture state)', () => {
+    useRuntimeStore.getState().setUpdatePrompt({ kind: 'ready' })
+    resetRuntime('transient')
+    expect(useRuntimeStore.getState().updatePrompt).toEqual({ kind: 'ready' })
+  })
+
+  it('all reset clears it like the other full-reset chrome state', () => {
+    useRuntimeStore.getState().setUpdatePrompt({ kind: 'available', version: '0.4.0' })
+    resetRuntime('all')
+    expect(useRuntimeStore.getState().updatePrompt).toBeNull()
   })
 })
 

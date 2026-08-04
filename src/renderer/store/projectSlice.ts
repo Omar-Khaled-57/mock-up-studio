@@ -1,5 +1,5 @@
 import { StateCreator } from 'zustand'
-import { Project } from '@shared/types'
+import { Project, UpdatePromptPayload } from '@shared/types'
 import { StoreState } from './index'
 import { serializeProject, loadProjectFromZipResult } from '../lib/project-serialization'
 import { createDefaultScene } from './sceneSlice'
@@ -27,6 +27,8 @@ declare global {
       openUserGuide: () => void
       checkForUpdatesNow: () => Promise<{ success: boolean; error?: string }>
       onDownloadProgress: (callback: (percent: number) => void) => (() => void)
+      onUpdatePrompt: (callback: (prompt: UpdatePromptPayload) => void) => (() => void)
+      respondToUpdate: (action: 'download' | 'later' | 'restart') => void
     }
   }
 }

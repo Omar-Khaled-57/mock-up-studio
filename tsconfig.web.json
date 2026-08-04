@@ -23,6 +23,7 @@
   "include": [
     "src/renderer/**/*",
     "src/shared/**/*",
-    "src/guide/**/*"
+    "src/guide/**/*",
+    "package.json"
   ]
 }
