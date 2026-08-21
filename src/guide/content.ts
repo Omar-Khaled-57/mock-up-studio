@@ -28,7 +28,7 @@ const DOCS: DocSection[] = [
   {
     id: 'introduction',
     title: 'Introduction',
-    icon: '📖',
+    icon: 'BookOpen',
     pages: [
       {
         id: 'welcome',
@@ -40,10 +40,10 @@ const DOCS: DocSection[] = [
           { type: 'heading', text: 'Key Features', level: 2 },
           { type: 'bullets', items: [
             'Rich canvas with grid, guides, and snap-to-grid',
-            'Device frames: phones, tablets, laptops, monitors, watches, browsers, terminals, TVs',
+            'Device frames: phones, tablets, laptops, monitors, watches, browsers, terminals',
             'Text boxes with full typography controls',
             'Image overlays with crop, blur, shadow, glow',
-            'SVG shapes with 16+ kinds and background images',
+            'SVG shapes with 13 kinds and background images',
             'Gradient, solid, image, and animated preset backgrounds',
             'Layer management with drag-to-reorder and grouping',
             'Multi-scene projects with version snapshots',
@@ -63,7 +63,7 @@ const DOCS: DocSection[] = [
   {
     id: 'getting-started',
     title: 'Getting Started',
-    icon: '🚀',
+    icon: 'Rocket',
     pages: [
       {
         id: 'creating-project',
@@ -117,7 +117,7 @@ const DOCS: DocSection[] = [
           { type: 'heading', text: 'Watermark', level: 2 },
           { type: 'paragraph', text: 'You can add a configurable watermark to exports. Set the text, font size, opacity, and position (top-left, top-right, bottom-left, bottom-right, or center).' },
           { type: 'steps', items: [
-            'Open the Export panel from the sidebar',
+            'Open the Export dialog from the toolbar or press Ctrl+E',
             'Choose format, scale, background, and quality',
             'Click Preview to see the result, then Save to export',
             'Or click Copy to copy to clipboard'
@@ -129,7 +129,7 @@ const DOCS: DocSection[] = [
   {
     id: 'workspace',
     title: 'Workspace Overview',
-    icon: '🖼️',
+    icon: 'Image',
     pages: [
       {
         id: 'canvas',
@@ -160,16 +160,16 @@ const DOCS: DocSection[] = [
           { type: 'heading', text: 'Sidebar Panels', level: 1 },
           { type: 'paragraph', text: 'The sidebar on the left contains all the tools for building your scene. Each tab provides different functionality.' },
           { type: 'bullets', items: [
-            'Devices — Add and manage device frames',
-            'Text — Add and style text boxes',
-            'Shapes — Add SVG shapes (16+ kinds)',
-            'Images — Upload and manage image overlays',
-            'Themes — Configure canvas background',
-            'Theme Presets — Apply color theme presets',
             'Canvas — Set canvas size and aspect ratio',
-            'Grid — Configure grid, guides, and rulers',
+            'Themes — Configure canvas background',
+            'Devices — Add and manage device frames',
+            'Images — Upload and manage image overlays',
+            'Text — Add and style text boxes',
+            'Shapes — Add SVG shapes (13 kinds)',
+            'Masks — Draw masks to hide/reveal regions',
+            'Units — Reusable component library',
             'Layers — Reorder, group, and manage elements',
-            'Export — Export scenes as images',
+            'Grid — Configure grid, guides, and rulers',
             'History — Version snapshots'
           ] }
         ]
@@ -179,7 +179,7 @@ const DOCS: DocSection[] = [
   {
     id: 'tools',
     title: 'Tools & Elements',
-    icon: '🔧',
+    icon: 'Wrench',
     pages: [
       {
         id: 'devices',
@@ -195,8 +195,7 @@ const DOCS: DocSection[] = [
             'Monitor — Desktop monitor with stand',
             'Watch — Smartwatch frame',
             'Browser — Browser window frame',
-            'Terminal — Terminal/console frame',
-            'TV — Television frame'
+            'Terminal — Terminal/console frame'
           ] },
           { type: 'heading', text: 'Screen Content', level: 2 },
           { type: 'paragraph', text: 'Double-click a devices screen area to upload an image. The image can be fitted using three modes: Contain (fits inside), Cover (fills the screen), or Stretch (fills the screen, may distort).' },
@@ -241,10 +240,9 @@ const DOCS: DocSection[] = [
           { type: 'paragraph', text: 'Shapes are SVG-based vector graphics that can be added to your scene. They render as crisp, scalable elements.' },
           { type: 'heading', text: 'Available Shapes', level: 2 },
           { type: 'bullets', items: [
-            'Rectangle, Circle, Triangle, Star',
+            'Rectangle, Circle, Ellipse, Triangle, Star',
             'Hexagon, Diamond, Parallelogram, Trapezoid',
-            'Cross, Plus, Heart, Shield',
-            'Arrow Right, Line, Arrow Up/Down/Left/Right'
+            'Cross, Plus, Heart, Arrow Right'
           ] },
           { type: 'heading', text: 'Properties', level: 2 },
           { type: 'bullets', items: [
@@ -279,7 +277,7 @@ const DOCS: DocSection[] = [
   {
     id: 'layers',
     title: 'Layers & Selection',
-    icon: '📑',
+    icon: 'FileText',
     pages: [
       {
         id: 'layer-management',
@@ -320,7 +318,7 @@ const DOCS: DocSection[] = [
   {
     id: 'backgrounds',
     title: 'Backgrounds & Themes',
-    icon: '🎨',
+    icon: 'Palette',
     pages: [
       {
         id: 'background-types',
@@ -354,7 +352,7 @@ const DOCS: DocSection[] = [
   {
     id: 'shortcuts',
     title: 'Keyboard Shortcuts',
-    icon: '⌨️',
+    icon: 'Keyboard',
     pages: [
       {
         id: 'shortcuts-reference',
@@ -408,7 +406,7 @@ const DOCS: DocSection[] = [
   {
     id: 'advanced',
     title: 'Advanced Features',
-    icon: '⚡',
+    icon: 'Zap',
     pages: [
       {
         id: 'multi-scene',
@@ -470,7 +468,7 @@ const DOCS: DocSection[] = [
   {
     id: 'troubleshooting',
     title: 'Troubleshooting',
-    icon: '❓',
+    icon: 'CircleHelp',
     pages: [
       {
         id: 'faq',

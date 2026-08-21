@@ -337,6 +337,7 @@ export default function LayersPanel() {
                 if (g) { pushHistory('Ungroup'); ungroup(g.id); clearSelection() }
               }}]
             : []),
+          { label: 'Add to Units', action: () => { useRuntimeStore.getState().openComponentCreationModal(contextTarget.id, contextTarget.kind) } },
           { divider: true, label: '', action: () => {} },
           { label: 'Delete', danger: true, action: () => { pushHistory('Delete'); deleteSelected([contextTarget.id]) } }
         ]

@@ -27,20 +27,25 @@ export async function ensureDirs(): Promise<void> {
 
 // ── Recovery ──────────────────────────────────────────
 
+/** Strip path separators and traversal sequences from a recovery id to prevent writes outside the recovery directory. */
+function sanitizeRecoveryId(projectId: string): string {
+  return projectId.replace(/[/\\]/g, '').replace(/\.\./g, '')
+}
+
 export async function writeRecovery(projectId: string, data: string): Promise<void> {
   await ensureDirs()
-  const filePath = join(getRecoveryDir(), `${projectId}.recovery`)
+  const filePath = join(getRecoveryDir(), `${sanitizeRecoveryId(projectId)}.recovery`)
   await writeFile(filePath, data, 'utf-8')
 }
 
 export async function readRecovery(projectId: string): Promise<string | null> {
-  const filePath = join(getRecoveryDir(), `${projectId}.recovery`)
+  const filePath = join(getRecoveryDir(), `${sanitizeRecoveryId(projectId)}.recovery`)
   if (!existsSync(filePath)) return null
   return readFile(filePath, 'utf-8')
 }
 
 export async function deleteRecovery(projectId: string): Promise<void> {
-  const filePath = join(getRecoveryDir(), `${projectId}.recovery`)
+  const filePath = join(getRecoveryDir(), `${sanitizeRecoveryId(projectId)}.recovery`)
   if (existsSync(filePath)) {
     await unlink(filePath)
   }
@@ -72,6 +77,26 @@ export async function addRecentProject(entry: RecentProject): Promise<void> {
   filtered.unshift(entry)
   const trimmed = filtered.slice(0, 20)
   await writeFile(getRecentPath(), JSON.stringify(trimmed, null, 2), 'utf-8')
+}
+
+// ── Components Library ────────────────────────────────
+
+function getComponentsPath(): string {
+  return join(getAppDataDir(), 'components.json')
+}
+
+export async function loadComponents(): Promise<string | null> {
+  const filePath = getComponentsPath()
+  if (!existsSync(filePath)) return null
+  try {
+    return readFile(filePath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+export async function saveComponents(data: string): Promise<void> {
+  await writeFile(getComponentsPath(), data, 'utf-8')
 }
 
 // ── .mockup ZIP File Operations ───────────────────────

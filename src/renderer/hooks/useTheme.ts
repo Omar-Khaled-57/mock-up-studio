@@ -32,7 +32,7 @@ export function useTheme() {
       primary: isLight ? 'bg-white' : 'bg-zinc-950',
       secondary: isLight ? 'bg-zinc-50' : 'bg-zinc-900',
       tertiary: isLight ? 'bg-zinc-100' : 'bg-zinc-800',
-      panel: isLight ? 'bg-white' : 'bg-zinc-900/50',
+      panel: isLight ? 'bg-white' : 'bg-zinc-900',
       input: isLight ? 'bg-white text-zinc-900 border-zinc-300 focus:border-indigo-600' : 'bg-zinc-800 text-zinc-200 border-zinc-700 focus:border-indigo-500/50',
       button: isLight ? 'bg-zinc-100 text-zinc-700 border-zinc-300 hover:bg-zinc-200 hover:text-zinc-900' : 'bg-zinc-800/60 text-zinc-300 border-zinc-700/50 hover:bg-zinc-700/80 hover:text-zinc-100',
       buttonActive: isLight ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',

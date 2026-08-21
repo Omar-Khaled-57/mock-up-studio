@@ -94,7 +94,7 @@ Two completely separate Zustand stores:
 
 ### Document Store (`src/renderer/store/index.ts`)
 
-Composed of 13 slices, all serialized/snapshotted by history:
+Composed of 14 slices, all serialized/snapshotted by history:
 
 | Slice | File | Responsibility |
 |---|---|---|
@@ -111,6 +111,7 @@ Composed of 13 slices, all serialized/snapshotted by history:
 | `ShapeSlice` | `shapeSlice.ts` | Shape-specific state (separate from sceneSlice) |
 | `MaskSlice` | `maskSlice.ts` | Mask CRUD, reverse, clear, refresh snapshot |
 | `EffectsSlice` | `effectsSlice.ts` | updateEffects, resetEffects (state lives on elements) |
+| `ComponentSlice` | `componentSlice.ts` | Units (components) CRUD, groups, library validation, instance sync, saveToDisk |
 
 Composition: `(...a) => ({ ...createProjectSlice(...a), ...createSceneSlice(...a), ... })` — each slice receives the full Zustand tuple and returns a partial state.
 
@@ -252,7 +253,7 @@ For destructive tools (blur/eraser), the bitmap (device screenshot, shape backgr
 
 2. **Elements are pure facades** — no pointer handlers on `ElementFacade`, `DeviceFrame`, `TextBox`, `ImageOverlay`, or `ShapeRenderer`. All interactions go through the Tool Manager via `ToolEventSurface`.
 
-3. **`pushHistory` before mutation** — universally enforced across all 13 slices and the PropertiesPanel.
+3. **`pushHistory` before mutation** — universally enforced across all 14 slices and the PropertiesPanel.
 
 4. **Runtime store never imports document store** — breaks the circular dependency. Document slices import `resetRuntime`.
 

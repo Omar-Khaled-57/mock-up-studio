@@ -70,13 +70,31 @@ export const createHistorySlice: StateCreator<StoreState, [], [], HistorySlice> 
 
     // Save current state to redoStack before restoring the snapshot.
     const currentSnapshot = JSON.stringify(scenes)
-    const entry = undoStack[undoStack.length - 1]
-    const restoredScenes = JSON.parse(entry.scenesSnapshot) as StoreState['scenes']
+
+    // Walk backward through the stack, skipping corrupted snapshots.
+    let restoredScenes: StoreState['scenes'] | null = null
+    let goodIndex = -1
+    for (let i = undoStack.length - 1; i >= 0; i--) {
+      try {
+        restoredScenes = JSON.parse(undoStack[i].scenesSnapshot) as StoreState['scenes']
+        goodIndex = i
+        break
+      } catch {
+        // Corrupted entry — skip it and continue to the next older entry.
+      }
+    }
+
+    // No valid snapshot found — all entries are corrupted. Drop them all.
+    if (restoredScenes === null || goodIndex < 0) {
+      set({ undoStack: [] })
+      return false
+    }
 
     set({
       scenes: restoredScenes,
       activeSceneIndex: Math.min(activeSceneIndex, restoredScenes.length - 1),
-      undoStack: undoStack.slice(0, -1),
+      // Keep entries older than the good one; discard the good one (consumed) and all newer (corrupted) entries.
+      undoStack: undoStack.slice(0, goodIndex),
       redoStack: [...state.redoStack, { scenesSnapshot: currentSnapshot, timestamp: Date.now() }]
     })
     // Transient editor state derived from the pre-undo document is now stale.
@@ -91,13 +109,30 @@ export const createHistorySlice: StateCreator<StoreState, [], [], HistorySlice> 
 
     // Save current state to undoStack before restoring the snapshot.
     const currentSnapshot = JSON.stringify(scenes)
-    const entry = redoStack[redoStack.length - 1]
-    const restoredScenes = JSON.parse(entry.scenesSnapshot) as StoreState['scenes']
+
+    // Walk backward through the stack, skipping corrupted snapshots.
+    let restoredScenes: StoreState['scenes'] | null = null
+    let goodIndex = -1
+    for (let i = redoStack.length - 1; i >= 0; i--) {
+      try {
+        restoredScenes = JSON.parse(redoStack[i].scenesSnapshot) as StoreState['scenes']
+        goodIndex = i
+        break
+      } catch {
+        // Corrupted entry — skip it and continue to the next older entry.
+      }
+    }
+
+    // No valid snapshot found — all entries are corrupted. Drop them all.
+    if (restoredScenes === null || goodIndex < 0) {
+      set({ redoStack: [] })
+      return false
+    }
 
     set({
       scenes: restoredScenes,
       activeSceneIndex: Math.min(activeSceneIndex, restoredScenes.length - 1),
-      redoStack: redoStack.slice(0, -1),
+      redoStack: redoStack.slice(0, goodIndex),
       undoStack: [...state.undoStack, { scenesSnapshot: currentSnapshot, timestamp: Date.now() }]
     })
     resetRuntime()

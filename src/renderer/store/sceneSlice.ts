@@ -520,7 +520,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
    */
   duplicateSelected: (ids) => {
     const state = get()
-    const scene = state.scenes[state.activeSceneIndex]
+    const scene = safeScene(state)
     const newIds: string[] = []
     let maxZ = findAllElements(scene).reduce((m, e) => Math.max(m, e.zIndex), -1)
 
@@ -564,7 +564,8 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     }
 
     const scenes = [...state.scenes]
-    scenes[state.activeSceneIndex] = {
+    const idx = Math.min(state.activeSceneIndex, scenes.length - 1)
+    scenes[idx] = {
       ...scene,
       devices: newDevices,
       textBoxes: newTextBoxes,
@@ -724,7 +725,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     const state = get()
     const ids = state.selectedIds
     if (ids.length < 2) return null
-    const scene = state.scenes[state.activeSceneIndex]
+    const scene = safeScene(state)
     const groupId = generateId()
     const group = { id: groupId, name: `Group ${scene.groups.length + 1}`, childIds: [...ids], parentGroupId: null }
     const newDevices = scene.devices.map((d) => ids.includes(d.id) ? { ...d, groupId } : d)
@@ -732,7 +733,8 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
     const newImages = scene.images.map((i) => ids.includes(i.id) ? { ...i, groupId } : i)
     const newShapes = scene.shapes.map((s) => ids.includes(s.id) ? { ...s, groupId } : s)
     const scenes = [...state.scenes]
-    scenes[state.activeSceneIndex] = {
+    const gIdx = Math.min(state.activeSceneIndex, scenes.length - 1)
+    scenes[gIdx] = {
       ...scene,
       devices: newDevices,
       textBoxes: newTextBoxes,
@@ -746,13 +748,14 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
 
   ungroup: (groupId) => {
     const state = get()
-    const scene = state.scenes[state.activeSceneIndex]
+    const scene = safeScene(state)
     const newDevices = scene.devices.map((d) => d.groupId === groupId ? { ...d, groupId: null } : d)
     const newTextBoxes = scene.textBoxes.map((t) => t.groupId === groupId ? { ...t, groupId: null } : t)
     const newImages = scene.images.map((i) => i.groupId === groupId ? { ...i, groupId: null } : i)
     const newShapes = scene.shapes.map((s) => s.groupId === groupId ? { ...s, groupId: null } : s)
     const scenes = [...state.scenes]
-    scenes[state.activeSceneIndex] = {
+    const uIdx = Math.min(state.activeSceneIndex, scenes.length - 1)
+    scenes[uIdx] = {
       ...scene,
       devices: newDevices,
       textBoxes: newTextBoxes,
@@ -1001,6 +1004,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
 
   renameScene: (index, name) =>
     set((state) => {
+      if (index < 0 || index >= state.scenes.length) return state
       const scenes = [...state.scenes]
       scenes[index] = { ...scenes[index], name }
       return { scenes }
@@ -1008,6 +1012,7 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
 
   togglePinScene: (index) =>
     set((state) => {
+      if (index < 0 || index >= state.scenes.length) return state
       const scenes = [...state.scenes]
       scenes[index] = { ...scenes[index], pinned: !scenes[index].pinned }
       return { scenes }
@@ -1015,8 +1020,10 @@ export const createSceneSlice: StateCreator<StoreState, [], [], SceneSlice> = (s
 
   reorderScene: (fromIndex, toIndex) =>
     set((state) => {
+      if (fromIndex < 0 || fromIndex >= state.scenes.length) return state
       const scenes = [...state.scenes]
       const [moved] = scenes.splice(fromIndex, 1)
+      if (moved === undefined) return state
       scenes.splice(toIndex, 0, moved)
       let newActive = state.activeSceneIndex
       if (fromIndex === state.activeSceneIndex) {

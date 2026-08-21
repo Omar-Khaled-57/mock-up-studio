@@ -7,6 +7,7 @@ import { getCapabilities } from '../../services/capabilities'
 import { isInFocusScope } from '../../services/focus'
 import { screenToScene } from '../../services/viewport'
 import { hitTest, HitTestResult, SceneElementKind } from '../../services/hit-test'
+import { placeComponentAt } from '../../lib/component-utils'
 
 interface ToolEventSurfaceProps {
   onWheel: (e: React.WheelEvent) => void
@@ -236,6 +237,8 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
   }
 
   const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
     if (isCanvasChromeTarget(e.target)) return
     const tool = toolManager.getEffectiveTool()
     if (!tool.onContextMenu) return
@@ -244,6 +247,41 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
       toolManager.buildContext({ scenePoint, hitResult: computeHit(e.target, scenePoint), toolId: tool.id }),
       e.nativeEvent
     )
+  }
+
+  // --- Drag-and-drop from component panel ---
+
+  const handleDragOver = (e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes('application/x-mockup-unit-id')) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    const componentId = e.dataTransfer.getData('application/x-mockup-unit-id')
+    if (!componentId) return
+    e.preventDefault()
+
+    const scene = useStore.getState().scenes[useStore.getState().activeSceneIndex]
+    if (!scene) return
+
+    const containerRect = containerRef.current?.getBoundingClientRect()
+    if (!containerRect) return
+
+    const sp = screenToScene(
+      e.clientX,
+      e.clientY,
+      containerRect,
+      panRef.current,
+      zoomRef.current
+    )
+
+    const definitions = useStore.getState().definitions
+    const def = definitions.find((d) => d.id === componentId)
+    if (!def) return
+
+    placeComponentAt(def, sp.x, sp.y)
   }
 
   return (
@@ -259,6 +297,8 @@ export default function ToolEventSurface({ onWheel, children }: ToolEventSurface
       onPointerLeave={handlePointerLeave}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {children}
     </div>

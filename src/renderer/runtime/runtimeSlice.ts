@@ -167,6 +167,10 @@ export interface RuntimeState {
   propertiesSections: Record<string, boolean>
   /** Whether the Export modal (Phase 5e) is open. Session-scoped chrome state. */
   exportModalOpen: boolean
+  /** Component creation modal — element id + kind of the element being saved as a component. */
+  componentCreationModal: { elementId: string; kind: string } | null
+  /** Currently selected definition id in the Units panel (for editing definition properties). */
+  selectedDefinitionId: string | null
   /** Whether the bottom toolbar's tool-groups row + options are revealed. Session-scoped chrome state. */
   toolbarToolsVisible: boolean
   /** The "Save changes?" guard modal shown before destructive navigation while dirty. */
@@ -218,6 +222,9 @@ export interface RuntimeSlice extends RuntimeState {
   setPropertiesSectionOpen: (section: string, open: boolean) => void
   openExportModal: () => void
   closeExportModal: () => void
+  openComponentCreationModal: (elementId: string, kind: string) => void
+  closeComponentCreationModal: () => void
+  selectDefinition: (id: string | null) => void
   toggleToolbarTools: () => void
   openSavePrompt: (prompt: SavePromptState) => void
   closeSavePrompt: () => void
@@ -250,6 +257,8 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   canvasEmptyStateDismissed: false,
   propertiesSections: {},
   exportModalOpen: false,
+  componentCreationModal: null,
+  selectedDefinitionId: null,
   toolbarToolsVisible: true,
   savePrompt: null,
   updatePrompt: null,
@@ -317,6 +326,12 @@ export const createRuntimeSlice: StateCreator<RuntimeState, [], [], RuntimeSlice
   openExportModal: () => set({ exportModalOpen: true }),
 
   closeExportModal: () => set({ exportModalOpen: false }),
+
+  openComponentCreationModal: (elementId, kind) => set({ componentCreationModal: { elementId, kind } }),
+
+  closeComponentCreationModal: () => set({ componentCreationModal: null }),
+
+  selectDefinition: (id) => set({ selectedDefinitionId: id }),
 
   toggleToolbarTools: () => set((state) => ({ toolbarToolsVisible: !state.toolbarToolsVisible })),
 

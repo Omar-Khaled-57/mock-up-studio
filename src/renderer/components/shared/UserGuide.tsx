@@ -1,5 +1,13 @@
 import { useState, useMemo, useCallback } from 'react'
+import {
+  BookOpen, Rocket, Image, Wrench, FileText, Palette, Keyboard, Zap, CircleHelp,
+  Lightbulb, TriangleAlert, StickyNote, type LucideIcon
+} from 'lucide-react'
 import DOCS, { type DocBlock } from '../../../guide/content'
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  BookOpen, Rocket, Image, Wrench, FileText, Palette, Keyboard, Zap, CircleHelp,
+}
 
 function renderBlock(block: DocBlock, idx: number): React.ReactNode {
   switch (block.type) {
@@ -38,21 +46,21 @@ function renderBlock(block: DocBlock, idx: number): React.ReactNode {
     case 'tip':
       return (
         <div key={idx} className="bg-emerald-900/30 border border-emerald-800/40 rounded p-2 mb-2">
-          <span className="text-[10px] font-semibold text-emerald-400 block mb-0.5">💡 Tip</span>
+          <span className="text-[10px] font-semibold text-emerald-400 block mb-0.5 flex items-center gap-1"><Lightbulb className="w-3 h-3" /> Tip</span>
           <p className="text-xs text-emerald-300/80">{block.text}</p>
         </div>
       )
     case 'warning':
       return (
         <div key={idx} className="bg-amber-900/30 border border-amber-800/40 rounded p-2 mb-2">
-          <span className="text-[10px] font-semibold text-amber-400 block mb-0.5">⚠️ Warning</span>
+          <span className="text-[10px] font-semibold text-amber-400 block mb-0.5 flex items-center gap-1"><TriangleAlert className="w-3 h-3" /> Warning</span>
           <p className="text-xs text-amber-300/80">{block.text}</p>
         </div>
       )
     case 'note':
       return (
         <div key={idx} className="bg-sky-900/30 border border-sky-800/40 rounded p-2 mb-2">
-          <span className="text-[10px] font-semibold text-sky-400 block mb-0.5">📝 Note</span>
+          <span className="text-[10px] font-semibold text-sky-400 block mb-0.5 flex items-center gap-1"><StickyNote className="w-3 h-3" /> Note</span>
           <p className="text-xs text-sky-300/80">{block.text}</p>
         </div>
       )
@@ -176,7 +184,7 @@ export default function UserGuide() {
                   className="flex items-center gap-1.5 w-full text-left px-1.5 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 rounded transition-colors"
                 >
                   <span className="text-[10px]">{expandedSections.has(section.id) ? '▾' : '▸'}</span>
-                  <span>{section.icon}</span>
+                   <span>{(() => { const Icon = ICON_MAP[section.icon]; return Icon ? <Icon className="w-3 h-3 inline" /> : null })()}</span>
                   <span>{section.title}</span>
                 </button>
                 {expandedSections.has(section.id) && (

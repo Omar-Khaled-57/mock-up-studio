@@ -15,7 +15,7 @@ interface PendingStroke {
   sampler: StrokeSampler
 }
 
-let pendingStroke: PendingStroke | null = null
+const pendingStrokes = new Map<number, PendingStroke>()
 let commitChain: Promise<void> = Promise.resolve()
 
 /**
@@ -59,7 +59,7 @@ export function createPaintBrush(preset: BrushPreset): Tool {
         seed: Date.now()
       })
       sampler.append(ctx.scenePoint.x, ctx.scenePoint.y)
-      pendingStroke = { pointerId: e.pointerId, sampler }
+      pendingStrokes.set(e.pointerId, { pointerId: e.pointerId, sampler })
 
       rt.beginInteraction({ toolId: preset.id, pointerId: e.pointerId, kind: 'paint', startedAt: Date.now() })
 
@@ -74,8 +74,8 @@ export function createPaintBrush(preset: BrushPreset): Tool {
     },
 
     onPointerMove(ctx, e) {
-      const stroke = pendingStroke
-      if (!stroke || stroke.pointerId !== e.pointerId) return
+      const stroke = pendingStrokes.get(e.pointerId)
+      if (!stroke) return
       if (!stroke.sampler.append(ctx.scenePoint.x, ctx.scenePoint.y)) return
 
       const rt = ctx.getRuntime()
@@ -96,9 +96,9 @@ export function createPaintBrush(preset: BrushPreset): Tool {
     },
 
     onPointerUp(ctx, e) {
-      const stroke = pendingStroke
-      if (!stroke || stroke.pointerId !== e.pointerId) return
-      pendingStroke = null
+      const stroke = pendingStrokes.get(e.pointerId)
+      if (!stroke) return
+      pendingStrokes.delete(e.pointerId)
 
       const rt = ctx.getRuntime()
       rt.endInteraction()
@@ -110,9 +110,8 @@ export function createPaintBrush(preset: BrushPreset): Tool {
     },
 
     onPointerCancel(ctx, e) {
-      const stroke = pendingStroke
-      if (!stroke || stroke.pointerId !== e.pointerId) return
-      pendingStroke = null
+      if (!pendingStrokes.has(e.pointerId)) return
+      pendingStrokes.delete(e.pointerId)
 
       const rt = ctx.getRuntime()
       rt.endInteraction()
@@ -122,8 +121,8 @@ export function createPaintBrush(preset: BrushPreset): Tool {
     },
 
     onInterrupt() {
-      if (!pendingStroke) return
-      pendingStroke = null
+      if (pendingStrokes.size === 0) return
+      pendingStrokes.clear()
       const rt = useRuntimeStore.getState()
       rt.endInteraction()
       rt.setStrokeBuffer([])
@@ -146,13 +145,14 @@ export function isPaintPreset(id: string): boolean {
 
 async function commitStroke(ctx: InteractionContext, points: StrokePoint[]): Promise<void> {
   ctx.fastOverlay?.clear()
-  const state = useStore.getState()
-  const scene = safeScene(state)
   const brush: StrokeBrush = ctx.getRuntime().brush
+  const preScene = safeScene(useStore.getState())
 
-  const commit = await resolvePaintCommit(scene, points, brush)
+  const commit = await resolvePaintCommit(preScene, points, brush)
   if (!commit) return
 
+  const state = useStore.getState()
+  const scene = safeScene(state)
   const focusGroupId = ctx.getRuntime().focusGroupId
   state.pushHistory('Brush stroke')
   const layer = createPaintLayer(scene, commit.src, focusGroupId, commit.region)

@@ -21,8 +21,9 @@
  * 3. Return the fully hydrated scenes array ready for Zustand.
  *
  * Thread safety:
- *   - `assetCounter` is reset at the start of `serializeProject()` to ensure
- *     deterministic asset naming within a single save operation.
+ *   - A per-call `AssetCounterState` is created at the start of
+ *     `serializeProject()` to ensure deterministic asset naming within
+ *     a single save operation.
  */
 
 import { ImageEffects } from '@shared/types'
@@ -76,7 +77,7 @@ interface SerializedScene {
   shapes?: SerializedShape[]
   guides: SerializedGuide[]
   grid: SerializedGrid
-  groups?: { id: string; name: string; childIds: string[] }[]
+  groups?: { id: string; name: string; childIds: string[]; parentGroupId?: string | null }[]
   masks?: SerializedMask[]
 }
 
@@ -134,6 +135,8 @@ interface SerializedDevice {
   groupId: string | null
   containerId?: string | null
   lockAspectRatio?: boolean
+  componentId?: string
+  isComponentEditing?: boolean
 }
 
 interface SerializedTextBox {
@@ -171,6 +174,8 @@ interface SerializedTextBox {
   locked: boolean
   groupId: string | null
   containerId?: string | null
+  componentId?: string
+  isComponentEditing?: boolean
 }
 
 interface SerializedImage {
@@ -194,8 +199,11 @@ interface SerializedImage {
   glow?: SerializedImageGlow[]
   shadow?: SerializedImageShadow[]
   effects?: ImageEffects
+  groupId?: string | null
   containerId?: string | null
   lockAspectRatio?: boolean
+  componentId?: string
+  isComponentEditing?: boolean
 }
 
 interface SerializedShape {
@@ -226,6 +234,8 @@ interface SerializedShape {
   containerId?: string | null
   effects?: ImageEffects
   lockAspectRatio?: boolean
+  componentId?: string
+  isComponentEditing?: boolean
 }
 
 interface SerializedImageGlow {
@@ -271,14 +281,16 @@ interface SerializedGrid {
   style: string
 }
 
-/** Incrementing counter for unique asset filenames within a single save. */
-let assetCounter = 0
+/** State for generating sequential asset filenames within a single save. */
+interface AssetCounterState {
+  current: number
+}
 
 /** Generates a sequential asset filename: img-1.png, img-2.jpg, etc. */
-function extractAssetName(originalName: string): string {
-  assetCounter++
+function extractAssetName(originalName: string, counter: AssetCounterState): string {
+  counter.current++
   const ext = originalName.split('.').pop() || 'png'
-  return `img-${assetCounter}.${ext}`
+  return `img-${counter.current}.${ext}`
 }
 
 /**
@@ -298,12 +310,13 @@ function parseDataUrl(dataUrl: string): { mime: string; buffer: Uint8Array } | n
  */
 function replaceDataUrlWithRef(
   dataUrl: string | null,
-  assets: Map<string, Uint8Array>
+  assets: Map<string, Uint8Array>,
+  counter: AssetCounterState
 ): string | null {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
   const parsed = parseDataUrl(dataUrl)
   if (!parsed) return dataUrl
-  const name = extractAssetName(parsed.mime.replace('/', '.'))
+  const name = extractAssetName(parsed.mime.replace('/', '.'), counter)
   assets.set(name, parsed.buffer)
   return `asset://${name}`
 }
@@ -313,7 +326,7 @@ export function serializeProject(
   scenes: Array<Record<string, unknown>>,
   activeSceneIndex: number
 ): { manifest: string; assets: Map<string, Uint8Array> } {
-  assetCounter = 0
+  const counter: AssetCounterState = { current: 0 }
   const assets = new Map<string, Uint8Array>()
 
   const serializedScenes: SerializedScene[] = scenes.map((scene) => {
@@ -333,26 +346,30 @@ export function serializeProject(
 
     const devices = s.devices.map((d) => ({
       ...d,
-      screenImage: replaceDataUrlWithRef(d.screenImage, assets)
+      screenImage: replaceDataUrlWithRef(d.screenImage, assets, counter),
+      componentId: undefined,
+      isComponentEditing: undefined
     }))
 
     const images = s.images.map((img) => ({
       ...img,
-      src: replaceDataUrlWithRef(img.src, assets)
+      src: replaceDataUrlWithRef(img.src, assets, counter),
+      componentId: undefined,
+      isComponentEditing: undefined
     }))
 
     const background = { ...s.background }
     if (background.image?.src) {
       background.image = {
         ...background.image,
-        src: replaceDataUrlWithRef(background.image.src, assets) || ''
+        src: replaceDataUrlWithRef(background.image.src, assets, counter) || ''
       }
     }
 
     const masks = (s.masks ?? []).map((m) => {
       const snapshot = (m as { snapshot?: { dataUrl?: string } }).snapshot
       if (!snapshot?.dataUrl) return m as SerializedMask
-      const ref = replaceDataUrlWithRef(snapshot.dataUrl, assets)
+      const ref = replaceDataUrlWithRef(snapshot.dataUrl, assets, counter)
       if (!ref) return m as SerializedMask
       return { ...m, snapshot: { ...snapshot, dataUrl: ref } } as SerializedMask
     })
@@ -364,12 +381,12 @@ export function serializeProject(
       canvas: s.canvas,
       background,
       devices,
-      textBoxes: s.textBoxes,
+      textBoxes: s.textBoxes.map((tb) => ({ ...tb, componentId: undefined, isComponentEditing: undefined })),
       images,
-      shapes: s.shapes ?? [],
+      shapes: (s.shapes ?? []).map((sh) => ({ ...sh, componentId: undefined, isComponentEditing: undefined })),
       guides: s.guides,
       grid: s.grid,
-      groups: (s as unknown as Record<string, unknown>).groups as { id: string; name: string; childIds: string[] }[] ?? [],
+      groups: ((s as unknown as Record<string, unknown>).groups ?? []) as { id: string; name: string; childIds: string[]; parentGroupId?: string | null }[],
       masks
     }
   })
@@ -397,7 +414,7 @@ function resolveAssetRef(ref: string | null, assets: Map<string, Uint8Array>): s
   if (!ref || !ref.startsWith('asset://')) return ref
   const name = ref.replace('asset://', '')
   const buffer = assets.get(name)
-  if (!buffer) return ref
+  if (!buffer) return null
   const ext = name.split('.').pop() || 'png'
   const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`
   return `data:${mime};base64,${bytesToBase64(buffer)}`
@@ -666,7 +683,7 @@ export function deserializeProject(manifestJson: string, assets: Map<string, Uin
       shapes,
       background,
       textBoxes,
-      groups: scene.groups ?? [],
+      groups: (scene.groups ?? []).map((g) => ({ ...g, parentGroupId: g.parentGroupId ?? null })),
       masks
     }
   })

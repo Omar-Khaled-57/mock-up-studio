@@ -345,11 +345,53 @@ export const selectTool: Tool = {
         { label: 'Send Backward', action: () => { state.pushHistory('Send Backward'); state.sendBackward(id) } },
         { divider: true, label: '', action: () => {} },
         { label: 'Duplicate', action: () => { state.pushHistory('Duplicate'); state.duplicateSelected([id]) } },
+        { label: 'Add to Units', action: () => { rt.openComponentCreationModal(id, ctx.hitResult!.kind) } },
         { label: 'Delete', danger: true, action: () => { state.pushHistory('Delete'); state.deleteSelected([id]) } }
       ]
       if (groupId) {
         items.splice(5, 0, { label: '', divider: true, action: () => {} })
         items.splice(5, 0, { label: 'Ungroup', action: () => { state.pushHistory('Ungroup'); state.ungroup(groupId); state.clearSelection() } })
+      }
+      // Instance-specific actions
+      const hitKind = ctx.hitResult.kind
+      const elementKind = hitKind === 'textBox' ? 'textbox' as const : hitKind as 'device' | 'image' | 'shape'
+      let hitComponentId: string | undefined
+      let hitIsEditing: boolean | undefined
+      switch (elementKind) {
+        case 'device': {
+          const el = scene.devices.find((d) => d.id === id)
+          if (el) { hitComponentId = el.componentId; hitIsEditing = el.isComponentEditing }
+          break
+        }
+        case 'textbox': {
+          const el = scene.textBoxes.find((t) => t.id === id)
+          if (el) { hitComponentId = el.componentId; hitIsEditing = el.isComponentEditing }
+          break
+        }
+        case 'image': {
+          const el = scene.images.find((i) => i.id === id)
+          if (el) { hitComponentId = el.componentId; hitIsEditing = el.isComponentEditing }
+          break
+        }
+        case 'shape': {
+          const el = scene.shapes.find((s) => s.id === id)
+          if (el) { hitComponentId = el.componentId; hitIsEditing = el.isComponentEditing }
+          break
+        }
+      }
+      if (hitComponentId) {
+        items.splice(5, 0, { divider: true, label: '', action: () => {} })
+        items.splice(5, 0, {
+          label: hitIsEditing ? 'Stop Editing Unit' : 'Edit Unit',
+          action: () => {
+            state.pushHistory(hitIsEditing ? 'Stop editing Unit' : 'Edit Unit')
+            state.setInstanceEditing(id, elementKind, !hitIsEditing)
+          }
+        })
+        items.splice(6, 0, {
+          label: 'Detach',
+          action: () => { state.pushHistory('Detach Unit'); state.detachInstance(id, elementKind) }
+        })
       }
       if (state.selectedIds.length >= 2) {
         items.push({ divider: true, label: '', action: () => {} })

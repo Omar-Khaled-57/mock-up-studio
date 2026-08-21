@@ -181,13 +181,13 @@ async function commitStroke(
   points: StrokePoint[]
 ): Promise<void> {
   ctx.fastOverlay?.clear()
-  const state = useStore.getState()
-  const scene = safeScene(state)
   const { target, element } = stroke
 
   // Resolve the bitmap source — rasterizing the shape on-demand when it has
   // no pre-existing backgroundImage (see ensureBitmapSrc for the contract).
-  const src = await ensureBitmapSrc(state, scene, target)
+  const preState = useStore.getState()
+  const preScene = safeScene(preState)
+  const src = await ensureBitmapSrc(preState, preScene, target)
   if (!src) return
 
   const localPoints = points.map((p) => {
@@ -203,6 +203,7 @@ async function commitStroke(
   )
   if (!dataUrl) return
 
+  const state = useStore.getState()
   state.pushHistory(stroke.historyLabel)
   commitBitmapSrc(state, target, dataUrl)
 }

@@ -592,7 +592,7 @@ function resolveTool(e): Tool | null {
 
 ```
 onPointerDown(e):
-  ├─ if isCanvasChromeTarget(e) → return (TitleBlock, guides)
+  ├─ if isCanvasChromeTarget(e) → return (guides)
   ├─ if resize-handle grab && !panGesture → route to select tool (tool-independent resize)
   ├─ resolveTool → tool
   ├─ scenePoint = screenToScene(e.clientX, e.clientY)
@@ -658,7 +658,7 @@ Subscribes to: `activeToolId`, `temporaryToolStack`, `hoveredElement`, `activeIn
 ### Key Decisions
 
 1. **Surface owns pointer capture** — tools never call `setPointerCapture`/`releasePointerCapture` directly. The surface releases on up/cancel.
-2. **Chrome guard**: Clicks on `data-canvas-chrome` / `data-guide` elements are consumed by their own handlers and don't reach tools. This is how the interactive Guides (drag-to-move, right-click delete) and TitleBlock editing coexist with the Select tool.
+2. **Chrome guard**: Clicks on `data-canvas-chrome` / `data-guide` elements are consumed by their own handlers and don't reach tools. This is how the interactive Guides (drag-to-move, right-click delete) coexist with the Select tool. (The hero title/slogan are ordinary `textBoxes` now, so only `data-guide` remains on canvas.)
 3. **Two preview surfaces**: `StrokeSurface` (brush strokes, direct canvas API via `fastOverlay`) and `PreviewSurface` (ghost/blur, store-subscription draw). Both render in `OverlayRenderer` as siblings of `[data-scene-export]`.
 4. **Drag threshold**: 3px for both drag-start and marquee-commit. A sub-3px move is treated as a click.
 5. **Tool-independent resize**: Resize handles intercept BEFORE the active tool is resolved, so any tool can resize (previously, only select could). The Select tool's gate stack (focus/locked/capability) still applies.

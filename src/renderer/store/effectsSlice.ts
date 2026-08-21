@@ -43,7 +43,7 @@ export const createEffectsSlice: StateCreator<StoreState, [], [], EffectsSlice> 
         }
         return { scenes }
       }
-      return {}
+      return state
     }),
 
   resetEffects: (elementId) =>
@@ -66,6 +66,6 @@ export const createEffectsSlice: StateCreator<StoreState, [], [], EffectsSlice> 
         }
         return { scenes }
       }
-      return {}
+      return state
     })
 })

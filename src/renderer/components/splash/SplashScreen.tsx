@@ -18,30 +18,34 @@ export default function SplashScreen() {
 
   useEffect(() => {
     if (window.api) {
-      window.api.getRecentProjects().then(setRecentProjects)
+      window.api.getRecentProjects().then(setRecentProjects).catch(() => setRecentProjects([]))
     }
   }, [])
 
   const applyProject = async (result: { manifest: string; assetsJson: string; filePath: string }) => {
-    const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
+    try {
+      const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
-    withDirtySuppressed(() =>
-      useStore.setState({
-        project: {
-          ...project,
-          scenes: scenes as never[]
-        },
-        scenes: scenes as never[],
-        activeSceneIndex,
-        filePath: result.filePath,
-        dirty: false,
-        lastSaved: Date.now(),
-        undoStack: [],
-        redoStack: [],
-        selectedIds: [],
-        showSplash: false
-      })
-    )
+      withDirtySuppressed(() =>
+        useStore.setState({
+          project: {
+            ...project,
+            scenes: scenes as never[]
+          },
+          scenes: scenes as never[],
+          activeSceneIndex,
+          filePath: result.filePath,
+          dirty: false,
+          lastSaved: Date.now(),
+          undoStack: [],
+          redoStack: [],
+          selectedIds: [],
+          showSplash: false
+        })
+      )
+    } catch (err) {
+      console.error('[SplashScreen] Failed to load project:', err)
+    }
   }
 
   const handleNew = () => {

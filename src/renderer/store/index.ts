@@ -12,6 +12,7 @@ import { createWatermarkSlice, WatermarkSlice } from './watermarkSlice'
 import { createShapeSlice, ShapeSlice } from './shapeSlice'
 import { createMaskSlice, MaskSlice } from './maskSlice'
 import { createEffectsSlice, EffectsSlice } from './effectsSlice'
+import { createComponentSlice, ComponentSlice } from './componentSlice'
 import { attachDirtyTracking } from './dirtyTracking'
 
 export type StoreState = ProjectSlice &
@@ -26,7 +27,8 @@ export type StoreState = ProjectSlice &
   WatermarkSlice &
   ShapeSlice &
   MaskSlice &
-  EffectsSlice
+  EffectsSlice &
+  ComponentSlice
 
 export const useStore = create<StoreState>()((...a) => ({
   ...createProjectSlice(...a),
@@ -41,7 +43,8 @@ export const useStore = create<StoreState>()((...a) => ({
   ...createWatermarkSlice(...a),
   ...createShapeSlice(...a),
   ...createMaskSlice(...a),
-  ...createEffectsSlice(...a)
+  ...createEffectsSlice(...a),
+  ...createComponentSlice(...a)
 }))
 
 attachDirtyTracking(

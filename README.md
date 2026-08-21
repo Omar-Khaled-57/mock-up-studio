@@ -48,6 +48,7 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Layer management** — Z-order reordering, visibility/lock toggles, inline rename, groups, nested groups
 - **Alignment & distribution** — 6-direction align, 4-direction distribute (space and center)
 - **Copy / Paste Style** — transfer appearance properties between same-kind elements
+- **Reusable Units** — save canvas elements as reusable definitions with type-tag grouping, search, drag-and-drop placement, and definition editing with live instance sync
 
 ### Canvas & Viewport
 - **Canvas chrome bar** — scene tabs, zoom controls (in/out/reset/fit), View menu
@@ -74,6 +75,7 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Auto-update** — GitHub Releases integration (production builds) with styled in-app prompts (checking / available / up-to-date / failed), a 25s network-timeout guard, and download progress bars
 - **Styled dialogs** — About and all update prompts render as in-app modals instead of native system dialogs
 - **Keyboard shortcuts** — Full shortcut suite with reference modal (Ctrl+/)
+- **User Guide** — In-app documentation with sectioned navigation, search, and prev/next paging (F1)
 - **Watermark** — Optional text watermark excluded from exports
 - **Color extraction** — Extract dominant colors from device screens
 - **Layout templates** — Pre-composed layouts for quick scene setup
@@ -86,7 +88,7 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 | Bundler | electron-vite 2 (Vite 5) |
 | UI Framework | React 18 + TypeScript 5.6 |
 | Styling | Tailwind CSS 3.4 |
-| State Management | Zustand 5 (13 slices + runtime store) |
+| State Management | Zustand 5 (14 slices + runtime store) |
 | Export | modern-screenshot 4 |
 | Archive | JSZip 3 |
 | Icons | Lucide React |
@@ -153,7 +155,7 @@ src/
   guide/           In-app User Guide content
   renderer/
     App.tsx        Root layout, dirty tracking, menu IPC, file association
-    store/         Zustand document store (13 merged slices)
+    store/         Zustand document store (14 merged slices)
     runtime/       Zustand runtime store (transient editor state)
     tools/         Tool system: manager, registry, types, tool implementations
     services/      Pure logic: rasterizer, transform, stroke, polygon-clip,
@@ -164,7 +166,7 @@ src/
     elements/      ElementFacade (presentational wrapper, mask application)
     components/    canvas, devices, text, images, shapes, backgrounds,
                    effects, masks, primitives, sidebar, shared, splash, toolbar
-    __tests__/       Vitest + Testing Library suites (74 test files)
+    __tests__/       Vitest + Testing Library suites (76 test files)
 docs/              Architecture documentation (see docs/index.md)
 public/            Icons + in-app changelog.json
 release/           electron-builder output
@@ -178,7 +180,7 @@ Mockup Studio uses **two separate Zustand stores**:
 
 | Store | Description |
 |-------|-------------|
-| **Document store** (`store/`) | All persisted state. Composed of 13 merged slices: project, scene, selection, history, viewport, UI, export, clipboard, version-history, watermark, shape, mask, effects. |
+| **Document store** (`store/`) | All persisted state. Composed of 14 merged slices: project, scene, selection, history, viewport, UI, export, clipboard, version-history, watermark, shape, mask, effects, component. |
 | **Runtime store** (`runtime/store.ts`) | Transient editor state (active tool, hover, marquee, brush settings, focus, previews, snap guides, editing). Never serialized. Importable by document slices via `resetRuntime`, but never the reverse. |
 
 | Slice | Responsibility |
@@ -196,6 +198,7 @@ Mockup Studio uses **two separate Zustand stores**:
 | `shapeSlice` | Shape CRUD (independent from sceneSlice) |
 | `maskSlice` | Mask CRUD, reverse, clear-all, refresh snapshot |
 | `effectsSlice` | Per-element image effects (brightness, contrast, blur, etc.) |
+| `componentSlice` | Units (components) CRUD, groups, library validation, instance sync |
 
 ### Key Patterns
 
@@ -223,7 +226,7 @@ assets/                Device screens, images, thumbnails (base64 in manifest)
 
 ## Testing
 
-1091 tests across 74 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
+1158 tests across 76 files covering all store slices, utility functions, tools, engines, mask system, rasterizer, export engine, and component rendering.
 
 ## License
 

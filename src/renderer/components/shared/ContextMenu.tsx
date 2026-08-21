@@ -30,9 +30,15 @@ export function ContextMenu({ items, x, y, onClose }: MenuProps) {
     function handleEscape(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose()
     }
-    document.addEventListener('mousedown', handleClick)
-    document.addEventListener('keydown', handleEscape)
+    // Delay attaching the outside-click listener so the mousedown that opened
+    // this menu (especially button-2 / contextmenu on Linux/GTK) does not
+    // immediately close it via the outside-click guard.
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleClick)
+      document.addEventListener('keydown', handleEscape)
+    }, 0)
     return () => {
+      clearTimeout(timer)
       document.removeEventListener('mousedown', handleClick)
       document.removeEventListener('keydown', handleEscape)
     }

@@ -25,7 +25,7 @@ interface PendingMask {
   radius: number
 }
 
-let pendingMask: PendingMask | null = null
+const pendingMasks = new Map<number, PendingMask>()
 
 const MIN_DRAG_DISTANCE_SQ = 9
 const BRUSH_MIN_DISTANCE_SQ = 2.25
@@ -105,7 +105,7 @@ export const maskTool: Tool = {
     const rt = ctx.getRuntime()
     if (!ctx.claimPointer(e.pointerId)) return
 
-    pendingMask = {
+    pendingMasks.set(e.pointerId, {
       pointerId: e.pointerId,
       shape: rt.maskShape,
       // 'mask' mode cuts the DRAWN region out of the canvas (the shape becomes
@@ -115,15 +115,15 @@ export const maskTool: Tool = {
       last: { x: ctx.scenePoint.x, y: ctx.scenePoint.y },
       points: [{ x: ctx.scenePoint.x, y: ctx.scenePoint.y }],
       radius: rt.brush.size / 2
-    }
+    })
 
     rt.beginInteraction({ toolId: 'mask', pointerId: e.pointerId, kind: 'mask', startedAt: Date.now() })
-    pushPreview(rt, pendingMask)
+    pushPreview(rt, pendingMasks.get(e.pointerId)!)
   },
 
   onPointerMove(ctx: InteractionContext, e: PointerEvent) {
-    const pm = pendingMask
-    if (!pm || pm.pointerId !== e.pointerId) return
+    const pm = pendingMasks.get(e.pointerId)
+    if (!pm) return
     pm.last = { x: ctx.scenePoint.x, y: ctx.scenePoint.y }
     if (pm.shape === 'brush') {
       const prev = pm.points[pm.points.length - 1]
@@ -137,9 +137,9 @@ export const maskTool: Tool = {
   },
 
   onPointerUp(ctx: InteractionContext, e: PointerEvent) {
-    const pm = pendingMask
-    if (!pm || pm.pointerId !== e.pointerId) return
-    pendingMask = null
+    const pm = pendingMasks.get(e.pointerId)
+    if (!pm) return
+    pendingMasks.delete(e.pointerId)
 
     // The pointer-up point is authoritative even when no move was delivered.
     pm.last = { x: ctx.scenePoint.x, y: ctx.scenePoint.y }
@@ -200,17 +200,16 @@ export const maskTool: Tool = {
   },
 
   onPointerCancel(ctx: InteractionContext, e: PointerEvent) {
-    const pm = pendingMask
-    if (!pm || pm.pointerId !== e.pointerId) return
-    pendingMask = null
+    if (!pendingMasks.has(e.pointerId)) return
+    pendingMasks.delete(e.pointerId)
     const rt = ctx.getRuntime()
     rt.endInteraction()
     rt.setMaskPreview(null)
   },
 
   onInterrupt() {
-    if (!pendingMask) return
-    pendingMask = null
+    if (pendingMasks.size === 0) return
+    pendingMasks.clear()
     const rt = useRuntimeStore.getState()
     rt.endInteraction()
     rt.setMaskPreview(null)

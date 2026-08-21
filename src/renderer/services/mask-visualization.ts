@@ -198,10 +198,13 @@ export function previewToMaskVisual(preview: MaskPreviewState, canvasWidth: numb
   let synthetic: Mask
   if (preview.shape === 'brush') {
     const polygon = buildMaskStrokePolygon(preview.points, preview.radius ?? 8)
-    const minX = Math.min(...polygon.map((p) => p.x))
-    const minY = Math.min(...polygon.map((p) => p.y))
-    const maxX = Math.max(...polygon.map((p) => p.x))
-    const maxY = Math.max(...polygon.map((p) => p.y))
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const p of polygon) {
+      if (p.x < minX) minX = p.x
+      if (p.y < minY) minY = p.y
+      if (p.x > maxX) maxX = p.x
+      if (p.y > maxY) maxY = p.y
+    }
     synthetic = {
       id: '__mask_preview__',
       name: 'Mask',

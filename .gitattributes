@@ -1,0 +1,28 @@
+# Normalize line endings to LF in the repository. Editors/checkouts may use
+# their native eol (Windows CRLF) via `core.autocrlf` / `core.eol`, but the
+# stored blobs stay LF — this prevents the CRLF-only "modified file" churn.
+* text=auto eol=lf
+
+# Windows shell/build scripts need CRLF on disk to run correctly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Explicitly binary (never line-ending-normalized or diffed as text).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.zip binary
+*.mockup binary
+*.map binary
+*.db binary
+*.node binary
+*.exe binary
+*.dll binary

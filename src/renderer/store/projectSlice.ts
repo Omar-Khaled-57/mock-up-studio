@@ -29,6 +29,9 @@ declare global {
       onDownloadProgress: (callback: (percent: number) => void) => (() => void)
       onUpdatePrompt: (callback: (prompt: UpdatePromptPayload) => void) => (() => void)
       respondToUpdate: (action: 'download' | 'later' | 'restart') => void
+      setNativeTheme: (theme: 'dark' | 'light') => void
+      loadComponents: () => Promise<string | null>
+      saveComponents: (data: string) => Promise<{ success: boolean; error?: string }>
     }
   }
 }
@@ -62,6 +65,12 @@ function encodeAssets(assets: Map<string, Uint8Array>): string {
   return JSON.stringify(assetsObj)
 }
 
+// Module-level debounce for save operations — coalesces rapid saves into one write.
+let savePending: Promise<boolean> = Promise.resolve(false)
+// Generation counter — incremented on newProject/openProject so in-flight saves
+// detect that the project changed mid-flight and bail out.
+let saveGeneration = 0
+
 export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> = (set, get) => ({
   project: null,
   filePath: null,
@@ -86,58 +95,84 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
   setDirty: (dirty) => set({ dirty }),
 
   saveProject: async () => {
-    const state = get()
-    const { project, scenes, activeSceneIndex, filePath } = state
-    if (!project) return false
+    // Chain onto the pending save — only the latest snapshot is written.
+    savePending = savePending.then(async () => {
+      try {
+        const gen = saveGeneration
+        const state = get()
+        const { project, scenes, activeSceneIndex, filePath } = state
+        if (!project) return false
 
-    const { manifest, assets } = serializeProject(
-      { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
-      scenes as unknown as Array<Record<string, unknown>>,
-      activeSceneIndex
-    )
+        const { manifest, assets } = serializeProject(
+          { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
+          scenes as unknown as Array<Record<string, unknown>>,
+          activeSceneIndex
+        )
 
-    const assetsJson = encodeAssets(assets)
+        const assetsJson = encodeAssets(assets)
 
-    if (filePath) {
-      const result = await window.api.saveProject(filePath, manifest, assetsJson)
-      if (result.success) {
-        set({ dirty: false, lastSaved: Date.now() })
-        return true
+        // The project may have changed (newProject/open) while the serialize was in flight.
+        if (saveGeneration !== gen) return false
+
+        if (filePath) {
+          const result = await window.api.saveProject(filePath, manifest, assetsJson)
+          if (result.success) {
+            set({ dirty: false, lastSaved: Date.now() })
+            return true
+          }
+          return false
+        }
+
+        const result = await window.api.saveProjectAs(manifest, assetsJson)
+        if (result?.success && result.filePath) {
+          set({ filePath: result.filePath, dirty: false, lastSaved: Date.now() })
+          return true
+        }
+        return false
+      } catch (err) {
+        console.error('[saveProject] Failed:', err)
+        return false
       }
-      return false
-    }
-
-    const result = await window.api.saveProjectAs(manifest, assetsJson)
-    if (result?.success && result.filePath) {
-      set({ filePath: result.filePath, dirty: false, lastSaved: Date.now() })
-      return true
-    }
-    return false
+    })
+    return savePending
   },
 
   saveProjectAs: async () => {
-    const state = get()
-    const { project, scenes, activeSceneIndex } = state
-    if (!project) return false
+    // Chain onto the same mutex so save+saveAs never run concurrently.
+    savePending = savePending.then(async () => {
+      try {
+        const gen = saveGeneration
+        const state = get()
+        const { project, scenes, activeSceneIndex } = state
+        if (!project) return false
 
-    const { manifest, assets } = serializeProject(
-      { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
-      scenes as unknown as Array<Record<string, unknown>>,
-      activeSceneIndex
-    )
+        const { manifest, assets } = serializeProject(
+          { id: project.id, name: project.name, createdAt: project.createdAt, updatedAt: project.updatedAt },
+          scenes as unknown as Array<Record<string, unknown>>,
+          activeSceneIndex
+        )
 
-    const assetsJson = encodeAssets(assets)
+        const assetsJson = encodeAssets(assets)
 
-    const result = await window.api.saveProjectAs(manifest, assetsJson)
-    if (result?.success && result.filePath) {
-      set({ filePath: result.filePath, dirty: false, lastSaved: Date.now() })
-      return true
-    }
-    return false
+        if (saveGeneration !== gen) return false
+
+        const result = await window.api.saveProjectAs(manifest, assetsJson)
+        if (result?.success && result.filePath) {
+          set({ filePath: result.filePath, dirty: false, lastSaved: Date.now() })
+          return true
+        }
+        return false
+      } catch (err) {
+        console.error('[saveProjectAs] Failed:', err)
+        return false
+      }
+    })
+    return savePending
   },
 
   openProject: async () => {
     try {
+      saveGeneration++
       const result = await window.api.openProject()
       if (!result) return false
 
@@ -167,6 +202,7 @@ export const createProjectSlice: StateCreator<StoreState, [], [], ProjectSlice> 
   },
 
   newProject: () => {
+    saveGeneration++
     const id = crypto.randomUUID()
     const now = Date.now()
     const defaultScene = createDefaultScene()

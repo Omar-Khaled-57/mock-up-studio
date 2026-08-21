@@ -1,6 +1,6 @@
 # Mockup Studio — Architecture Documentation
 
-> Version 0.3.0 · Released August 2, 2026
+> Version 0.4.0
 >
 > Comprehensive technical reference for the Mockup Studio desktop application — an Electron + React + TypeScript device mockup scene builder.
 
@@ -15,7 +15,7 @@
 | [Architecture Overview](./architecture.md) | High-level architecture, rendering pipeline, store separation, data flow |
 | [Engines](./engines.md) | Rasterizer, export, transform sessions, polygon boolean, paint layers, stroke sampling, preview system |
 | [Tools](./tools.md) | Tool manager, select/hand/marquee/focus/mask/brush tool taxonomy and behavior |
-| [State Management](./state.md) | Zustand store (13 slices), history, serialization, clipboard, runtime store |
+| [State Management](./state.md) | Zustand store (14 slices), history, serialization, clipboard, runtime store |
 | [Components](./components.md) | Component hierarchy, element facades, overlay renderer, canvas subsystems |
 | [Folder Structure](./folder-structure.md) | Canonical, up-to-date source tree for the whole repository |
 | [Core Types](./types.md) | Type definitions for Scene, Device, TextBox, ImageOverlay, Shape, Mask, Background, etc. |
@@ -40,8 +40,8 @@
 | Bundler | electron-vite (requires Vite 5) |
 | UI framework | React 18 + TypeScript |
 | Styling | Tailwind CSS 3.4 |
-| State management | Zustand (13 slices merged into a single store + separate runtime store) |
-| Testing | vitest + jsdom (1074 tests across 72 files) |
+| State management | Zustand (14 slices merged into a single store + separate runtime store) |
+| Testing | vitest + jsdom (1158 tests across 76 files) |
 | Packaging | electron-builder (Windows NSIS/portable, macOS DMG, Linux AppImage) |
 | Auto-update | electron-updater via GitHub Releases |
 
@@ -66,8 +66,8 @@
 │  - UiSlice / ExportSlice            transient state   │
 │  - ClipboardSlice / VersionHistory                     │
 │  - WatermarkSlice / ShapeSlice                         │
-│  - MaskSlice / EffectsSlice                           │
-│  - (13 slices total)                                  │
+│  - MaskSlice / EffectsSlice / ComponentSlice             │
+│  - (14 slices total)                                  │
 │                                                         │
 │  App.tsx                                               │
 │  ├── Sidebar (rail + tab panels)                       │
@@ -122,11 +122,9 @@
 
 9. **Safe scene access** — `safeScene(state)` must be used everywhere instead of raw `scenes[activeSceneIndex]` — it guards against empty arrays and out-of-bounds indices (after undo/redo or scene deletion).
 
-10. **`safeScene()` must be used instead of raw `scenes[activeSceneIndex]` everywhere** — it guards against empty arrays and out-of-bounds indices.
+10. **Focus-scoping** — Focus mode (M9) gates all element interactions: dimmed-out content is rejected at pointer-down. Smart guides and grid snap are independent toggles. The focus path is root→focused group ancestry.
 
-11. **Focus-scoping** — Focus mode (M9) gates all element interactions: dimmed-out content is rejected at pointer-down. Smart guides and grid snap are independent toggles. The focus path is root→focused group ancestry.
-
-12. **`@shared/*` path alias** — Configured in both `tsconfig.web.json` and `tsconfig.node.json`, resolving to `src/shared/types.ts`.
+11. **`@shared/*` path alias** — Configured in both `tsconfig.web.json` and `tsconfig.node.json`, resolving to `src/shared/types.ts`.
 
 ---
 

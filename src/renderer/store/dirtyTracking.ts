@@ -17,7 +17,7 @@
  * `withDirtySuppressed`. Tests reset the store through the same helper.
  */
 
-let suppressDirty = false
+let suppressCount = 0
 let prevScenes: unknown = undefined
 
 /**
@@ -33,7 +33,7 @@ export function attachDirtyTracking(
     const state = getState()
     const scenesChanged = state.scenes !== prevScenes
     prevScenes = state.scenes
-    if (suppressDirty || !scenesChanged || state.dirty) return
+    if (suppressCount > 0 || !scenesChanged || state.dirty) return
     state.setDirty(true)
   })
 }
@@ -43,10 +43,10 @@ export function attachDirtyTracking(
  * replace the scenes array without representing user edits.
  */
 export function withDirtySuppressed<T>(fn: () => T): T {
-  suppressDirty = true
+  suppressCount++
   try {
     return fn()
   } finally {
-    suppressDirty = false
+    suppressCount--
   }
 }

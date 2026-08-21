@@ -5,6 +5,48 @@ All notable changes to Mockup Studio will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-21
+
+Units (Components) system release. A Figma-style master/instance reusable-element library with per-user global storage, definition editing with live instance sync, type-tag categorization, panel search/sort/group management, drag-and-drop placement, 36 themed default units, and cross-platform emoji rendering fix.
+
+### Units (Components) System
+
+- **Save as Unit** — save any canvas element as a reusable Unit definition via context menu ("Add to Units") or the Units panel
+- **Master/instance model** — instances mirror their definition's visual properties; edit the definition to update every instance live
+- **Per-user global library** — units persist to disk and load on startup; separate from the project file
+- **36 themed default units** across 3 palettes: Redora (Hover Agency), Qless (BoardFlow), CatarinaUI — each with buttons, badges, cards, headings, inputs, navbars, progress bars, and alerts
+- **Three group modes** — Default (by theme palette), Custom (user-created), and By type
+- **Search** — filter units by name across all groups
+- **Context menu** — Rename, Edit Properties, Delete, Move to group
+- **Drag-and-drop** — drag units from the panel onto the canvas to place them
+- **Definition editing** — edit unit properties (text, color, shape, effects) with changes synced to all instances
+- **Type tags** — each unit carries an optional type tag (Text, Shape, Image, etc.) for categorization
+- **Group management** — create, rename, delete, and inline-rename groups; "+ New Group" always visible
+
+### Cross-Platform
+
+- **Emoji rendering fixed on Linux** — all emoji in the User Guide and ComponentsPanel replaced with lucide-react SVG icons that render identically on all platforms
+
+### UI Fixes
+
+- **Modal dropdown clipping** — `FilterableGroupSelect` portals its dropdown to `document.body` so it is no longer clipped by the modal's `overflow-y: auto`
+- **ContextMenu dismiss timing** — outside-click listener delayed by one tick to prevent premature close on right-click open
+- **Sidebar panel opacity** — `bg.panel` changed from translucent `bg-zinc-900/50` to opaque `bg-zinc-900`
+- **White modal divider** — uses `border.primary` theme token instead of hardcoded `borderColor: 'inherit'`
+
+### Performance
+
+- **ComponentCreationModal split** — outer shell subscribes only to the boolean flag; inner form mounts only when open (zero store overhead when closed)
+
+### Quality
+
+- 1158 tests / 76 files passing
+- ESLint zero errors / zero warnings
+- TypeScript strict mode clean
+- Production build clean (pre-existing dynamic-import warnings only)
+
+---
+
 ## [0.3.1] - 2026-08-04
 
 Polish release. Native Electron dialogs are replaced with styled in-app modals, the auto-update flow gains visible feedback end to end, and the Keyboard Shortcuts reference gets clearer section headings.

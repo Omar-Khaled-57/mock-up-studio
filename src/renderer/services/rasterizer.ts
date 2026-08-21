@@ -1,6 +1,8 @@
 import type { StrokePoint } from './stroke'
+import type { ComponentData } from '@shared/types'
 import type { BrushShape } from '../runtime/runtimeSlice'
 import { buildMaskStrokePolygon } from './mask-brush'
+import { shapeToSvg, textToSvg } from '../lib/default-components'
 
 export type RGBA = readonly [number, number, number, number]
 
@@ -460,6 +462,7 @@ function applyMagicEraseStroke(
   if (imageData.data[(sy * width + sx) * 4 + 3] === 0) return
   const tolerance = clamp01(brush.hardness) * 0.25
   const filled = floodFill(imageData, sx, sy, tolerance, [0, 0, 0, 0])
+  if (!filled) return
   ctx.putImageData(filled, 0, 0)
 }
 
@@ -488,6 +491,8 @@ function strokeBounds(
 }
 
 const MAX_COLOR_DISTANCE = Math.sqrt(3 * 255 * 255)
+/** Reject flood fills on images larger than 4M pixels to prevent OOM. */
+const FLOOD_FILL_SAFE_PIXEL_LIMIT = 4_000_000
 
 export function floodFill(
   imageData: ImageData,
@@ -495,9 +500,10 @@ export function floodFill(
   seedY: number,
   tolerance = 0,
   replacement: RGBA = [0, 0, 0, 0]
-): ImageData {
+): ImageData | null {
   const { width, height, data } = imageData
   if (width === 0 || height === 0) return imageData
+  if (width * height > FLOOD_FILL_SAFE_PIXEL_LIMIT) return null
   const sx = clampIndex(Math.round(seedX), width)
   const sy = clampIndex(Math.round(seedY), height)
   const seedIndex = (sy * width + sx) * 4
@@ -586,4 +592,43 @@ function colorDistance(
   const dg = g1 - g2
   const db = b1 - b2
   return Math.sqrt(dr * dr + dg * dg + db * db)
+}
+
+/**
+ * Render a group's children into a single bitmap data-URL.  The children are
+ * composited into an SVG which is rasterised onto an off-screen canvas.  Returns
+ * `null` when a 2-D context is unavailable or the rasterisation fails.
+ */
+export async function renderGroupToBitmap(
+  children: ComponentData[],
+  width: number,
+  height: number
+): Promise<string | null> {
+  const parts: string[] = []
+  let z = 0
+  for (const child of children) {
+    const cw = (child as unknown as { width: number }).width ?? 100
+    const ch = (child as unknown as { height: number }).height ?? 100
+    const cx = (child as unknown as { x: number }).x ?? 0
+    const cy = (child as unknown as { y: number }).y ?? 0
+    parts.push(`<g z-index="${z}">`)
+    if (child.kind === 'shape') parts.push(shapeToSvg(child, cx, cy, cw, ch))
+    else if (child.kind === 'text') parts.push(textToSvg(child, cx, cy, cw, ch))
+    parts.push('</g>')
+    z++
+  }
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${parts.join('')}</svg>`
+  const dataUrl = `data:image/svg+xml,${encodeURIComponent(svg)}`
+  return new Promise<string | null>((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const surface = createRasterSurface(width, height)
+      if (!surface) { resolve(null); return }
+      surface.ctx.drawImage(img, 0, 0, width, height)
+      canvasToDataUrl(surface.canvas).then(resolve)
+    }
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
 }

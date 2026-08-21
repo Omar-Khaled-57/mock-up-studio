@@ -1,6 +1,61 @@
 {
   "versions": [
     {
+      "version": "0.4.0",
+      "date": "2026-08-21",
+      "title": "Reusable Units System",
+      "origin": "Major feature release adding a Figma-style reusable units (components) system — save canvas elements as reusable definitions with a per-user global library, type-tag categorization, search, drag-and-drop placement, definition editing with live instance sync, and 36 themed default units. Also includes cross-platform emoji rendering fixes, modal/dropdown UI hardening, and performance improvements.",
+      "sections": [
+        {
+          "heading": "Reusable Units System",
+          "items": [
+            "Save any canvas element as a reusable Unit definition with one click (context menu or 'Add to Units')",
+            "Figma-style master/instance model: instances mirror their definition's visual properties; edit the definition to update all instances",
+            "Per-user global library persisted to disk, loaded on startup",
+            "36 themed default units across 3 palettes: Redora (Hover Agency), Qless (BoardFlow), CatarinaUI (Catarina + Hodor) — each with buttons, badges, cards, headings, inputs, navbars, progress bars, and alerts",
+            "Type-tag categorization: each unit carries an optional type tag (Text, Shape, Image, etc.) for organizing",
+            "Three group modes: Default (by theme), Custom (user-created), and By type",
+            "Search bar filters units by name across all groups",
+            "Context menu: Rename, Edit Properties, Delete, Move to group",
+            "Drag-and-drop placement onto the canvas",
+            "Definition editing panel with live instance sync",
+            "Group management: create, rename, delete, and inline-rename groups"
+          ]
+        },
+        {
+          "heading": "Cross-Platform",
+          "items": [
+            "Emoji rendering fixed on Linux: all emoji in the User Guide and ComponentsPanel replaced with lucide-react SVG icons"
+          ]
+        },
+        {
+          "heading": "UI Fixes",
+          "items": [
+            "Modal dropdown clipping: FilterableGroupSelect portals its dropdown to document.body",
+            "Empty groups now visible with an italic placeholder instead of being hidden",
+            "ContextMenu dismiss timing: outside-click listener delayed by one tick to prevent premature close",
+            "Sidebar panel opacity: bg.panel changed from translucent to opaque so content never shows through",
+            "White modal divider line: uses border.primary theme token instead of hardcoded borderColor"
+          ]
+        },
+        {
+          "heading": "Performance",
+          "items": [
+            "ComponentCreationModal refactored: outer shell subscribes only to the boolean flag; inner form mounts only when open, zero store overhead when closed"
+          ]
+        },
+        {
+          "heading": "Quality",
+          "items": [
+            "1158 tests across 76 files",
+            "ESLint zero errors / zero warnings",
+            "TypeScript strict mode clean",
+            "Production build clean"
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.3.1",
       "date": "2026-08-04",
       "title": "Styled Dialogs & Update UX",

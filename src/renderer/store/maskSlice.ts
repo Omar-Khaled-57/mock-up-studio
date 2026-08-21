@@ -122,18 +122,33 @@ export const createMaskSlice: StateCreator<StoreState, [], [], MaskSlice> = (set
     }),
 
   refreshMaskSnapshot: async (maskId) => {
-    const state = get()
-    const scene = state.scenes[state.activeSceneIndex]
-    const mask = scene.masks.find((m) => m.id === maskId)
-    if (!mask) return
-    const snapshot = await captureMaskSnapshot({
-      x: mask.x,
-      y: mask.y,
-      width: mask.width,
-      height: mask.height
-    })
+    let snapshotBounds
+    try {
+      const state = get()
+      const scene = state.scenes[state.activeSceneIndex]
+      const mask = scene.masks.find((m) => m.id === maskId)
+      if (!mask) return
+      snapshotBounds = { x: mask.x, y: mask.y, width: mask.width, height: mask.height }
+    } catch {
+      return
+    }
+    let snapshot
+    try {
+      snapshot = await captureMaskSnapshot(snapshotBounds)
+    } catch (err) {
+      console.error('[refreshMaskSnapshot] Capture failed:', err)
+      return
+    }
     if (!snapshot) return
-    state.pushHistory('Refresh mask')
-    state.updateMask(maskId, { snapshot })
+    try {
+      const fresh = get()
+      const freshScene = fresh.scenes[fresh.activeSceneIndex]
+      const stillExists = freshScene?.masks?.some((m) => m.id === maskId)
+      if (!stillExists) return
+      fresh.pushHistory('Refresh mask')
+      fresh.updateMask(maskId, { snapshot })
+    } catch (err) {
+      console.error('[refreshMaskSnapshot] Commit failed:', err)
+    }
   }
 })

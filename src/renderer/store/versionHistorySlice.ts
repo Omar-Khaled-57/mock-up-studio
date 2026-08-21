@@ -53,11 +53,16 @@ export const createVersionHistorySlice: StateCreator<StoreState, [], [], Version
     const state = get()
     const snapshot = state.snapshots.find((s) => s.id === snapshotId)
     if (!snapshot) return
-    set({
-      scenes: JSON.parse(snapshot.scenesJson) as Scene[],
-      activeSceneIndex: snapshot.activeSceneIndex,
-      selectedIds: []
-    })
+    try {
+      state.pushHistory('Restore snapshot')
+      set({
+        scenes: JSON.parse(snapshot.scenesJson) as Scene[],
+        activeSceneIndex: snapshot.activeSceneIndex,
+        selectedIds: []
+      })
+    } catch (err) {
+      console.error('[restoreSnapshot] Corrupted snapshot:', err)
+    }
   },
 
   deleteSnapshot: (snapshotId) => {

@@ -2,7 +2,7 @@ import { type ElementType } from 'react'
 import { useStore } from '../../store'
 import { useTheme } from '../../hooks/useTheme'
 import type { SidebarTab } from '../../store/uiSlice'
-import { Proportions, Palette, Monitor, Image, Type, Hexagon, Scan, Layers, Grid3X3, Clock, Sun, Moon } from 'lucide-react'
+import { Proportions, Palette, Monitor, Image, Type, Hexagon, Scan, Layers, Grid3X3, Clock, Sun, Moon, Puzzle } from 'lucide-react'
 import ImagesPanel from './ImagesPanel'
 import DevicesPanel from './DevicesPanel'
 import TextPanel from './TextPanel'
@@ -13,6 +13,7 @@ import BackgroundPanel from './BackgroundPanel'
 import LayersPanel from './LayersPanel'
 import GridPanel from './GridPanel'
 import VersionHistoryPanel from './VersionHistoryPanel'
+import ComponentsPanel from './ComponentsPanel'
 
 interface TabDef {
   id: SidebarTab
@@ -40,7 +41,8 @@ const SECTIONS: SectionDef[] = [
       { id: 'images', label: 'Images', icon: Image },
       { id: 'text', label: 'Text', icon: Type },
       { id: 'shapes', label: 'Shapes', icon: Hexagon },
-      { id: 'masks', label: 'Masks', icon: Scan }
+      { id: 'masks', label: 'Masks', icon: Scan },
+      { id: 'components', label: 'Units', icon: Puzzle }
     ]
   },
   {
@@ -128,6 +130,7 @@ export default function Sidebar() {
           {sidebarTab === 'images' && <ImagesPanel />}
           {sidebarTab === 'shapes' && <ShapesPanel />}
           {sidebarTab === 'masks' && <MasksPanel />}
+          {sidebarTab === 'components' && <ComponentsPanel />}
           {sidebarTab === 'grid' && <GridPanel />}
           {sidebarTab === 'history' && <VersionHistoryPanel />}
         </div>

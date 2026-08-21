@@ -28,6 +28,7 @@ import type { UpdatePromptPayload } from '../shared/types'
 
 let updateCheckInterval: ReturnType<typeof setInterval> | null = null
 let currentWindow: BrowserWindow | null = null
+let updaterListenersRegistered = false
 let responseHandlerRegistered = false
 
 export function initAutoUpdater(mainWindow: BrowserWindow): void {
@@ -35,28 +36,33 @@ export function initAutoUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = false
 
-  autoUpdater.on('update-available', (info) => {
-    sendUpdatePrompt({ kind: 'available', version: info.version })
-  })
+  // Guard against duplicate listeners when initAutoUpdater is called again
+  // (e.g. on macOS dock re-click recreating the window).
+  if (!updaterListenersRegistered) {
+    updaterListenersRegistered = true
+    autoUpdater.on('update-available', (info) => {
+      sendUpdatePrompt({ kind: 'available', version: info.version })
+    })
 
-  autoUpdater.on('download-progress', (progress) => {
-    currentWindow?.setProgressBar(progress.percent / 100)
-    currentWindow?.webContents.send('download-progress', progress.percent)
-  })
+    autoUpdater.on('download-progress', (progress) => {
+      currentWindow?.setProgressBar(progress.percent / 100)
+      currentWindow?.webContents.send('download-progress', progress.percent)
+    })
 
-  autoUpdater.on('update-downloaded', () => {
-    currentWindow?.setProgressBar(-1)
-    sendUpdatePrompt({ kind: 'ready' })
-  })
+    autoUpdater.on('update-downloaded', () => {
+      currentWindow?.setProgressBar(-1)
+      sendUpdatePrompt({ kind: 'ready' })
+    })
 
-  autoUpdater.on('error', (err) => {
-    console.error('Auto-updater error:', err.message)
-    sendUpdatePrompt({ kind: 'failed', message: err.message })
-  })
+    autoUpdater.on('error', (err) => {
+      console.error('Auto-updater error:', err.message)
+      sendUpdatePrompt({ kind: 'failed', message: err.message })
+    })
 
-  autoUpdater.on('update-not-available', () => {
-    console.log('No update available.')
-  })
+    autoUpdater.on('update-not-available', () => {
+      console.log('No update available.')
+    })
+  }
 
   // Register the renderer reply channel once (initAutoUpdater can be called
   // again on macOS window re-creation — duplicate ipcMain.on would be a leak).

@@ -706,6 +706,7 @@ describe('select tool', () => {
       'Send Backward',
       '',
       'Duplicate',
+      'Add to Units',
       'Delete'
     ])
   })

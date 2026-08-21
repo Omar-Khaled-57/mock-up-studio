@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc-handlers'
@@ -93,8 +93,17 @@ function createWindow(): void {
     clearCloseSafetyTimer()
   })
 
+  ipcMain.on('set-native-theme', (_event, theme: unknown) => {
+    if (theme === 'dark' || theme === 'light' || theme === 'system') {
+      nativeTheme.themeSource = theme
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    const url = details.url
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      shell.openExternal(url)
+    }
     return { action: 'deny' }
   })
 
@@ -143,7 +152,6 @@ ipcMain.on('open-user-guide', () => {
     title: 'Mockup Studio Guide',
     icon: join(__dirname, '../../public/logo.ico'),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true

@@ -21,31 +21,36 @@ import { useTheme } from './hooks/useTheme'
 import BottomToolbar from './components/toolbar/BottomToolbar'
 import ExportDialog from './components/sidebar/ExportDialog'
 import SaveChangesDialog from './components/shared/SaveChangesDialog'
+import ComponentCreationModal from './components/shared/ComponentCreationModal'
 import { withSaveGuard } from './lib/save-guard'
 
 const STORAGE_KEY = 'mockup-studio-last-seen-version'
 
 async function openFileAtPath(filePath: string): Promise<void> {
-  const result = await window.api.openProjectByPath(filePath)
-  if (!result) return
+  try {
+    const result = await window.api.openProjectByPath(filePath)
+    if (!result) return
 
-  const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
+    const { project, scenes, activeSceneIndex } = loadProjectFromZipResult(result)
 
-  withDirtySuppressed(() =>
-    useStore.setState({
-      project: project as unknown as import('@shared/types').Project,
-      scenes: scenes as never[],
-      activeSceneIndex,
-      filePath: result.filePath,
-      dirty: false,
-      lastSaved: Date.now(),
-      undoStack: [],
-      redoStack: [],
-      selectedIds: [],
-      showSplash: false
-    })
-  )
-  resetRuntime('all')
+    withDirtySuppressed(() =>
+      useStore.setState({
+        project: project as unknown as import('@shared/types').Project,
+        scenes: scenes as never[],
+        activeSceneIndex,
+        filePath: result.filePath,
+        dirty: false,
+        lastSaved: Date.now(),
+        undoStack: [],
+        redoStack: [],
+        selectedIds: [],
+        showSplash: false
+      })
+    )
+    resetRuntime('all')
+  } catch (err) {
+    console.error('[openFileAtPath] Failed to load project:', err)
+  }
 }
 
 // If the URL has ?guide=1, render just the UserGuide
@@ -97,7 +102,13 @@ export default function App() {
 
   useEffect(() => {
     document.body.classList.toggle('light-theme', theme === 'light')
+    window.api?.setNativeTheme?.(theme)
   }, [theme])
+
+  // Load component library on startup
+  useEffect(() => {
+    useStore.getState().loadFromDisk()
+  }, [])
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -179,6 +190,11 @@ export default function App() {
             } else if (rt.updatePrompt?.kind === 'checking') {
               rt.setUpdatePrompt({ kind: 'uptodate' })
             }
+          }).catch(() => {
+            useRuntimeStore.getState().setUpdatePrompt({
+              kind: 'failed',
+              message: 'Update check failed. Please try again.'
+            })
           })
           break
         }
@@ -296,11 +312,12 @@ export default function App() {
           useStore.getState().setPropertiesPanelWidth(Math.max(160, Math.min(400, current - delta)))
         }} />
         <PropertiesPanel />
-        {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        {<ShortcutsModal open={showShortcuts} onClose={() => setShowShortcuts(false)} />}
         {updateVersion && <UpdateModal version={updateVersion} onDismiss={dismissUpdate} />}
         <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
         <ExportDialog open={exportModalOpen} onClose={closeExportModal} />
         <SaveChangesDialog />
+        <ComponentCreationModal />
         <UpdatePromptDialog />
         {downloadProgress !== null && (
           <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center gap-2 bg-zinc-900 border-t border-zinc-700 px-4 py-2 text-xs text-zinc-400">

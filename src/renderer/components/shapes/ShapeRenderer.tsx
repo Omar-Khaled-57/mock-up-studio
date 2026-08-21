@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import type { Shape } from '@shared/types'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
+import { useInstanceMirror } from '../../lib/component-utils'
 import ElementFacade from '../../elements/ElementFacade'
 import RenameOverlay from '../../elements/RenameOverlay'
 import { buildEffectsFilter } from '../../lib/effects'
@@ -30,7 +31,8 @@ function CrossPaths({ w, h, thickness, fill }: { w: number; h: number; thickness
   return <><path d={arm1} fill={fill} /><path d={arm2} fill={fill} /></>
 }
 
-function ShapeRenderer({ shape }: Props) {
+function ShapeRenderer({ shape: raw }: Props) {
+  const shape = useInstanceMirror(raw)
   const editing = useRuntimeStore((s) => s.editing)
   // The select-tool ghost's raw source is the shared live-transform: while the
   // element is being dragged/resized the store geometry is untouched (it only

@@ -12,18 +12,20 @@ App.tsx
 ├── UpdateModal (changelog)
 ├── ExportDialog (modal)
 ├── Sidebar.tsx
-│   ├── SceneTabs (Design/Content/Organize/View/History tabs)
+│   ├── Tab rail (Design / Content / Organize / View / History sections)
+│   ├── CanvasPresetsPanel (canvas tab)
+│   ├── BackgroundPanel (theme tab)
+│   │   ├── ThemesPanel (Background editor)
+│   │   └── ThemePresetsPanel
 │   ├── DevicesPanel
 │   ├── ImagesPanel
 │   ├── TextPanel
 │   ├── ShapesPanel
-│   ├── ThemesPanel (Background editor)
-│   ├── ThemePresetsPanel
-│   ├── CanvasPresetsPanel
-│   ├── GridPanel
+│   ├── MasksPanel
+│   ├── ComponentsPanel (Units tab)
 │   ├── LayersPanel
-│   ├── VersionHistoryPanel
-│   └── WatermarkPanel
+│   ├── GridPanel
+│   └── VersionHistoryPanel
 ├── Canvas column (flex-1)
 │   ├── CanvasChromeBar.tsx    (scene tabs, zoom, View menu)
 │   ├── Canvas.tsx

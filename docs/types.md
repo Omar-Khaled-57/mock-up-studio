@@ -16,7 +16,7 @@ Project
        ├─ devices: Device[]      ← device frames with screen images
        ├─ textBoxes: TextBox[]   ← styled text (heroes are first-class)
        ├─ images: ImageOverlay[] ← imported/raster images
-       � ├── shapes: Shape[]      ← SVG shapes (rect, circle, star, etc.)
+       ├─ shapes: Shape[]      ← SVG shapes (rect, circle, star, etc.)
        ├─ guides: Guide[]
        ├─ GridSettings
        ├─ groups: ElementGroup[] (flat, parentGroupId links)
@@ -574,6 +574,47 @@ type SceneElementKind = ElementKind  // alias
 ```
 
 Used throughout the codebase for kind-dispatched logic (hit-test, selection, z-order, capabilities, update dispatch, etc.).
+
+---
+
+## ComponentDefinition / ComponentGroup / ComponentLibrary
+
+**File:** `src/shared/types.ts`
+
+```typescript
+interface ComponentDefinition {
+  id: string
+  name: string
+  groupId: string | null
+  kind: 'image' | 'text' | 'shape' | 'brush' | 'group'
+  typeTag?: string             // e.g. "Text", "Shape", "Image" — for type-based grouping
+  data: SceneElement           // Serialized element data (Device | TextBox | ImageOverlay | Shape)
+  thumbnail?: string           // SVG data URL thumbnail (rendered by renderGroupToSvg for groups)
+  createdAt: number
+  updatedAt: number
+}
+
+interface ComponentGroup {
+  id: string
+  name: string
+  createdAt: number
+}
+
+interface ComponentLibrary {
+  definitions: ComponentDefinition[]
+  groups: ComponentGroup[]
+}
+```
+
+**Purpose:** A Figma-style master/instance system for reusable elements. Users save canvas elements as `ComponentDefinition` objects; placing a unit stamps the definition's `data` onto a new scene element tagged with `componentId`. Instances mirror their definition's visual properties via `useInstanceMirror` at render time.
+
+**Storage:** The library is persisted to disk via IPC (`loadComponents`/`saveComponents`) as `~/.config/mockup-studio/components.json`. `saveToDisk` is debounced via chained promises to avoid blocking the UI thread.
+
+**Key behaviors:**
+- 36 themed default definitions ship with the app (`default-components.ts`): 3 palettes × 12 units (buttons, badges, cards, headings, inputs, navbars, progress bars, alerts).
+- `allTypeTags(definitions)` is a standalone function (not a store getter) that returns all unique `typeTag` values across the library — used for the type autocomplete combobox in `ComponentCreationModal`.
+- `addComponent(data, name, groupId, thumbnail, kind, typeTag?)` stamps the definition and chains `saveToDisk`.
+- `syncDefinitionToInstances` re-applies visual property overrides from the definition to every matching instance. O(1) early-return per non-matching element.
 
 ---
 

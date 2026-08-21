@@ -17,6 +17,7 @@ export type SidebarTab =
   | 'layers'
   | 'grid'
   | 'history'
+  | 'components'
 
 export interface UiSlice {
   sidebarTab: SidebarTab

@@ -2,12 +2,14 @@ import { useMemo } from 'react'
 import { ImageOverlay as ImageOverlayType } from '@shared/types'
 import ElementFacade from '../../elements/ElementFacade'
 import { buildEffectsFilter } from '../../lib/effects'
+import { useInstanceMirror } from '../../lib/component-utils'
 
 interface Props {
   image: ImageOverlayType
 }
 
-export default function ImageOverlay({ image }: Props) {
+export default function ImageOverlay({ image: raw }: Props) {
+  const image = useInstanceMirror(raw)
   const combinedFilter = useMemo(() => {
     const filters: string[] = []
     if (image.glow.length > 0) {

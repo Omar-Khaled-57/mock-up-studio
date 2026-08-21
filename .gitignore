@@ -1,11 +1,35 @@
+# Dependencies
 node_modules
+*.tsbuildinfo
+
+# Build output
 dist
 out
 release
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Test / lint caches
+coverage
+.eslintcache
+.vitest
+
+# OS / editor
 .DS_Store
+Thumbs.db
+desktop.ini
 *.log
-dev/
-*.tsbuildinfo
 .kilo/
+
+# Local docs (untracked by design — see AGENTS.md)
+dev/
+
+# Dev log (deliberately untracked)
 AGENTS.md
-REMAINING-WORK.md
+
+# Local tool config
+opencode.json
+

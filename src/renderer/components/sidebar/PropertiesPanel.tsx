@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
 import { useTheme } from '../../hooks/useTheme'
@@ -10,7 +10,7 @@ import { isEffectsNeutral } from '../../lib/effects'
 import { pickImageFile, pickImageFileObject } from '../../lib/file-upload'
 import { QUICK_ADD_DEVICE_TYPES } from '../../lib/element-factories'
 import { ICON } from '../../lib/icons'
-import { AccordionSection, Button, NumberInput, ResponsiveButtonGroup } from '../primitives'
+import { AccordionSection, Button, Field, NumberInput, ResponsiveButtonGroup } from '../primitives'
 import SliderInput from '../shared/SliderInput'
 import ColorInput from '../shared/ColorInput'
 import ShadowEditor from '../shared/ShadowEditor'
@@ -199,6 +199,7 @@ export default function PropertiesPanel() {
     (v: number) => {
       if (!selected) return
       const { kind, data } = selected
+      useStore.getState().pushHistory('Move')
       if (kind === 'device') updateDevice(data.id, { x: v })
       else if (kind === 'textbox') updateTextBox(data.id, { x: v })
       else if (kind === 'shape') useStore.getState().updateShape(data.id, { x: v })
@@ -211,6 +212,7 @@ export default function PropertiesPanel() {
     (v: number) => {
       if (!selected) return
       const { kind, data } = selected
+      useStore.getState().pushHistory('Move')
       if (kind === 'device') updateDevice(data.id, { y: v })
       else if (kind === 'textbox') updateTextBox(data.id, { y: v })
       else if (kind === 'shape') useStore.getState().updateShape(data.id, { y: v })
@@ -223,6 +225,7 @@ export default function PropertiesPanel() {
     (v: number) => {
       if (!selected || v < 20) return
       const { kind, data } = selected
+      useStore.getState().pushHistory('Resize')
       if (kind === 'device') {
         const s = applyLockedSize(data, { width: v, height: data.height }, data.lockAspectRatio ?? false)
         updateDevice(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
@@ -243,6 +246,7 @@ export default function PropertiesPanel() {
     (v: number) => {
       if (!selected || v < 20) return
       const { kind, data } = selected
+      useStore.getState().pushHistory('Resize')
       if (kind === 'device') {
         const s = applyLockedSize(data, { width: data.width, height: v }, data.lockAspectRatio ?? false)
         updateDevice(data.id, { width: Math.round(s.width), height: Math.round(s.height) })
@@ -263,11 +267,12 @@ export default function PropertiesPanel() {
     (v: number) => {
       if (!selected) return
       const { kind, data } = selected
+      pushHistoryDebounced('Rotate')
       if (kind === 'device') updateDevice(data.id, { rotation: v })
       else if (kind === 'shape') useStore.getState().updateShape(data.id, { rotation: v })
       else if (kind === 'image') updateImage(data.id, { rotation: v })
     },
-    [selected, updateDevice, updateImage]
+    [selected, updateDevice, updateImage, pushHistoryDebounced]
   )
 
   const commitName = useCallback(
@@ -305,6 +310,7 @@ export default function PropertiesPanel() {
     if (!selected) return
     const { kind, data } = selected
     const next = !data.visible
+    useStore.getState().pushHistory(next ? 'Show' : 'Hide')
     if (kind === 'device') updateDevice(data.id, { visible: next })
     else if (kind === 'textbox') updateTextBox(data.id, { visible: next })
     else if (kind === 'shape') useStore.getState().updateShape(data.id, { visible: next })
@@ -315,6 +321,7 @@ export default function PropertiesPanel() {
     if (!selected) return
     const { kind, data } = selected
     const next = !data.locked
+    useStore.getState().pushHistory(next ? 'Unlock' : 'Lock')
     if (kind === 'device') updateDevice(data.id, { locked: next })
     else if (kind === 'textbox') updateTextBox(data.id, { locked: next })
     else if (kind === 'shape') useStore.getState().updateShape(data.id, { locked: next })
@@ -378,6 +385,125 @@ export default function PropertiesPanel() {
     const state = useStore.getState()
     state.pushHistory('Delete')
     state.deleteSelected(state.selectedIds)
+  }
+
+  // ---- Definition editing (selected in Units panel) ----
+  const selectedDefId = useRuntimeStore((s) => s.selectedDefinitionId)
+  const definitions = useStore((s) => s.definitions)
+  const selectDefinition = useRuntimeStore((s) => s.selectDefinition)
+
+  // Clear definition selection when a scene element is selected
+  useEffect(() => {
+    if (selectedIds.length > 0 && selectedDefId) {
+      useRuntimeStore.getState().selectDefinition(null)
+    }
+  }, [selectedIds.length, selectedDefId])
+
+  if (selectedDefId) {
+    const def = definitions.find((d) => d.id === selectedDefId)
+    if (def) {
+      const updateDef = (patch: Record<string, unknown>) => {
+        useStore.getState().pushHistory('Edit unit definition')
+        useStore.getState().updateComponentDefinition(def.id, patch)
+        useStore.getState().syncDefinitionToInstances(def.id)
+      }
+      return (
+        <aside
+          data-properties-panel
+          className={clsx("border-l p-3 flex flex-col gap-1 overflow-y-auto", bg.panel, border.primary, shadow.md)}
+          style={{ width: propertiesPanelWidth }}
+        >
+          <div className="flex items-center gap-2 py-1 pb-2">
+            <Shapes size={14} className={text.muted} />
+            <span className={clsx("text-[13px] font-medium truncate", text.primary)}>Unit: {def.name}</span>
+            <button
+              onClick={() => selectDefinition(null)}
+              className={clsx("ml-auto text-[10px] px-2 py-0.5 rounded", text.muted, bg.hover)}
+            >
+              Done
+            </button>
+          </div>
+          {/* Content properties */}
+          {def.data.kind === 'text' && (
+            <AccordionSection title="Content" open={sectionOpen('def:text', true)} onToggle={onToggleSection('def:text')}>
+              <Field label="Text">
+                <textarea
+                  value={def.data.content}
+                  onChange={(e) => updateDef({ content: e.target.value })}
+                  className={clsx("w-full rounded-lg px-2 py-1 text-[11px] resize-none h-16", bg.input, text.primary, border.primary)}
+                />
+              </Field>
+              <Field label="Font">
+                <select
+                  value={def.data.fontFamily}
+                  onChange={(e) => updateDef({ fontFamily: e.target.value })}
+                  className={clsx("w-full rounded-lg px-2 py-1 text-[11px]", bg.input, text.primary, border.primary)}
+                >
+                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </select>
+              </Field>
+              <div className="flex gap-2">
+                <Field label="Size">
+                  <NumberInput
+                    value={def.data.fontSize}
+                    onChange={(v) => updateDef({ fontSize: v })}
+                    min={8} max={200} unit="px"
+                  />
+                </Field>
+                <Field label="Weight">
+                  <NumberInput
+                    value={def.data.fontWeight}
+                    onChange={(v) => updateDef({ fontWeight: v })}
+                    min={100} max={900}
+                  />
+                </Field>
+              </div>
+              <Field label="Color">
+                <ColorInput
+                  value={def.data.color}
+                  onChange={(v) => updateDef({ color: v })}
+                />
+              </Field>
+            </AccordionSection>
+          )}
+          {def.data.kind === 'image' && (
+            <AccordionSection title="Content" open={sectionOpen('def:image', true)} onToggle={onToggleSection('def:image')}>
+              <div className={clsx("text-[11px] py-2", text.muted)}>
+                Image source is stored in the definition. Editing the source is not yet supported.
+              </div>
+              <SliderInput
+                label="Opacity"
+                value={def.data.opacity}
+                onChange={(v) => updateDef({ opacity: v })}
+                min={0} max={100} step={1} unit="%"
+              />
+            </AccordionSection>
+          )}
+          {def.data.kind === 'shape' && (
+            <AccordionSection title="Content" open={sectionOpen('def:shape', true)} onToggle={onToggleSection('def:shape')}>
+              <Field label="Color">
+                <ColorInput
+                  value={def.data.color}
+                  onChange={(v) => updateDef({ color: v })}
+                />
+              </Field>
+              <SliderInput
+                label="Opacity"
+                value={def.data.opacity}
+                onChange={(v) => updateDef({ opacity: v })}
+                min={0} max={100} step={1} unit="%"
+              />
+            </AccordionSection>
+          )}
+          <AccordionSection title="Advanced" open={sectionOpen('def:advanced', false)} onToggle={onToggleSection('def:advanced')}>
+            <div>
+              <span className={clsx("block text-[11px] mb-1", text.secondary)}>Definition ID</span>
+              <div className={clsx("px-2 py-1 text-[10px] font-mono rounded-lg truncate", bg.input, text.muted)}>{def.id}</div>
+            </div>
+          </AccordionSection>
+        </aside>
+      )
+    }
   }
 
   // ---- Empty state (nothing selected) ----
@@ -637,7 +763,7 @@ export default function PropertiesPanel() {
               <span className={clsx("block text-[11px] mb-1", text.secondary)}>Name</span>
               <input
                 value={(data as Device).name}
-                onChange={(e) => updateDevice(data.id, { name: e.target.value })}
+                onChange={(e) => { pushHistoryDebounced('Edit name'); updateDevice(data.id, { name: e.target.value }) }}
                 className={clsx("w-full px-2 py-1.5 text-[13px] rounded-lg outline-none", bg.input, border.focus)}
               />
             </div>
@@ -667,7 +793,7 @@ export default function PropertiesPanel() {
                 {(['contain', 'cover', 'stretch'] as const).map((fit) => (
                   <button
                     key={fit}
-                    onClick={() => updateDevice(data.id, { objectFit: fit })}
+                    onClick={() => { useStore.getState().pushHistory('Object fit'); updateDevice(data.id, { objectFit: fit }) }}
                     className={clsx(
                       "flex-1 px-2 py-1 text-xs rounded transition-colors",
                       (data as Device).objectFit === fit ? bg.selected : bg.button
@@ -684,7 +810,7 @@ export default function PropertiesPanel() {
                 {(['dark', 'light', 'space-gray', 'midnight', 'custom'] as const).map((theme) => (
                   <button
                     key={theme}
-                    onClick={() => updateDevice(data.id, { colorTheme: theme })}
+                    onClick={() => { useStore.getState().pushHistory('Color theme'); updateDevice(data.id, { colorTheme: theme }) }}
                     className={clsx(
                       "px-1 py-1 text-[10px] rounded transition-colors capitalize",
                       (data as Device).colorTheme === theme ? bg.selected : bg.button
@@ -697,8 +823,8 @@ export default function PropertiesPanel() {
             </div>
             {(data as Device).colorTheme === 'custom' && (
               <div className="space-y-1.5">
-                <ColorInput label="Bezel" value={(data as Device).customBezelColor ?? '#27272a'} onChange={(c) => updateDevice(data.id, { customBezelColor: c })} />
-                <ColorInput label="Border" value={(data as Device).customBorderColor ?? '#09090b'} onChange={(c) => updateDevice(data.id, { customBorderColor: c })} />
+                <ColorInput label="Bezel" value={(data as Device).customBezelColor ?? '#27272a'} onChange={(c) => { pushHistoryDebounced('Bezel color'); updateDevice(data.id, { customBezelColor: c }) }} />
+                <ColorInput label="Border" value={(data as Device).customBorderColor ?? '#09090b'} onChange={(c) => { pushHistoryDebounced('Border color'); updateDevice(data.id, { customBorderColor: c }) }} />
               </div>
             )}
           </>
@@ -710,7 +836,7 @@ export default function PropertiesPanel() {
               <span className={clsx("block text-[11px] mb-1", text.secondary)}>Text</span>
               <textarea
                 value={(data as TextBox).content}
-                onChange={(e) => updateTextBox(data.id, { content: e.target.value })}
+                onChange={(e) => { pushHistoryDebounced('Edit text'); updateTextBox(data.id, { content: e.target.value }) }}
                 rows={3}
                 className={clsx("w-full px-2 py-1.5 text-[13px] rounded-lg outline-none resize-y", bg.input, border.focus)}
               />
@@ -720,7 +846,7 @@ export default function PropertiesPanel() {
                 <span className={clsx("block text-[11px] mb-1", text.secondary)}>Font</span>
                 <select
                   value={(data as TextBox).fontFamily}
-                  onChange={(e) => updateTextBox(data.id, { fontFamily: e.target.value })}
+                  onChange={(e) => { useStore.getState().pushHistory('Font'); updateTextBox(data.id, { fontFamily: e.target.value }) }}
                   className={clsx("w-full px-2 py-1.5 text-[13px] rounded-lg outline-none", bg.input, border.focus)}
                 >
                   {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -728,12 +854,12 @@ export default function PropertiesPanel() {
               </div>
               <div>
                 <span className={clsx("block text-[11px] mb-1", text.secondary)}>Size</span>
-                <NumberInput ariaLabel="Font size" value={(data as TextBox).fontSize} onChange={(v) => updateTextBox(data.id, { fontSize: v })} min={8} max={400} />
+                <NumberInput ariaLabel="Font size" value={(data as TextBox).fontSize} onChange={(v) => { useStore.getState().pushHistory('Font size'); updateTextBox(data.id, { fontSize: v }) }} min={8} max={400} />
               </div>
             </div>
             <div>
               <span className={clsx("block text-[11px] mb-1", text.secondary)}>Color</span>
-              <ColorInput value={(data as TextBox).color} onChange={(c) => updateTextBox(data.id, { color: c })} />
+              <ColorInput value={(data as TextBox).color} onChange={(c) => { pushHistoryDebounced('Text color'); updateTextBox(data.id, { color: c }) }} />
             </div>
           </>
         )}
@@ -754,7 +880,7 @@ export default function PropertiesPanel() {
               <span className={clsx("block text-[11px] mb-1", text.secondary)}>Kind</span>
               <select
                 value={(data as Shape).kind}
-                onChange={(e) => useStore.getState().updateShape(data.id, { kind: e.target.value as ShapeKind })}
+                onChange={(e) => { useStore.getState().pushHistory('Shape kind'); useStore.getState().updateShape(data.id, { kind: e.target.value as ShapeKind }) }}
                 className={clsx("w-full px-2 py-1.5 text-[13px] rounded-lg outline-none", bg.input, border.focus)}
               >
                 {SHAPE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
@@ -801,33 +927,33 @@ export default function PropertiesPanel() {
         >
           {kind === 'image' && (
             <>
-              <SliderInput label="Opacity" value={(data as ImageOverlay).opacity} min={0} max={100} unit="%" onChange={(v) => updateImage(data.id, { opacity: v })} />
-              <SliderInput label="Radius" value={(data as ImageOverlay).borderRadius} min={0} max={60} unit="px" onChange={(v) => updateImage(data.id, { borderRadius: v })} />
+              <SliderInput label="Opacity" value={(data as ImageOverlay).opacity} min={0} max={100} unit="%" onChange={(v) => { pushHistoryDebounced('Opacity'); updateImage(data.id, { opacity: v }) }} />
+              <SliderInput label="Radius" value={(data as ImageOverlay).borderRadius} min={0} max={60} unit="px" onChange={(v) => { pushHistoryDebounced('Border radius'); updateImage(data.id, { borderRadius: v }) }} />
               <div>
                 <span className={clsx("block text-[11px] mb-1", text.secondary)}>Blend Mode</span>
                 <select
                   value={(data as ImageOverlay).blendMode}
-                  onChange={(e) => updateImage(data.id, { blendMode: e.target.value as BlendMode })}
+                  onChange={(e) => { useStore.getState().pushHistory('Blend mode'); updateImage(data.id, { blendMode: e.target.value as BlendMode }) }}
                   className={clsx("w-full px-2 py-1.5 text-[13px] rounded-lg outline-none", bg.input, border.focus)}
                 >
                   {BLEND_MODES.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </div>
               <ResponsiveButtonGroup gap="sm" minChildWidth="64px">
-                <Button size="sm" variant={(data as ImageOverlay).flipX ? 'accent' : 'default'} onClick={() => updateImage(data.id, { flipX: !(data as ImageOverlay).flipX })}>Flip X</Button>
-                <Button size="sm" variant={(data as ImageOverlay).flipY ? 'accent' : 'default'} onClick={() => updateImage(data.id, { flipY: !(data as ImageOverlay).flipY })}>Flip Y</Button>
+                <Button size="sm" variant={(data as ImageOverlay).flipX ? 'accent' : 'default'} onClick={() => { useStore.getState().pushHistory('Flip'); updateImage(data.id, { flipX: !(data as ImageOverlay).flipX }) }}>Flip X</Button>
+                <Button size="sm" variant={(data as ImageOverlay).flipY ? 'accent' : 'default'} onClick={() => { useStore.getState().pushHistory('Flip'); updateImage(data.id, { flipY: !(data as ImageOverlay).flipY }) }}>Flip Y</Button>
               </ResponsiveButtonGroup>
-              <SliderInput label="Blur" value={(data as ImageOverlay).blur} min={0} max={20} unit="px" onChange={(v) => updateImage(data.id, { blur: v })} />
-              <ShadowEditor value={(data as ImageOverlay).shadow} onChange={(shadows) => updateImage(data.id, { shadow: shadows })} />
-              <GlowEditor value={(data as ImageOverlay).glow} onChange={(glows) => updateImage(data.id, { glow: glows })} />
+              <SliderInput label="Blur" value={(data as ImageOverlay).blur} min={0} max={20} unit="px" onChange={(v) => { pushHistoryDebounced('Blur'); updateImage(data.id, { blur: v }) }} />
+              <ShadowEditor value={(data as ImageOverlay).shadow} onChange={(shadows) => { pushHistoryDebounced('Shadow'); updateImage(data.id, { shadow: shadows }) }} />
+              <GlowEditor value={(data as ImageOverlay).glow} onChange={(glows) => { pushHistoryDebounced('Glow'); updateImage(data.id, { glow: glows }) }} />
             </>
           )}
 
           {kind === 'shape' && (
             <>
-              <SliderInput label="Opacity" value={(data as Shape).opacity} min={0} max={100} unit="%" onChange={(v) => useStore.getState().updateShape(data.id, { opacity: v })} />
+              <SliderInput label="Opacity" value={(data as Shape).opacity} min={0} max={100} unit="%" onChange={(v) => { pushHistoryDebounced('Opacity'); useStore.getState().updateShape(data.id, { opacity: v }) }} />
               {(data as Shape).kind === 'rectangle' && (
-                <SliderInput label="Radius" value={(data as Shape).cornerRadius} min={0} max={60} unit="px" onChange={(v) => useStore.getState().updateShape(data.id, { cornerRadius: v })} />
+                <SliderInput label="Radius" value={(data as Shape).cornerRadius} min={0} max={60} unit="px" onChange={(v) => { pushHistoryDebounced('Corner radius'); useStore.getState().updateShape(data.id, { cornerRadius: v }) }} />
               )}
               {(data as Shape).kind === 'triangle' && (
                 <div className="space-y-1.5">
@@ -849,6 +975,7 @@ export default function PropertiesPanel() {
                           const newAngles: [number, number, number] = [...angles] as [number, number, number]
                           newAngles[i] = v
                           newAngles[lastIdx] = 180 - v - unchangedVal
+                          pushHistoryDebounced('Triangle angle')
                           useStore.getState().updateShape(data.id, { angles: newAngles })
                         }}
                       />
@@ -857,42 +984,42 @@ export default function PropertiesPanel() {
                 </div>
               )}
               {(data as Shape).kind === 'cross' && (
-                <SliderInput label="Arm" value={Math.round(((data as Shape).crossThickness ?? 0.3) * 100)} min={5} max={50} unit="%" onChange={(v) => useStore.getState().updateShape(data.id, { crossThickness: v / 100 })} />
+                <SliderInput label="Arm" value={Math.round(((data as Shape).crossThickness ?? 0.3) * 100)} min={5} max={50} unit="%" onChange={(v) => { pushHistoryDebounced('Arm thickness'); useStore.getState().updateShape(data.id, { crossThickness: v / 100 }) }} />
               )}
               {(data as Shape).kind === 'plus' && (
-                <SliderInput label="Arm" value={Math.round(((data as Shape).plusThickness ?? 0.3) * 100)} min={10} max={50} unit="%" onChange={(v) => useStore.getState().updateShape(data.id, { plusThickness: v / 100 })} />
+                <SliderInput label="Arm" value={Math.round(((data as Shape).plusThickness ?? 0.3) * 100)} min={10} max={50} unit="%" onChange={(v) => { pushHistoryDebounced('Arm thickness'); useStore.getState().updateShape(data.id, { plusThickness: v / 100 }) }} />
               )}
               {(data as Shape).kind === 'arrow-right' && (
-                <SliderInput label="Arm" value={Math.round(((data as Shape).arrowThickness ?? 0.5) * 100)} min={10} max={100} unit="%" onChange={(v) => useStore.getState().updateShape(data.id, { arrowThickness: v / 100 })} />
+                <SliderInput label="Arm" value={Math.round(((data as Shape).arrowThickness ?? 0.5) * 100)} min={10} max={100} unit="%" onChange={(v) => { pushHistoryDebounced('Arm thickness'); useStore.getState().updateShape(data.id, { arrowThickness: v / 100 }) }} />
               )}
-              <SliderInput label="Blur" value={(data as Shape).blur} min={0} max={20} unit="px" onChange={(v) => useStore.getState().updateShape(data.id, { blur: v })} />
-              <ShadowEditor value={(data as Shape).shadow} onChange={(shadows) => useStore.getState().updateShape(data.id, { shadow: shadows })} />
-              <GlowEditor value={(data as Shape).glow} onChange={(glows) => useStore.getState().updateShape(data.id, { glow: glows })} />
+              <SliderInput label="Blur" value={(data as Shape).blur} min={0} max={20} unit="px" onChange={(v) => { pushHistoryDebounced('Blur'); useStore.getState().updateShape(data.id, { blur: v }) }} />
+              <ShadowEditor value={(data as Shape).shadow} onChange={(shadows) => { pushHistoryDebounced('Shadow'); useStore.getState().updateShape(data.id, { shadow: shadows }) }} />
+              <GlowEditor value={(data as Shape).glow} onChange={(glows) => { pushHistoryDebounced('Glow'); useStore.getState().updateShape(data.id, { glow: glows }) }} />
             </>
           )}
 
           {kind === 'textbox' && (
             <>
               <div className="flex items-center gap-1.5">
-                <Button size="sm" variant={(data as TextBox).backgroundVisible ? 'accent' : 'default'} onClick={() => updateTextBox(data.id, { backgroundVisible: !(data as TextBox).backgroundVisible })}>Background</Button>
+                <Button size="sm" variant={(data as TextBox).backgroundVisible ? 'accent' : 'default'} onClick={() => { useStore.getState().pushHistory('Background'); updateTextBox(data.id, { backgroundVisible: !(data as TextBox).backgroundVisible }) }}>Background</Button>
                 {(data as TextBox).backgroundVisible && (
-                  <ColorInput value={(data as TextBox).backgroundColor} onChange={(c) => updateTextBox(data.id, { backgroundColor: c })} />
+                  <ColorInput value={(data as TextBox).backgroundColor} onChange={(c) => { pushHistoryDebounced('Background color'); updateTextBox(data.id, { backgroundColor: c }) }} />
                 )}
               </div>
               <div className="flex items-center gap-1.5">
-                <Button size="sm" variant={(data as TextBox).borderVisible ? 'accent' : 'default'} onClick={() => updateTextBox(data.id, { borderVisible: !(data as TextBox).borderVisible })}>Border</Button>
+                <Button size="sm" variant={(data as TextBox).borderVisible ? 'accent' : 'default'} onClick={() => { useStore.getState().pushHistory('Border'); updateTextBox(data.id, { borderVisible: !(data as TextBox).borderVisible }) }}>Border</Button>
                 {(data as TextBox).borderVisible && (
-                  <ColorInput value={(data as TextBox).borderColor} onChange={(c) => updateTextBox(data.id, { borderColor: c })} />
+                  <ColorInput value={(data as TextBox).borderColor} onChange={(c) => { pushHistoryDebounced('Border color'); updateTextBox(data.id, { borderColor: c }) }} />
                 )}
               </div>
-              <SliderInput label="Radius" value={(data as TextBox).borderRadius} min={0} max={60} unit="px" onChange={(v) => updateTextBox(data.id, { borderRadius: v })} />
+              <SliderInput label="Radius" value={(data as TextBox).borderRadius} min={0} max={60} unit="px" onChange={(v) => { pushHistoryDebounced('Border radius'); updateTextBox(data.id, { borderRadius: v }) }} />
               <ShadowEditor
                 value={toShadowLayers((data as TextBox).shadow)}
-                onChange={(shadows) => updateTextBox(data.id, { shadow: fromShadowLayers(shadows) })}
+                onChange={(shadows) => { pushHistoryDebounced('Shadow'); updateTextBox(data.id, { shadow: fromShadowLayers(shadows) }) }}
               />
               <GlowEditor
                 value={toGlowLayers((data as TextBox).glow)}
-                onChange={(glows) => updateTextBox(data.id, { glow: fromGlowLayers(glows) })}
+                onChange={(glows) => { pushHistoryDebounced('Glow'); updateTextBox(data.id, { glow: fromGlowLayers(glows) }) }}
               />
             </>
           )}
@@ -927,6 +1054,36 @@ export default function PropertiesPanel() {
           <span className={clsx("block text-[11px] mb-1", text.secondary)}>Element ID</span>
           <div className={clsx("px-2 py-1 text-[10px] font-mono rounded-lg truncate", bg.input, text.muted)}>{data.id}</div>
         </div>
+        <Button size="sm" onClick={() => useRuntimeStore.getState().openComponentCreationModal(data.id, kind)} className="w-full">
+          Save as Unit
+        </Button>
+        {'componentId' in data && data.componentId && (
+          <div className="flex gap-1 w-full">
+            <Button
+              size="sm"
+              className="flex-1"
+              variant={data.isComponentEditing ? 'accent' : 'ghost'}
+              onClick={() => {
+                const newEditing = !data.isComponentEditing
+                useStore.getState().pushHistory(newEditing ? 'Edit Unit' : 'Stop editing Unit')
+                useStore.getState().setInstanceEditing(data.id, kind, newEditing)
+              }}
+            >
+              {data.isComponentEditing ? 'Editing' : 'Edit Unit'}
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              variant="ghost"
+              onClick={() => {
+                useStore.getState().pushHistory('Detach Unit')
+                useStore.getState().detachInstance(data.id, kind)
+              }}
+            >
+              Detach
+            </Button>
+          </div>
+        )}
         <ResponsiveButtonGroup gap="sm" minChildWidth="100px">
           <Button size="sm" onClick={() => handleBringForward(data.id)}>
             <ArrowUp size={12} /> Bring Forward

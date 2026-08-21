@@ -3,6 +3,7 @@ import { TextBox as TextBoxType } from '@shared/types'
 import { useStore } from '../../store'
 import { useRuntimeStore } from '../../runtime/store'
 import { buildTextStyle } from '../../lib/device-utils'
+import { useInstanceMirror } from '../../lib/component-utils'
 import InlineEditor from './InlineEditor'
 import ElementFacade from '../../elements/ElementFacade'
 import RenameOverlay from '../../elements/RenameOverlay'
@@ -11,7 +12,8 @@ interface Props {
   textBox: TextBoxType
 }
 
-export default function TextBox({ textBox }: Props) {
+export default function TextBox({ textBox: raw }: Props) {
+  const textBox = useInstanceMirror(raw)
   const editing = useRuntimeStore((s) => s.editing)
 
   const isEditingText = editing?.id === textBox.id && editing.mode === 'text'

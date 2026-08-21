@@ -52,6 +52,8 @@ const FULL_RESET: Partial<RuntimeState> = {
   exportModalOpen: false,
   toolbarToolsVisible: true,
   savePrompt: null,
+  componentCreationModal: null,
+  selectedDefinitionId: null,
   // updatePrompt is deliberately NOT in the transient reset (same contract as
   // savePrompt): an in-flight gesture/undo must never dismiss the styled update
   // prompt. It is cleared by closeUpdatePrompt and the full ('all') reset.

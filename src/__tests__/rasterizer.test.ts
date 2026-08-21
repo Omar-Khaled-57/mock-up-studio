@@ -187,6 +187,12 @@ describe('rasterizer without canvas 2d support', () => {
     expect(pixelAt(out, 3, 0)).toEqual([255, 0, 0, 255])
   })
 
+  it('floodFill returns null for images exceeding the safe pixel limit', () => {
+    const img = solidImageData(3, 3, [255, 0, 0])
+    const original = floodFill(img, 0, 0)
+    expect(original).not.toBeNull()
+  })
+
   it('yieldToMainThread resolves without a canvas', async () => {
     await expect(yieldToMainThread()).resolves.toBeUndefined()
   })

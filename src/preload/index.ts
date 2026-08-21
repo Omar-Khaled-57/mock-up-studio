@@ -84,7 +84,17 @@ const api = {
   /** Reply to a styled update prompt: 'download' | 'later' | 'restart'. */
   respondToUpdate: (action: 'download' | 'later' | 'restart'): void => {
     ipcRenderer.send('update-response', action)
-  }
+  },
+
+  setNativeTheme: (theme: 'dark' | 'light'): void => {
+    ipcRenderer.send('set-native-theme', theme)
+  },
+
+  loadComponents: (): Promise<string | null> =>
+    ipcRenderer.invoke('load-components'),
+
+  saveComponents: (data: string): Promise<{ success: boolean; error?: string }> =>
+    ipcRenderer.invoke('save-components', data)
 }
 
 contextBridge.exposeInMainWorld('api', api)

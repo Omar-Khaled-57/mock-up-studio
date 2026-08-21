@@ -30,7 +30,9 @@ import {
   getRecentProjects,
   addRecentProject,
   writeMockupZip,
-  readMockupZip
+  readMockupZip,
+  loadComponents,
+  saveComponents
 } from './file-system'
 
 /** Upper bound for a single update check — a blocked/slow network must fail fast instead of hanging. */
@@ -45,6 +47,10 @@ export function registerIpcHandlers(): void {
    */
   ipcMain.handle('save-project', async (_event, filePath: string, projectJSON: string, assetsJson: string) => {
     try {
+      // Reject paths that don't look like .mockup files (defense-in-depth).
+      if (!filePath.endsWith('.mockup')) {
+        return { success: false, error: 'Invalid file path: must end with .mockup' }
+      }
       const assetsMap = new Map<string, Buffer>()
       const assetsObj = JSON.parse(assetsJson) as Record<string, string>
       for (const [name, base64] of Object.entries(assetsObj)) {
@@ -67,11 +73,18 @@ export function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender) || BrowserWindow.getAllWindows()[0]
     if (!win) return null
 
-    const { filePaths } = await dialog.showOpenDialog(win, {
-      title: 'Open Project',
-      filters: [{ name: 'Mockup Studio', extensions: ['mockup'] }],
-      properties: ['openFile']
-    })
+    let filePaths: string[]
+    try {
+      const result = await dialog.showOpenDialog(win, {
+        title: 'Open Project',
+        filters: [{ name: 'Mockup Studio', extensions: ['mockup'] }],
+        properties: ['openFile']
+      })
+      filePaths = result.filePaths
+    } catch (err) {
+      console.error('open-project dialog error:', err)
+      return null
+    }
 
     if (filePaths.length === 0) return null
 
@@ -107,11 +120,18 @@ export function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
 
-    const { filePath } = await dialog.showSaveDialog(win, {
-      title: 'Save Project As',
-      defaultPath: 'untitled.mockup',
-      filters: [{ name: 'Mockup Studio', extensions: ['mockup'] }]
-    })
+    let filePath: string | undefined
+    try {
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Save Project As',
+        defaultPath: 'untitled.mockup',
+        filters: [{ name: 'Mockup Studio', extensions: ['mockup'] }]
+      })
+      filePath = result.filePath
+    } catch (err) {
+      console.error('save-project-as dialog error:', err)
+      return null
+    }
 
     if (!filePath) return null
 
@@ -143,6 +163,9 @@ export function registerIpcHandlers(): void {
    */
   ipcMain.handle('open-project-by-path', async (_event, filePath: string) => {
     try {
+      if (!filePath.endsWith('.mockup')) {
+        return null
+      }
       const { manifest, assets } = await readMockupZip(filePath)
 
       const assetsObj: Record<string, string> = {}
@@ -173,16 +196,25 @@ export function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { success: false, error: 'No window' }
 
-    const { filePath, canceled } = await dialog.showSaveDialog(win, {
-      title: 'Export Image',
-      defaultPath: defaultName,
-      filters: [
-        { name: 'PNG', extensions: ['png'] },
-        { name: 'JPEG', extensions: ['jpg'] },
-        { name: 'WebP', extensions: ['webp'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    })
+    let filePath: string | undefined
+    let canceled = false
+    try {
+      const result = await dialog.showSaveDialog(win, {
+        title: 'Export Image',
+        defaultPath: defaultName,
+        filters: [
+          { name: 'PNG', extensions: ['png'] },
+          { name: 'JPEG', extensions: ['jpg'] },
+          { name: 'WebP', extensions: ['webp'] },
+          { name: 'All Files', extensions: ['*'] }
+        ]
+      })
+      filePath = result.filePath
+      canceled = result.canceled
+    } catch (err) {
+      console.error('save-image-dialog error:', err)
+      return { success: false, error: String(err) }
+    }
 
     if (canceled || !filePath) return { success: false, canceled: true }
 
@@ -195,19 +227,35 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('get-recent-projects', async () => {
-    return getRecentProjects()
+    try {
+      return getRecentProjects()
+    } catch {
+      return []
+    }
   })
 
   ipcMain.handle('write-recovery', async (_event, projectId: string, data: string) => {
-    await writeRecovery(projectId, data)
+    try {
+      await writeRecovery(projectId, data)
+    } catch (err) {
+      console.error('[write-recovery] Failed:', err)
+    }
   })
 
   ipcMain.handle('read-recovery', async (_event, projectId: string) => {
-    return readRecovery(projectId)
+    try {
+      return readRecovery(projectId)
+    } catch {
+      return null
+    }
   })
 
   ipcMain.handle('delete-recovery', async (_event, projectId: string) => {
-    await deleteRecovery(projectId)
+    try {
+      await deleteRecovery(projectId)
+    } catch (err) {
+      console.error('[delete-recovery] Failed:', err)
+    }
   })
 
   /**
@@ -226,11 +274,14 @@ export function registerIpcHandlers(): void {
           error: 'Update checks are only available in packaged builds of Mockup Studio.'
         }
       }
+      const checkPromise = autoUpdater.checkForUpdates()
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('The update server did not respond in time. Check your connection and try again.')), UPDATE_CHECK_TIMEOUT_MS).unref()
+      })
+      // Catch the race loser to prevent an unhandled rejection (Node ≥15 crashes on those).
       const result = await Promise.race([
-        autoUpdater.checkForUpdates(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('The update server did not respond in time. Check your connection and try again.')), UPDATE_CHECK_TIMEOUT_MS).unref()
-        })
+        checkPromise.catch(() => null),
+        timeoutPromise
       ])
       if (!result) {
         return { success: false, error: 'No update source was found.' }
@@ -238,6 +289,28 @@ export function registerIpcHandlers(): void {
       return { success: true }
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  // ── Components library ────────────────────────────────
+
+  ipcMain.handle('load-components', async () => {
+    try {
+      const json = await loadComponents()
+      return json
+    } catch (err) {
+      console.error('load-components error:', err)
+      return null
+    }
+  })
+
+  ipcMain.handle('save-components', async (_event, data: string) => {
+    try {
+      await saveComponents(data)
+      return { success: true }
+    } catch (err) {
+      console.error('save-components error:', err)
+      return { success: false, error: String(err) }
     }
   })
 }

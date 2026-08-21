@@ -125,10 +125,16 @@ export function getRotatedBounds(el: ElementLike): Rect {
 export function unionBounds(elements: ElementLike[]): Rect | null {
   if (elements.length === 0) return null
   const rects = elements.map(getRotatedBounds)
-  const minX = Math.min(...rects.map((r) => r.x))
-  const minY = Math.min(...rects.map((r) => r.y))
-  const maxX = Math.max(...rects.map((r) => r.x + r.width))
-  const maxY = Math.max(...rects.map((r) => r.y + r.height))
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const r of rects) {
+    if (r.x < minX) minX = r.x
+    if (r.y < minY) minY = r.y
+    if (r.x + r.width > maxX) maxX = r.x + r.width
+    if (r.y + r.height > maxY) maxY = r.y + r.height
+  }
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 

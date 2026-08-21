@@ -82,6 +82,10 @@ export interface Device {
   containerId: string | null
   /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
   lockAspectRatio?: boolean
+  /** When set, this element is an instance of the referenced component definition. */
+  componentId?: string
+  /** When true the element is in override mode (edits do not propagate back to the definition). */
+  isComponentEditing?: boolean
 }
 
 export interface TextBox {
@@ -119,6 +123,8 @@ export interface TextBox {
   locked: boolean
   groupId: string | null
   containerId: string | null
+  componentId?: string
+  isComponentEditing?: boolean
 }
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion'
@@ -166,6 +172,8 @@ export interface ImageOverlay {
   effects?: ImageEffects
   /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
   lockAspectRatio?: boolean
+  componentId?: string
+  isComponentEditing?: boolean
 }
 
 export interface Background {
@@ -338,6 +346,137 @@ export interface Shape {
   effects?: ImageEffects
   /** When true, resize/numeric-size edits preserve the current width/height aspect ratio. */
   lockAspectRatio?: boolean
+  componentId?: string
+  isComponentEditing?: boolean
+}
+
+// ---------------------------------------------------------------------------
+// v0.4.0 — Components
+// ---------------------------------------------------------------------------
+
+/** Per-kind serialized element state stored in a component definition. */
+export interface ComponentImageData {
+  kind: 'image'
+  src: string
+  width: number
+  height: number
+  opacity: number
+  blendMode: BlendMode
+  flipX: boolean
+  flipY: boolean
+  blur: number
+  glow: GlowLayer[]
+  shadow: ShadowLayer[]
+  borderRadius: number
+  effects?: ImageEffects
+  /** Absolute x-position inside a parent group (px from left edge). */
+  x?: number
+  /** Absolute y-position inside a parent group (px from top edge). */
+  y?: number
+}
+
+export interface ComponentTextData {
+  kind: 'text'
+  content: string
+  fontFamily: string
+  fontSize: number
+  fontWeight: number
+  color: string
+  textAlign: 'left' | 'center' | 'right'
+  lineHeight: number
+  letterSpacing: number
+  wordSpacing: number
+  textTransform: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
+  wrap: boolean
+  heightAuto: boolean
+  shadow: TextShadow | null
+  glow: TextGlow | null
+  strokeColor: string
+  strokeWidth: number
+  gradient: TextGradient | null
+  backgroundVisible: boolean
+  borderRadius: number
+  border: string
+  backgroundColor: string
+  width: number
+  height: number
+  /** Absolute x-position inside a parent group (px from left edge). */
+  x?: number
+  /** Absolute y-position inside a parent group (px from top edge). */
+  y?: number
+}
+
+export interface ComponentShapeData {
+  kind: 'shape'
+  shapeKind: ShapeKind
+  width: number
+  height: number
+  color: string
+  gradient: ShapeGradient | null
+  cornerRadius: number
+  angles: [number, number, number]
+  crossThickness: number
+  plusThickness: number
+  arrowThickness: number
+  opacity: number
+  backgroundImage: string | null
+  blur: number
+  glow: GlowLayer[]
+  shadow: ShadowLayer[]
+  effects?: ImageEffects
+  /** Absolute x-position inside a parent group (px from left edge). */
+  x?: number
+  /** Absolute y-position inside a parent group (px from top edge). */
+  y?: number
+}
+
+export interface ComponentBrushData {
+  kind: 'brush'
+  src: string
+  width: number
+  height: number
+}
+
+export interface ComponentGroupData {
+  kind: 'group'
+  children: ComponentData[]
+  width: number
+  height: number
+}
+
+export type ComponentData =
+  | ComponentImageData
+  | ComponentTextData
+  | ComponentShapeData
+  | ComponentBrushData
+  | ComponentGroupData
+
+/** A saved component definition in the per-user global library. */
+export interface ComponentDefinition {
+  id: string
+  name: string
+  groupId: string
+  kind: 'image' | 'text' | 'shape' | 'brush' | 'group'
+  /** User-defined type tag (e.g. "button", "badge", "card"). Free-form, autocomplete-backed. */
+  typeTag?: string
+  thumbnail: string
+  createdAt: number
+  updatedAt: number
+  data: ComponentData
+}
+
+/** A folder/tag grouping components in the panel. */
+export interface ComponentGroup {
+  id: string
+  name: string
+  isDefault: boolean
+  createdAt: number
+}
+
+/** Full shape of the components.json file stored in app userData. */
+export interface ComponentLibrary {
+  definitions: ComponentDefinition[]
+  groups: ComponentGroup[]
 }
 
 /**

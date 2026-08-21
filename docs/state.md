@@ -2,7 +2,7 @@
 
 Mockup Studio uses **two completely separate Zustand stores** with a strict dependency rule:
 
-- **Document store** (`src/renderer/store/index.ts`) — all persisted/serialized state. Composed of 13 merged slices.
+- **Document store** (`src/renderer/store/index.ts`) — all persisted/serialized state. Composed of 14 merged slices.
 - **Runtime store** (`src/renderer/runtime/store.ts`) — transient editor state (tools, previews, focus, gestures). Never serialized.
 
 Document slices import `resetRuntime` from the runtime module — the runtime store must never import from the document store (circular dependency avoidance).
@@ -28,7 +28,8 @@ export const useStore = create<StoreState>()((...a) => ({
   ...createWatermarkSlice(...a),
   ...createShapeSlice(...a),
   ...createMaskSlice(...a),
-  ...createEffectsSlice(...a)
+  ...createEffectsSlice(...a),
+  ...createComponentSlice(...a)
 }))
 
 // Dirty tracking is wired AFTER the store is created (it subscribes to the
@@ -476,7 +477,40 @@ Returns empty string when all neutral (or when `effects` is `null`/`undefined`).
 
 ---
 
-## 8. VersionHistorySlice
+## 8. ComponentSlice
+
+**File:** `src/renderer/store/componentSlice.ts`
+
+### State
+
+**None.** Component definitions live in the per-user library file (`~/.config/mockup-studio/components.json`), loaded on startup via IPC. The slice operates on this external state via in-memory `definitions[]` and `groups[]` arrays stored in the slice itself.
+
+### Actions
+
+| Action | Behavior |
+|---|---|
+| `addComponent(data, name, groupId, thumbnail, kind, typeTag?)` | Creates a `ComponentDefinition` with generated id/timestamps, appends to `definitions[]`, chains `saveToDisk()`. |
+| `deleteDefinition(id)` | Removes the definition and detaches all instances (`componentId` → `undefined`, `isComponentEditing` → `undefined`) across all scene elements. Chains `saveToDisk()`. |
+| `updateDefinition(id, patch)` | Merges patch onto the definition (`updatedAt` bumped), chains `saveToDisk()`. |
+| `addDef(...)` | Lower-level add used by default-definition loading. |
+| `addComponentGroup(name)` | Creates a `ComponentGroup`, appends to `groups[]`, chains `saveToDisk()`. |
+| `removeComponentGroup(id)` | Removes the group; orphaned definitions (matching `groupId`) keep their `groupId` and render in the "Ungrouped" fallback section. Chains `saveToDisk()`. |
+| `renameComponentGroup(id, name)` | Renames a group, chains `saveToDisk()`. |
+| `moveComponentToGroup(defId, groupId)` | Moves a definition to a group (or `"__default__"` sentinel for the Default group). Chains `saveToDisk()`. |
+| `syncDefinitionToInstances(defId)` | Reads the definition's `data`, iterates all scene elements (images → shapes → text boxes → devices), and applies visual property overrides to every matching `componentId`. Pure merge, no history push. O(1) early-return per non-matching element. |
+| `setInstanceEditing(elementId, editing)` | Sets `isComponentEditing` on a specific element. When `editing=false`, `syncDefinitionToInstances` is called on next render via `useInstanceMirror`. |
+| `saveToDisk()` | Debounced IPC write to `~/.config/mockup-studio/components.json`. Chain-guarded via `pendingSave` to avoid overlapping writes. |
+
+### Per-User Library
+
+The component library is stored per-user, not per-project:
+- **Load:** `loadComponents` IPC → `useStore.getState().setLibrary(library)` on app start (called from `App.tsx`).
+- **Save:** Every mutating action chains `saveToDisk()` (debounced, chain-guarded).
+- **Path:** `~/.config/mockup-studio/components.json` (Linux/macOS) or `%APPDATA%/mockup-studio/components.json` (Windows).
+
+---
+
+## 9. VersionHistorySlice
 
 **File:** `src/renderer/store/versionHistorySlice.ts`
 
@@ -517,13 +551,13 @@ Snapshots are created only when `autoSnapshotEnabled` is true and at least `AUTO
 
 ---
 
-## 9. Runtime Store
+## 10. Runtime Store
 
 **File:** `src/renderer/runtime/store.ts`
 
 ### Architecture
 
-A **completely separate Zustand store** — `useRuntimeStore`. The document store imports `resetRuntime` from this module; the runtime store imports nothing from the document store. All 13 document slices share a single `resetRuntime` import.
+A **completely separate Zustand store** — `useRuntimeStore`. The document store imports `resetRuntime` from this module; the runtime store imports nothing from the document store. All 14 document slices share a single `resetRuntime` import.
 
 ```typescript
 // runtime/store.ts

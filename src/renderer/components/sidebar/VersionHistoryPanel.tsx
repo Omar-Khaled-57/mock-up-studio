@@ -27,14 +27,12 @@ export default function VersionHistoryPanel() {
   const deleteSnapshot = useStore((s) => s.deleteSnapshot)
   const clearSnapshots = useStore((s) => s.clearSnapshots)
   const setAutoSnapshotEnabled = useStore((s) => s.setAutoSnapshotEnabled)
-  const pushHistory = useStore((s) => s.pushHistory)
 
   const handleRestore = useCallback(
     (snapshotId: string) => {
-      pushHistory('Before restore')
       restoreSnapshot(snapshotId)
     },
-    [restoreSnapshot, pushHistory]
+    [restoreSnapshot]
   )
 
   const handleCreateManual = useCallback(() => {

@@ -105,6 +105,17 @@ export default function SceneTabs({ chrome = false }: { chrome?: boolean }) {
     setAdjustedPos({ x, y })
   }, [contextIdx, contextPos])
 
+  useEffect(() => {
+    if (contextIdx === null) return
+    const handlePointerDown = (e: PointerEvent) => {
+      if (contextRef.current && !contextRef.current.contains(e.target as Node)) {
+        setContextIdx(null)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true)
+  }, [contextIdx])
+
   const handleContextMenu = useCallback((e: React.MouseEvent, idx: number) => {
     e.preventDefault()
     if (contextIdx === idx) {

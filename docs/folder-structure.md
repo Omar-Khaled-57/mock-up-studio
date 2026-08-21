@@ -1,6 +1,6 @@
 # Folder Structure
 
-Canonical, up-to-date source tree for Mockup Studio v0.3.0. This document is the single source of truth for the repository layout; any folder-structure block in other docs should reference this file rather than duplicate the tree.
+Canonical, up-to-date source tree for Mockup Studio v0.4.0. This document is the single source of truth for the repository layout; any folder-structure block in other docs should reference this file rather than duplicate the tree.
 
 ```
 src/
@@ -23,7 +23,7 @@ src/
     vite-env.d.ts          Vite type references
     styles/
       globals.css          Centralized scrollbars, focus-visible rings, accent CSS vars, reduced-motion rules
-    store/                 Zustand document store — 13 slices merged in index.ts
+      store/                 Zustand document store — 14 slices merged in index.ts
       index.ts             Store composition (all slices spread into one store)
       projectSlice.ts      File path, dirty state, save/open/new
       sceneSlice.ts        Scene CRUD, z-order, grid/guides/masks/groups, safeScene(), element factories
@@ -38,6 +38,7 @@ src/
       shapeSlice.ts        Shape CRUD
       maskSlice.ts         Mask CRUD, reverse, clear-all, refresh snapshot
       effectsSlice.ts      Per-element image effects
+      componentSlice.ts   Units (components) CRUD, groups, library validation, instance sync
       dirtyTracking.ts     attachDirtyTracking + withDirtySuppressed
     runtime/               Zustand runtime store (transient editor state, never serialized)
       runtimeSlice.ts      Runtime state + actions (tools, brush, focus, previews, marquee, editing, contextMenu)
@@ -106,6 +107,8 @@ src/
       id.ts                generateId
       multi-drag.ts        Multi-drag follower entries
       brush-presets.ts     Paint brush presets (Paint/Pencil/Airbrush/Marker/Pen/Pixel)
+      default-components.ts  36 themed default unit definitions (Redora/Qless/CatarinaUI)
+      component-utils.ts  useInstanceMirror hook, placeComponentAt, definition overlay
       watermark.ts         Watermark rendering
       save-guard.ts        Unsaved-changes guard
     elements/
@@ -151,17 +154,18 @@ src/
         ThemePresetsPanel.tsx, GridPanel.tsx, DevicesPanel.tsx, TextPanel.tsx,
         ImagesPanel.tsx, ShapesPanel.tsx, MasksPanel.tsx, LayersPanel.tsx,
         PropertiesPanel.tsx, SceneTabs.tsx, VersionHistoryPanel.tsx,
-        ExportDialog.tsx, LayoutTemplates.tsx
+        ExportDialog.tsx, LayoutTemplates.tsx, ComponentsPanel.tsx
       shared/
         ErrorBoundary.tsx, ResizeHandle.tsx, ResizeHandles.tsx, ContextMenu.tsx,
         ShortcutsModal.tsx, GradientEditor.tsx, ShadowEditor.tsx, GlowEditor.tsx,
         ColorInput.tsx, SliderInput.tsx, ToggleSwitch.tsx, SectionHeader.tsx,
-        Checkerboard.tsx, SaveChangesDialog.tsx, UpdateModal.tsx, UserGuide.tsx
+        Checkerboard.tsx, SaveChangesDialog.tsx, UpdateModal.tsx, UserGuide.tsx,
+        ComponentCreationModal.tsx, ComponentDeleteDialog.tsx
       splash/
         SplashScreen.tsx
       toolbar/
         BottomToolbar.tsx, ToolButton.tsx, ToolOptionsPanel.tsx, icons.ts
-  __tests__/                  Vitest + Testing Library suites (74 files: 72 test suites + helpers + setup)
+  __tests__/                  Vitest + Testing Library suites (76 test files: 74 test suites + helpers + setup)
     helpers.ts                resetStore, makeDevice/makeTextBox/makeImage/makeShape
     setup.ts                  jest-dom matchers, ImageData polyfill, ResizeObserver stub
     *.test.ts / *.test.tsx    Per-module test suites
@@ -170,7 +174,7 @@ docs/
   architecture.md      High-level architecture, rendering pipeline, store separation
   engines.md           Rasterizer, export, transform, polygon boolean, paint layers, stroke, preview
   tools.md             Tool manager + tool taxonomy and behavior
-  state.md             Zustand store (13 slices), history, serialization, clipboard, runtime store
+  state.md             Zustand store (14 slices), history, serialization, clipboard, runtime store
   components.md        Component hierarchy, facades, overlay renderer, canvas subsystems
   types.md             Core type definitions
   mask-engine.md       Mask system deep-dive
