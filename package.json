@@ -112,7 +112,7 @@
           ]
         }
       ],
-      "icon": "public/logo.png",
+      "icon": "public/logo.icns",
       "category": "public.app-category.design-tools"
     },
     "linux": {
