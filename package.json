@@ -1,6 +1,6 @@
 {
   "name": "mockup-studio",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Desktop device mockup scene builder",
   "type": "module",
   "main": "./out/main/index.js",
