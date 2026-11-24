@@ -1,6 +1,6 @@
 # <img src="public/logo.png" width="64" height="64" style="vertical-align: middle; margin-right: 8px;" /> Mockup Studio
 
-Desktop device mockup scene builder. Compose beautiful device mockups with drag-and-drop, multi-scene support, and instant export.
+Desktop device mockup scene builder for composing device screenshots, text, images, shapes, and masks into exportable scenes.
 
 ## Origin Story
 
@@ -68,7 +68,7 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Export modal** — PNG, JPEG, WebP at 1x–4x scale with solid/transparent/custom backgrounds
 - **Multi-scene export** — Export all scenes as a ZIP archive
 - **Project files** — `.mockup` ZIP format with JSON manifest + embedded assets
-- **Version history** — Auto-snapshots every 5 minutes (pinned scenes only)
+- **Version history** — Time-gated auto-snapshots (5-minute interval, 50 max; no pinned-scene gate)
 - **Auto-save recovery** — Crash recovery with periodic snapshots
 - **File association** — Double-click `.mockup` files to open them directly
 - **Unsaved changes guard** — Prompts before closing with unsaved work
@@ -79,6 +79,23 @@ Mockup Studio started as a single HTML file — `mockup-template.html` — a qui
 - **Watermark** — Optional text watermark excluded from exports
 - **Color extraction** — Extract dominant colors from device screens
 - **Layout templates** — Pre-composed layouts for quick scene setup
+
+## Visual identity
+
+The editor chrome uses indigo controls against neutral surfaces. Light mode
+keeps the canvas dark so device artwork remains clear; the user's composed
+scene is independent of the chrome palette.
+
+| UI mode | Accent | Surface character |
+|---|---|---|
+| Dark | `#6366f1` | dark editor chrome; dark canvas |
+| Light | `#4f46e5` | white/zinc chrome; dark canvas |
+
+![Mockup Studio brand mark](public/logo.png)
+
+The repository currently has no editor screenshot checked in. See the
+[visual identity guide](docs/visual-identity.md) and theme source in
+[`src/renderer/styles/globals.css`](src/renderer/styles/globals.css).
 
 ## Tech Stack
 
@@ -143,6 +160,28 @@ npm run lint
 npm run typecheck
 ```
 
+### Command reference
+
+| Command | Configured action |
+| --- | --- |
+| `npm run dev` | `electron-vite dev` |
+| `npm run build` | `electron-vite build` |
+| `npm run start` | `electron-vite preview` |
+| `npm run preview` | `electron-vite preview` |
+| `npm run typecheck:node` | `tsc --noEmit -p tsconfig.node.json` |
+| `npm run typecheck:web` | `tsc --noEmit -p tsconfig.web.json` |
+| `npm run typecheck` | `npm run typecheck:node && npm run typecheck:web` |
+| `npm run lint` | `eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0` |
+| `npm run format` | `prettier --write "src/**/*.{ts,tsx,css}"` |
+| `npm test` | `vitest run` |
+| `npm run test:watch` | `vitest` |
+| `npm run package` | `electron-builder --win --publish never` |
+| `npm run package:mac` | `electron-builder --mac --publish never` |
+| `npm run package:linux` | `electron-builder --linux --publish never` |
+| `npm run postinstall` | `electron-builder install-app-deps` |
+
+`npm run build` does not run typechecking, linting, or tests. See [configuration](docs/configuration.md) for settings and [testing](docs/testing.md) for the current test result.
+
 ## Project Structure
 
 The canonical, up-to-date source tree lives in **[`docs/folder-structure.md`](./docs/folder-structure.md)** — a complete `src/` walkthrough with per-directory descriptions and repository conventions. A high-level summary:
@@ -172,6 +211,18 @@ public/            Icons + in-app changelog.json
 release/           electron-builder output
 ```
 
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Product](docs/product.md)
+- [Configuration](docs/configuration.md)
+- [Development](docs/development.md)
+- [Testing](docs/testing.md)
+- [Deployment](docs/deployment.md)
+- [Changelog](docs/changelog.md) and the maintained [root changelog](CHANGELOG.md)
+- [Architecture index](docs/index.md), [folder structure](docs/folder-structure.md), [engines](docs/engines.md), [tools](docs/tools.md), [state](docs/state.md), [components](docs/components.md), [types](docs/types.md), and [mask engine](docs/mask-engine.md)
+- [Visual identity](docs/visual-identity.md) and the historical [development log](AGENTS.md)
+
 ## Architecture
 
 ### State Management
@@ -193,7 +244,7 @@ Mockup Studio uses **two separate Zustand stores**:
 | `uiSlice` | Sidebar tab, theme, splash state, rulers |
 | `exportSlice` | Export format, scale, quality, background, scope |
 | `clipboardSlice` | Internal copy/cut/paste, copy-paste style |
-| `versionHistorySlice` | Auto-snapshots (5min interval, 50 max, pinned scenes only) |
+| `versionHistorySlice` | Auto-snapshots (5min interval, 50 max, no pinned-scene gate) |
 | `watermarkSlice` | Watermark text and visibility |
 | `shapeSlice` | Shape CRUD (independent from sceneSlice) |
 | `maskSlice` | Mask CRUD, reverse, clear-all, refresh snapshot |
@@ -230,4 +281,8 @@ assets/                Device screens, images, thumbnails (base64 in manifest)
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+## Sources
+
+[`package.json`](package.json), [`src/shared/types.ts`](src/shared/types.ts), [`src/renderer/App.tsx`](src/renderer/App.tsx), [`docs/README.md`](docs/README.md), and [`AGENTS.md`](AGENTS.md).

@@ -21,9 +21,11 @@ src/
     main.tsx               React entry point
     index.html             Renderer HTML shell
     vite-env.d.ts          Vite type references
+    assets/
+      splash-logo.png      Splash-screen logo asset
     styles/
       globals.css          Centralized scrollbars, focus-visible rings, accent CSS vars, reduced-motion rules
-      store/                 Zustand document store — 14 slices merged in index.ts
+    store/                 Zustand document store — 14 slices merged in index.ts
       index.ts             Store composition (all slices spread into one store)
       projectSlice.ts      File path, dirty state, save/open/new
       sceneSlice.ts        Scene CRUD, z-order, grid/guides/masks/groups, safeScene(), element factories
@@ -33,7 +35,7 @@ src/
       uiSlice.ts           Sidebar tab, theme, splash, rulers, smart-guides toggle
       exportSlice.ts       Export format, scale, quality, background, scope
       clipboardSlice.ts    Internal copy/cut/paste, copy-paste style
-      versionHistorySlice.ts  Auto-snapshots (5min interval, pinned scenes only)
+      versionHistorySlice.ts  Auto-snapshots (5min interval, 50 max, no pinned-scene gate)
       watermarkSlice.ts    Watermark text and visibility
       shapeSlice.ts        Shape CRUD
       maskSlice.ts         Mask CRUD, reverse, clear-all, refresh snapshot
@@ -170,7 +172,14 @@ src/
     setup.ts                  jest-dom matchers, ImageData polyfill, ResizeObserver stub
     *.test.ts / *.test.tsx    Per-module test suites
 docs/
+  README.md            Documentation index and source-of-truth list
   index.md             Architecture documentation index (ToC for all docs)
+  product.md           Product purpose, current feature inventory, and known gaps
+  configuration.md     Scripts, build settings, runtime paths, env vars, and persisted state
+  development.md       Install, run, checks, layout, conventions, and troubleshooting
+  testing.md           Test runner, exact commands, current suite result, and gaps
+  deployment.md        Build/package commands, artifacts, targets, and unconfigured items
+  changelog.md         Pointer to the maintained root CHANGELOG
   architecture.md      High-level architecture, rendering pipeline, store separation
   engines.md           Rasterizer, export, transform, polygon boolean, paint layers, stroke, preview
   tools.md             Tool manager + tool taxonomy and behavior
@@ -178,6 +187,7 @@ docs/
   components.md        Component hierarchy, facades, overlay renderer, canvas subsystems
   types.md             Core type definitions
   mask-engine.md       Mask system deep-dive
+  visual-identity.md   Brand mark, colors, and missing-screenshot note
   folder-structure.md  This document
 public/
   changelog.json       In-app "What's New" data (versions array)

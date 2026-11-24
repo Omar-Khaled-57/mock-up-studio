@@ -8,6 +8,18 @@
 
 ## Table of Contents
 
+### Standard Pages
+
+| Document | Summary |
+|---|---|
+| [Documentation index](./README.md) | Index of every project document and source-of-truth files. |
+| [Product](./product.md) | Product purpose, current feature inventory, and known gaps. |
+| [Configuration](./configuration.md) | Scripts, build settings, runtime paths, env vars, and persisted state. |
+| [Development](./development.md) | Install, run, checks, layout, conventions, and troubleshooting. |
+| [Testing](./testing.md) | Test runner, exact commands, suite counts, and coverage gaps. |
+| [Deployment](./deployment.md) | Build/package commands, artifacts, targets, and unconfigured items. |
+| [Changelog](./changelog.md) | Pointer to the maintained root [CHANGELOG](../CHANGELOG.md). |
+
 ### Core Documents
 
 | Document | Summary |
@@ -24,7 +36,8 @@
 
 | Document | Summary |
 |---|---|
-| [Mask Engine](./mask-engine.md) | Deep-dive on the first-class mask system — clip paths, boolean difference, frozen snapshots, background masks |
+| [Mask Engine](./mask-engine.md) | Deep-dive on the first-class mask system — clip paths, boolean difference, frozen snapshots, scene-space layers |
+| [Visual identity](./visual-identity.md) | Brand mark, color tokens, and note about the missing editor screenshot |
 
 ---
 
@@ -130,15 +143,22 @@
 
 ## Development Commands
 
-| Command | Description |
+| Command | Configured action |
 |---|---|
-| `npm run dev` | Dev mode with hot reload |
-| `npm run build` | Production build |
-| `npm start` | Run production build |
-| `npm test` | Run vitest (single run) |
-| `npm run test:watch` | Run vitest in watch mode |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript type checking |
-| `npm run package` | Build Windows distributable (NSIS + portable) |
-| `npm run package:mac` | Build macOS DMG |
-| `npm run package:linux` | Build Linux AppImage |
+| `npm run dev` | `electron-vite dev` |
+| `npm run build` | `electron-vite build` |
+| `npm run start` | `electron-vite preview` |
+| `npm run preview` | `electron-vite preview` |
+| `npm run typecheck:node` | `tsc --noEmit -p tsconfig.node.json` |
+| `npm run typecheck:web` | `tsc --noEmit -p tsconfig.web.json` |
+| `npm run typecheck` | `npm run typecheck:node && npm run typecheck:web` |
+| `npm run lint` | `eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0` |
+| `npm run format` | `prettier --write "src/**/*.{ts,tsx,css}"` |
+| `npm test` | `vitest run` |
+| `npm run test:watch` | `vitest` |
+| `npm run package` | `electron-builder --win --publish never` |
+| `npm run package:mac` | `electron-builder --mac --publish never` |
+| `npm run package:linux` | `electron-builder --linux --publish never` |
+| `npm run postinstall` | `electron-builder install-app-deps` |
+
+`npm run build` does not run typechecking, linting, or tests. The package scripts pass `--publish never` even though the build config declares a GitHub publish provider.
