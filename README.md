@@ -1,4 +1,4 @@
-# <img src="public/logo.png" width="64" height="64" style="vertical-align: middle; margin-right: 8px;" /> Mockup Studio
+# <img src="public/logo-docs.webp" width="64" height="64" style="vertical-align: middle; margin-right: 8px;" /> Mockup Studio
 
 Desktop device mockup scene builder for composing device screenshots, text, images, shapes, and masks into exportable scenes.
 
@@ -91,7 +91,7 @@ scene is independent of the chrome palette.
 | Dark | `#6366f1` | dark editor chrome; dark canvas |
 | Light | `#4f46e5` | white/zinc chrome; dark canvas |
 
-![Mockup Studio brand mark](public/logo.png)
+![Mockup Studio brand mark](public/logo-docs.webp)
 
 The repository currently has no editor screenshot checked in. See the
 [visual identity guide](docs/visual-identity.md) and theme source in
